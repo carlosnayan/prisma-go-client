@@ -67,6 +67,11 @@ func runFormat(args []string) error {
 		return fmt.Errorf("cannot format schema with syntax errors - fix errors first")
 	}
 
+	// Safety check: schema should not be nil at this point
+	if schema == nil {
+		return fmt.Errorf("error: schema is nil after parsing")
+	}
+
 	// Format
 	formatted := formatter.FormatSchema(schema)
 	if formatted == "" {

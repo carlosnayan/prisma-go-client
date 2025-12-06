@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -46,7 +47,7 @@ func createTestSchema(t testingT, content string) string {
 
 generator client {
   provider = "prisma-client-go"
-  output   = "../db"
+  output   = "./db"
 }
 
 model users {
@@ -182,6 +183,7 @@ func setEnv(t testingT, key, value string) func() {
 func createInvalidSchema(t testingT) string {
 	content := `datasource db {
   provider = "postgresql"
+}
 
 generator client {
   provider = "prisma-client-go"
@@ -190,7 +192,9 @@ generator client {
 
 model users {
   id String @id
-  // Missing closing brace
+  email String
+  invalidField = invalid syntax here
+  // Missing closing brace - this will cause a syntax error
 `
 	return createTestSchema(t, content)
 }
@@ -240,5 +244,23 @@ func skipIfNoDatabase(t *testing.T) {
 	if url == "" {
 		t.Skip("TEST_DATABASE_URL not set, skipping database test")
 	}
+}
+
+// createTestGoMod creates a go.mod file in the test directory
+// This is needed for generate tests that require module detection
+func createTestGoMod(t testingT, moduleName string) string {
+	if moduleName == "" {
+		moduleName = "test-module"
+	}
+	
+	content := fmt.Sprintf("module %s\n\ngo 1.21\n", moduleName)
+	
+	goModPath := "go.mod"
+	err := os.WriteFile(goModPath, []byte(content), 0644)
+	if err != nil {
+		t.Fatalf("Failed to write go.mod file: %v", err)
+	}
+	
+	return goModPath
 }
 

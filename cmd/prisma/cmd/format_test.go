@@ -138,6 +138,7 @@ func TestFormat_FailsWithInvalidSchema(t *testing.T) {
 	err := runFormat([]string{})
 	if err == nil {
 		t.Error("runFormat should fail with invalid schema")
+		return
 	}
 	if !strings.Contains(err.Error(), "syntax errors") {
 		t.Errorf("Error should mention syntax errors, got: %v", err)

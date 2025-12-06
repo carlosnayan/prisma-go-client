@@ -10,6 +10,7 @@ func TestIntegration_InitGenerateValidate(t *testing.T) {
 	dir := setupTestDir(t)
 	defer func() { _ = cleanupTestDir(dir) }()
 
+	createTestGoMod(t, "test-module")
 	// Step 1: Initialize project
 	err := runInit([]string{})
 	if err != nil {
@@ -31,7 +32,7 @@ func TestIntegration_InitGenerateValidate(t *testing.T) {
 	}
 
 	// Verify generated files
-	if !fileExists("../db/client.go") {
+	if !fileExists("./generated/client.go") {
 		t.Error("client.go should exist after generate")
 	}
 
@@ -47,6 +48,7 @@ func TestIntegration_InitGenerateFormat(t *testing.T) {
 	dir := setupTestDir(t)
 	defer func() { _ = cleanupTestDir(dir) }()
 
+	createTestGoMod(t, "test-module")
 	// Step 1: Initialize project
 	err := runInit([]string{})
 	if err != nil {
@@ -73,6 +75,7 @@ func TestIntegration_InitWithProviderGenerate(t *testing.T) {
 	dir := setupTestDir(t)
 	defer func() { _ = cleanupTestDir(dir) }()
 
+	createTestGoMod(t, "test-module")
 	// Initialize with specific provider
 	providerFlag = "mysql"
 	err := runInit([]string{})
@@ -98,6 +101,7 @@ func TestIntegration_FullWorkflow(t *testing.T) {
 	dir := setupTestDir(t)
 	defer func() { _ = cleanupTestDir(dir) }()
 
+	createTestGoMod(t, "test-module")
 	// 1. Initialize
 	err := runInit([]string{})
 	if err != nil {

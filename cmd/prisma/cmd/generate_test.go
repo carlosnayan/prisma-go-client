@@ -12,6 +12,7 @@ func TestGenerate_CreatesOutputFiles(t *testing.T) {
 	dir := setupTestDir(t)
 	defer func() { _ = cleanupTestDir(dir) }()
 
+	createTestGoMod(t, "test-module")
 	createTestConfig(t, "")
 	createTestSchema(t, "")
 
@@ -21,17 +22,17 @@ func TestGenerate_CreatesOutputFiles(t *testing.T) {
 	}
 
 	// Check that output directory exists
-	outputDir := "../db"
+	outputDir := "./db"
 	if !fileExists(outputDir) {
 		t.Error("Output directory was not created")
 	}
 
 	// Check for generated files
 	expectedFiles := []string{
-		"../db/client.go",
-		"../db/models",
-		"../db/queries",
-		"../db/inputs",
+		"./db/client.go",
+		"./db/models",
+		"./db/queries",
+		"./db/inputs",
 	}
 
 	for _, file := range expectedFiles {
@@ -46,6 +47,7 @@ func TestGenerate_CreatesModelFiles(t *testing.T) {
 	dir := setupTestDir(t)
 	defer func() { _ = cleanupTestDir(dir) }()
 
+	createTestGoMod(t, "test-module")
 	createTestConfig(t, "")
 	createTestSchema(t, "")
 
@@ -55,7 +57,7 @@ func TestGenerate_CreatesModelFiles(t *testing.T) {
 	}
 
 	// Check for model file
-	modelFile := "../db/models/users.go"
+	modelFile := "./db/models/users.go"
 	if !fileExists(modelFile) {
 		t.Error("Model file was not created")
 	}
@@ -71,6 +73,7 @@ func TestGenerate_CreatesQueryFiles(t *testing.T) {
 	dir := setupTestDir(t)
 	defer func() { _ = cleanupTestDir(dir) }()
 
+	createTestGoMod(t, "test-module")
 	createTestConfig(t, "")
 	createTestSchema(t, "")
 
@@ -80,7 +83,7 @@ func TestGenerate_CreatesQueryFiles(t *testing.T) {
 	}
 
 	// Check for query file
-	queryFile := "../db/queries/users_query.go"
+	queryFile := "./db/queries/users_query.go"
 	if !fileExists(queryFile) {
 		t.Error("Query file was not created")
 	}
@@ -96,6 +99,7 @@ func TestGenerate_CreatesClientFile(t *testing.T) {
 	dir := setupTestDir(t)
 	defer func() { _ = cleanupTestDir(dir) }()
 
+	createTestGoMod(t, "test-module")
 	createTestConfig(t, "")
 	createTestSchema(t, "")
 
@@ -105,7 +109,7 @@ func TestGenerate_CreatesClientFile(t *testing.T) {
 	}
 
 	// Check for client file
-	clientFile := "../db/client.go"
+	clientFile := "./db/client.go"
 	if !fileExists(clientFile) {
 		t.Error("Client file was not created")
 	}
@@ -124,6 +128,7 @@ func TestGenerate_CreatesInputFiles(t *testing.T) {
 	dir := setupTestDir(t)
 	defer func() { _ = cleanupTestDir(dir) }()
 
+	createTestGoMod(t, "test-module")
 	createTestConfig(t, "")
 	createTestSchema(t, "")
 
@@ -133,7 +138,7 @@ func TestGenerate_CreatesInputFiles(t *testing.T) {
 	}
 
 	// Check for input file
-	inputFile := "../db/inputs/users_input.go"
+	inputFile := "./db/inputs/users_input.go"
 	if !fileExists(inputFile) {
 		t.Error("Input file was not created")
 	}
@@ -163,6 +168,7 @@ func TestGenerate_WithCustomSchemaPath(t *testing.T) {
 	dir := setupTestDir(t)
 	defer func() { _ = cleanupTestDir(dir) }()
 
+	createTestGoMod(t, "test-module")
 	createTestConfig(t, "")
 	
 	// Create schema in custom location
@@ -189,6 +195,7 @@ func TestGenerate_WithCustomOutputDir(t *testing.T) {
 	dir := setupTestDir(t)
 	defer func() { _ = cleanupTestDir(dir) }()
 
+	createTestGoMod(t, "test-module")
 	// Create schema with custom output
 	customOutput := "./custom_output"
 	schemaContent := `datasource db {
@@ -224,6 +231,7 @@ func TestGenerate_NoUnusedImports(t *testing.T) {
 	dir := setupTestDir(t)
 	defer func() { _ = cleanupTestDir(dir) }()
 
+	createTestGoMod(t, "test-module")
 	createTestConfig(t, "")
 	createTestSchema(t, "")
 
@@ -233,7 +241,7 @@ func TestGenerate_NoUnusedImports(t *testing.T) {
 	}
 
 	// Check client.go doesn't have unused context import
-	clientFile := "../db/client.go"
+	clientFile := "./db/client.go"
 	content := readFile(t, clientFile)
 	
 	// Should not import context if not used
@@ -254,7 +262,8 @@ func TestGenerate_NoUnusedImports(t *testing.T) {
 			}
 		}
 		// Context should not be imported if not used in the code
-		if hasContext && !contains(content, "context.") {
+		// Check for context.Context (type) or context. (package usage)
+		if hasContext && !contains(content, "context.Context") && !contains(content, "context.") {
 			t.Error("Client file should not import context if not used")
 		}
 	}
