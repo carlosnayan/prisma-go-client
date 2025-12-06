@@ -126,7 +126,55 @@ go get github.com/go-sql-driver/mysql
 go get github.com/mattn/go-sqlite3
 ```
 
-### 6. Use in Your Code
+### 6. Setup Database Connection
+
+**PostgreSQL Setup:**
+
+```go
+package database
+
+import (
+    "context"
+    "log"
+    "os"
+
+    db "my-app/db" // Your generated client
+    "github.com/jackc/pgx/v5"
+    "github.com/jackc/pgx/v5/pgxpool"
+)
+
+var (
+    Client *db.Client
+)
+
+func SetupPrismaClient() {
+    ctx := context.Background()
+    databaseURL := os.Getenv("DATABASE_URL")
+
+    cfg, err := pgxpool.ParseConfig(databaseURL)
+    if err != nil {
+        log.Fatalf("Error parsing database URL: %v", err)
+    }
+
+    // Disable prepared statements for PgBouncer compatibility
+    cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+
+    pool, err := pgxpool.NewWithConfig(ctx, cfg)
+    if err != nil {
+        log.Fatalf("Error creating pool: %v", err)
+    }
+
+    if err := pool.Ping(ctx); err != nil {
+        log.Fatalf("Error pinging database: %v", err)
+    }
+
+    // Use the generated driver adapter
+    dbDriver := db.NewPgxPoolDriver(pool)
+    Client = db.NewClient(dbDriver)
+}
+```
+
+### 7. Use in Your Code
 
 **PostgreSQL Example:**
 
@@ -136,32 +184,20 @@ package main
 import (
     "context"
     "log"
-    "os"
 
     "my-app/db" // Your generated client
     "my-app/db/inputs" // Generated input types (WhereInput, etc.)
-    "my-app/db/models" // Generated models
-    "github.com/carlosnayan/prisma-go-client/builder"
-    "github.com/carlosnayan/prisma-go-client/internal/driver"
-    "github.com/jackc/pgx/v5/pgxpool"
+    "my-app/database" // Your database setup package
 )
 
 func main() {
     ctx := context.Background()
 
-    databaseURL := os.Getenv("DATABASE_URL")
-    pool, err := pgxpool.New(ctx, databaseURL)
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer pool.Close()
-
-    // Wrap pgx pool with driver adapter
-    dbDriver := driver.NewPgxPool(pool)
-    client := db.NewClient(dbDriver)
+    // Setup client (call once at application startup)
+    database.SetupPrismaClient()
 
     // Create a user using fluent API
-    user, err := client.User.Create().
+    user, err := database.Client.User.Create().
         Data(inputs.UserCreateInput{
             Email: "test@example.com",
             Name:  db.String("Test User"),
@@ -173,7 +209,7 @@ func main() {
     log.Printf("Created user: %+v\n", user)
 
     // Find users using fluent API with type-safe WhereInput
-    users, err := client.User.FindMany().
+    users, err := database.Client.User.FindMany().
         Where(inputs.UserWhereInput{
             Email: db.Contains("example.com"),
         }).
@@ -184,7 +220,7 @@ func main() {
     log.Printf("Found %d users\n", len(users))
 
     // Find first user with Select
-    foundUser, err := client.User.FindFirst().
+    foundUser, err := database.Client.User.FindFirst().
         Select(inputs.UserSelect{
             Email: true,
             Name:  true,
@@ -199,7 +235,7 @@ func main() {
     log.Printf("Found user: %+v\n", foundUser)
 
     // Raw SQL example
-    rows, err := client.Raw().Query(ctx, "SELECT * FROM users WHERE email LIKE $1", "%example%")
+    rows, err := database.Client.Raw().Query(ctx, "SELECT * FROM users WHERE email LIKE $1", "%example%")
     if err != nil {
         log.Fatal(err)
     }
@@ -211,39 +247,59 @@ func main() {
 **MySQL Example:**
 
 ```go
+package database
+
 import (
     "database/sql"
+    "log"
+    "os"
+
+    db "my-app/db"
     _ "github.com/go-sql-driver/mysql"
-    "github.com/carlosnayan/prisma-go-client/internal/driver"
 )
 
-db, err := sql.Open("mysql", databaseURL)
-if err != nil {
-    log.Fatal(err)
-}
-defer db.Close()
+var (
+    Client *db.Client
+)
 
-dbDriver := driver.NewSQLDB(db)
-client := db.NewClient(dbDriver)
+func SetupPrismaClient() {
+    databaseURL := os.Getenv("DATABASE_URL")
+    sqlDB, err := sql.Open("mysql", databaseURL)
+    if err != nil {
+        log.Fatalf("Error opening database: %v", err)
+    }
+
+    dbDriver := db.NewSQLDriver(sqlDB)
+    Client = db.NewClient(dbDriver)
+}
 ```
 
 **SQLite Example:**
 
 ```go
+package database
+
 import (
     "database/sql"
+    "log"
+
+    db "my-app/db"
     _ "github.com/mattn/go-sqlite3"
-    "github.com/carlosnayan/prisma-go-client/internal/driver"
 )
 
-db, err := sql.Open("sqlite3", "./database.db")
-if err != nil {
-    log.Fatal(err)
-}
-defer db.Close()
+var (
+    Client *db.Client
+)
 
-dbDriver := driver.NewSQLDB(db)
-client := db.NewClient(dbDriver)
+func SetupPrismaClient() {
+    sqlDB, err := sql.Open("sqlite3", "./database.db")
+    if err != nil {
+        log.Fatalf("Error opening database: %v", err)
+    }
+
+    dbDriver := db.NewSQLDriver(sqlDB)
+    Client = db.NewClient(dbDriver)
+}
 ```
 
 ## 📚 Documentation

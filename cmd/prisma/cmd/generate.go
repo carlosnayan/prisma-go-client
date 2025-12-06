@@ -99,6 +99,10 @@ func runGenerate(args []string) error {
 		return fmt.Errorf("error generating helpers: %w", err)
 	}
 
+	if err := generator.GenerateDriver(schema, absoluteOutputDir); err != nil {
+		return fmt.Errorf("error generating driver: %w", err)
+	}
+
 	// Calculate elapsed time
 	elapsed := time.Since(startTime)
 	elapsedMs := elapsed.Milliseconds()

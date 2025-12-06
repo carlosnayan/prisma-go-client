@@ -16,6 +16,18 @@ import (
 // DBTX is an alias for driver.DB for backward compatibility
 type DBTX = driver.DB
 
+// Result is an alias for driver.Result for use in generated code
+type Result = driver.Result
+
+// Rows is an alias for driver.Rows for use in generated code
+type Rows = driver.Rows
+
+// Row is an alias for driver.Row for use in generated code
+type Row = driver.Row
+
+// Tx is an alias for driver.Tx for use in generated code
+type Tx = driver.Tx
+
 // TableQueryBuilder provides a Prisma-like query builder for database tables
 type TableQueryBuilder struct {
 	db         DBTX
