@@ -8,7 +8,7 @@ import (
 func TestIntegration_InitGenerateValidate(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	// Step 1: Initialize project
 	err := runInit([]string{})
@@ -45,7 +45,7 @@ func TestIntegration_InitGenerateValidate(t *testing.T) {
 func TestIntegration_InitGenerateFormat(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	// Step 1: Initialize project
 	err := runInit([]string{})
@@ -71,7 +71,7 @@ func TestIntegration_InitGenerateFormat(t *testing.T) {
 func TestIntegration_InitWithProviderGenerate(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	// Initialize with specific provider
 	providerFlag = "mysql"
@@ -96,7 +96,7 @@ func TestIntegration_InitWithProviderGenerate(t *testing.T) {
 func TestIntegration_FullWorkflow(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	// 1. Initialize
 	err := runInit([]string{})
@@ -139,7 +139,7 @@ func TestIntegration_FullWorkflow(t *testing.T) {
 func TestIntegration_MigrateWorkflow(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	// This test requires a database
 	skipIfNoDatabase(t)
@@ -171,7 +171,7 @@ func TestIntegration_MigrateWorkflow(t *testing.T) {
 func TestIntegration_WithCustomPaths(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	// Create custom config path
 	customConfigPath := "custom/prisma.conf"

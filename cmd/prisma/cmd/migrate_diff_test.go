@@ -2,14 +2,13 @@ package cmd
 
 import (
 	"os"
-	"strings"
 	"testing"
 )
 
 func TestMigrateDiff_RequiresConfigFile(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	// Don't create config file
 	diffFrom = "schema1.prisma"
@@ -17,15 +16,13 @@ func TestMigrateDiff_RequiresConfigFile(t *testing.T) {
 
 	err := runMigrateDiff([]string{})
 	// This may fail for other reasons, but should handle missing config gracefully
-	if err != nil && strings.Contains(err.Error(), "prisma.conf not found") {
-		// Expected
-	}
+	_ = err // Expected to fail if prisma.conf not found
 }
 
 func TestMigrateDiff_RequiresFromAndTo(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	
@@ -41,7 +38,7 @@ func TestMigrateDiff_RequiresFromAndTo(t *testing.T) {
 func TestMigrateDiff_CompareTwoSchemas(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	
@@ -70,16 +67,14 @@ model users { id String @id email String name String? }`
 
 	err = runMigrateDiff([]string{})
 	// This should generate SQL for the difference
-	if err != nil {
-		// May fail if database connection is needed for some reason
-		// But should work for file-to-file comparison
-	}
+	_ = err // May fail if database connection is needed for some reason
+	// But should work for file-to-file comparison
 }
 
 func TestMigrateDiff_WithOutputFile(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	
@@ -118,7 +113,7 @@ model users { id String @id email String }`
 func TestMigrateDiff_NoDifferences(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	
@@ -143,8 +138,6 @@ model users { id String @id }`
 
 	err = runMigrateDiff([]string{})
 	// Should succeed with "No differences found"
-	if err != nil {
-		// May fail for other reasons, but should handle no differences gracefully
-	}
+	_ = err // May fail for other reasons, but should handle no differences gracefully
 }
 

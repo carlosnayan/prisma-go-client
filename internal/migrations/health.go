@@ -48,7 +48,7 @@ func CheckHealth(db *sql.DB, timeout time.Duration) (*HealthCheck, error) {
 	// Obter nome do banco (se possível)
 	dbName := "unknown"
 	if nameErr := db.QueryRowContext(ctx, "SELECT current_database()").Scan(&dbName); nameErr != nil {
-		// Ignorar erro, usar "unknown"
+		_ = nameErr // Ignorar erro, usar "unknown"
 	}
 	check.Database = dbName
 

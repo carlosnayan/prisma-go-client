@@ -7,7 +7,7 @@ import (
 func TestMigrateReset_RequiresConfigFile(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	// Don't create config file
 	createTestSchema(t, "")
@@ -21,7 +21,7 @@ func TestMigrateReset_RequiresConfigFile(t *testing.T) {
 func TestMigrateReset_RequiresDatabase(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")
@@ -36,7 +36,7 @@ func TestMigrateReset_RequiresDatabase(t *testing.T) {
 func TestMigrateReset_ResetsDatabase(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")

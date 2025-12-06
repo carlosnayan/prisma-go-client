@@ -8,7 +8,7 @@ import (
 func TestMigrateResolve_RequiresConfigFile(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	// Don't create config file
 	createTestSchema(t, "")
@@ -22,7 +22,7 @@ func TestMigrateResolve_RequiresConfigFile(t *testing.T) {
 func TestMigrateResolve_RequiresFlag(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")
@@ -47,7 +47,7 @@ func TestMigrateResolve_RequiresFlag(t *testing.T) {
 func TestMigrateResolve_WithAppliedFlag(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")
@@ -70,7 +70,7 @@ func TestMigrateResolve_WithAppliedFlag(t *testing.T) {
 func TestMigrateResolve_WithRolledBackFlag(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")

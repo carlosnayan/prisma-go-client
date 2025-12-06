@@ -9,7 +9,7 @@ import (
 func TestFormat_FormatsSchema(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	
@@ -45,7 +45,7 @@ model users{id String @id email String}
 func TestFormat_CheckMode(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	
@@ -72,7 +72,7 @@ func TestFormat_CheckMode(t *testing.T) {
 func TestFormat_AlreadyFormatted(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")
@@ -97,7 +97,7 @@ func TestFormat_AlreadyFormatted(t *testing.T) {
 func TestFormat_WriteMode(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	
@@ -130,7 +130,7 @@ func TestFormat_WriteMode(t *testing.T) {
 func TestFormat_FailsWithInvalidSchema(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createInvalidSchema(t)
@@ -147,7 +147,7 @@ func TestFormat_FailsWithInvalidSchema(t *testing.T) {
 func TestFormat_RequiresConfigFile(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	// Don't create config file
 	createTestSchema(t, "")

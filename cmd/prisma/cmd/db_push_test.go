@@ -7,7 +7,7 @@ import (
 func TestDbPush_RequiresConfigFile(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	// Don't create config file
 	createTestSchema(t, "")
@@ -21,7 +21,7 @@ func TestDbPush_RequiresConfigFile(t *testing.T) {
 func TestDbPush_RequiresDatabase(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")
@@ -36,7 +36,7 @@ func TestDbPush_RequiresDatabase(t *testing.T) {
 func TestDbPush_NoChanges(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")
@@ -53,7 +53,7 @@ func TestDbPush_NoChanges(t *testing.T) {
 func TestDbPush_WithAcceptDataLoss(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")
@@ -73,7 +73,7 @@ func TestDbPush_WithAcceptDataLoss(t *testing.T) {
 func TestDbPush_WithSkipGenerate(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")

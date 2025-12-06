@@ -9,7 +9,7 @@ import (
 func TestMigrateDev_RequiresConfigFile(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	// Don't create config file
 	createTestSchema(t, "")
@@ -23,7 +23,7 @@ func TestMigrateDev_RequiresConfigFile(t *testing.T) {
 func TestMigrateDev_RequiresMigrationName(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")
@@ -38,17 +38,14 @@ func TestMigrateDev_RequiresMigrationName(t *testing.T) {
 	err := runMigrateDev([]string{})
 	// This will fail for various reasons (database connection, etc.)
 	// But we can verify it doesn't fail immediately for missing name when provided
-	if err != nil && !strings.Contains(err.Error(), "migration name is required") && 
-		!strings.Contains(err.Error(), "DATABASE_URL") {
-		// If error is about name, that's expected
-		// Otherwise it's likely about database connection which is fine for this test
-	}
+	_ = err // If error is about name, that's expected
+	// Otherwise it's likely about database connection which is fine for this test
 }
 
 func TestMigrateDev_WithMigrationName(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")
@@ -68,7 +65,7 @@ func TestMigrateDev_WithMigrationName(t *testing.T) {
 func TestMigrateDev_CreatesMigrationDirectory(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")
@@ -94,7 +91,7 @@ func TestMigrateDev_CreatesMigrationDirectory(t *testing.T) {
 func TestMigrateDev_NoChangesDetected(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")

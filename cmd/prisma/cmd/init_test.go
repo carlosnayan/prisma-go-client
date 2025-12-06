@@ -9,7 +9,7 @@ import (
 func TestInit_CreatesProjectStructure(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	err := runInit([]string{})
 	if err != nil {
@@ -35,7 +35,7 @@ func TestInit_CreatesProjectStructure(t *testing.T) {
 func TestInit_CreatesCorrectConfig(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	err := runInit([]string{})
 	if err != nil {
@@ -62,7 +62,7 @@ func TestInit_CreatesCorrectConfig(t *testing.T) {
 func TestInit_CreatesCorrectSchema(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	err := runInit([]string{})
 	if err != nil {
@@ -89,7 +89,7 @@ func TestInit_CreatesCorrectSchema(t *testing.T) {
 func TestInit_WithProviderFlag(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	providerFlag = "mysql"
 	err := runInit([]string{})
@@ -106,7 +106,7 @@ func TestInit_WithProviderFlag(t *testing.T) {
 func TestInit_WithDatabaseFlag(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	databaseFlag = "postgresql://user:pass@localhost/db"
 	err := runInit([]string{})
@@ -123,7 +123,7 @@ func TestInit_WithDatabaseFlag(t *testing.T) {
 func TestInit_FailsWhenConfigExists(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	// Create existing config
 	err := os.WriteFile("prisma.conf", []byte("existing"), 0644)
@@ -143,7 +143,7 @@ func TestInit_FailsWhenConfigExists(t *testing.T) {
 func TestInit_CreatesMigrationsDirectory(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	err := runInit([]string{})
 	if err != nil {
@@ -167,7 +167,7 @@ func TestInit_WithDifferentProviders(t *testing.T) {
 		t.Run(provider, func(t *testing.T) {
 			resetGlobalFlags()
 			dir := setupTestDir(t)
-			defer cleanupTestDir(dir)
+			defer func() { _ = cleanupTestDir(dir) }()
 
 			providerFlag = provider
 			err := runInit([]string{})

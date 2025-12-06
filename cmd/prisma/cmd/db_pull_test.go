@@ -7,7 +7,7 @@ import (
 func TestDbPull_RequiresConfigFile(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	// Don't create config file
 
@@ -20,7 +20,7 @@ func TestDbPull_RequiresConfigFile(t *testing.T) {
 func TestDbPull_RequiresDatabase(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 
@@ -34,7 +34,7 @@ func TestDbPull_RequiresDatabase(t *testing.T) {
 func TestDbPull_GeneratesSchema(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 

@@ -57,15 +57,13 @@ func TestDbExecute_WithFileFlag(t *testing.T) {
 	err = runDbExecute([]string{})
 	// This will either succeed or fail based on database connection
 	// We just verify it doesn't crash
-	if err != nil {
-		// Expected to fail if database is not properly set up
-	}
+	_ = err // Expected to fail if database is not properly set up
 }
 
 func TestDbExecute_WithStdinFlag(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 
@@ -79,15 +77,13 @@ func TestDbExecute_WithStdinFlag(t *testing.T) {
 	err := runDbExecute([]string{})
 	// This will either succeed or fail based on database connection
 	// We just verify it doesn't crash
-	if err != nil {
-		// Expected to fail if database is not properly set up
-	}
+	_ = err // Expected to fail if database is not properly set up
 }
 
 func TestDbExecute_WithArguments(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 
@@ -102,15 +98,13 @@ func TestDbExecute_WithArguments(t *testing.T) {
 	err := runDbExecute([]string{"SELECT", "1;"})
 	// This will either succeed or fail based on database connection
 	// We just verify it doesn't crash
-	if err != nil {
-		// Expected to fail if database is not properly set up
-	}
+	_ = err // Expected to fail if database is not properly set up
 }
 
 func TestDbExecute_RequiresSQL(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 
@@ -127,4 +121,3 @@ func TestDbExecute_RequiresSQL(t *testing.T) {
 		t.Error("runDbExecute should fail when no SQL is provided")
 	}
 }
-

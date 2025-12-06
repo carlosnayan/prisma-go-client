@@ -7,7 +7,7 @@ import (
 func TestMigrateDeploy_RequiresConfigFile(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	// Don't create config file
 	createTestSchema(t, "")
@@ -21,7 +21,7 @@ func TestMigrateDeploy_RequiresConfigFile(t *testing.T) {
 func TestMigrateDeploy_RequiresDatabase(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")
@@ -36,7 +36,7 @@ func TestMigrateDeploy_RequiresDatabase(t *testing.T) {
 func TestMigrateDeploy_AppliesPendingMigrations(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")
@@ -51,9 +51,7 @@ func TestMigrateDeploy_AppliesPendingMigrations(t *testing.T) {
 	err := runMigrateDeploy([]string{})
 	// This will either succeed or fail based on database state
 	// We just verify it doesn't crash
-	if err != nil {
-		// Expected to fail if database is not properly set up
-		// In a real scenario, this would apply pending migrations
-	}
+	_ = err // Expected to fail if database is not properly set up
+	// In a real scenario, this would apply pending migrations
 }
 

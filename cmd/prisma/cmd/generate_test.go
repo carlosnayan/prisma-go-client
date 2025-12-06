@@ -10,7 +10,7 @@ import (
 func TestGenerate_CreatesOutputFiles(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")
@@ -44,7 +44,7 @@ func TestGenerate_CreatesOutputFiles(t *testing.T) {
 func TestGenerate_CreatesModelFiles(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")
@@ -69,7 +69,7 @@ func TestGenerate_CreatesModelFiles(t *testing.T) {
 func TestGenerate_CreatesQueryFiles(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")
@@ -94,7 +94,7 @@ func TestGenerate_CreatesQueryFiles(t *testing.T) {
 func TestGenerate_CreatesClientFile(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")
@@ -122,7 +122,7 @@ func TestGenerate_CreatesClientFile(t *testing.T) {
 func TestGenerate_CreatesInputFiles(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")
@@ -147,7 +147,7 @@ func TestGenerate_CreatesInputFiles(t *testing.T) {
 func TestGenerate_FailsWithInvalidSchema(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createInvalidSchema(t)
@@ -161,7 +161,7 @@ func TestGenerate_FailsWithInvalidSchema(t *testing.T) {
 func TestGenerate_WithCustomSchemaPath(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	
@@ -187,7 +187,7 @@ func TestGenerate_WithCustomSchemaPath(t *testing.T) {
 func TestGenerate_WithCustomOutputDir(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	// Create schema with custom output
 	customOutput := "./custom_output"
@@ -222,7 +222,7 @@ model users {
 func TestGenerate_NoUnusedImports(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")
@@ -263,7 +263,7 @@ func TestGenerate_NoUnusedImports(t *testing.T) {
 func TestGenerate_RequiresConfigFile(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	// Don't create config file
 	createTestSchema(t, "")

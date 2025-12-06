@@ -198,7 +198,7 @@ func (m *Manager) ApplyMigration(migration *Migration) error {
 	if err != nil {
 		return fmt.Errorf("erro ao iniciar transação: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Registrar início da migration
 	migrationID := generateMigrationID()

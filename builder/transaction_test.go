@@ -105,7 +105,9 @@ func TestTransactionCommit(t *testing.T) {
 			record := TestRecord{Name: "Transaction Test"}
 			err = query.Create(ctx, record)
 			if err != nil {
-				tx.Rollback(ctx)
+				if rbErr := tx.Rollback(ctx); rbErr != nil {
+					t.Logf("Rollback failed: %v", rbErr)
+				}
 				t.Fatalf("Create in transaction failed: %v", err)
 			}
 
@@ -202,7 +204,9 @@ func TestTransactionRollback(t *testing.T) {
 			record := TestRecord{Name: "Rollback Test"}
 			err = query.Create(ctx, record)
 			if err != nil {
-				tx.Rollback(ctx)
+				if rbErr := tx.Rollback(ctx); rbErr != nil {
+					t.Logf("Rollback failed: %v", rbErr)
+				}
 				t.Fatalf("Create in transaction failed: %v", err)
 			}
 
@@ -682,7 +686,9 @@ func TestTransactionIsolation(t *testing.T) {
 			record := TestRecord{Name: "Isolation Test"}
 			err = query.Create(ctx, record)
 			if err != nil {
-				tx.Rollback(ctx)
+				if rbErr := tx.Rollback(ctx); rbErr != nil {
+					t.Logf("Rollback failed: %v", rbErr)
+				}
 				t.Fatalf("Create in transaction failed: %v", err)
 			}
 
@@ -734,7 +740,7 @@ func TestTransactionDBAdapter(t *testing.T) {
 			if err != nil {
 				t.Fatalf("BeginTransaction failed: %v", err)
 			}
-			defer tx.Rollback(ctx)
+			defer func() { _ = tx.Rollback(ctx) }()
 
 			// Test DB() method
 			txDB := tx.DB()
@@ -750,4 +756,3 @@ func TestTransactionDBAdapter(t *testing.T) {
 		})
 	}
 }
-

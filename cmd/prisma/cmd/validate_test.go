@@ -10,7 +10,7 @@ import (
 func TestValidate_ValidSchema(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")
@@ -24,7 +24,7 @@ func TestValidate_ValidSchema(t *testing.T) {
 func TestValidate_InvalidSyntax(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createInvalidSchema(t)
@@ -38,7 +38,7 @@ func TestValidate_InvalidSyntax(t *testing.T) {
 func TestValidate_ValidationErrors(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	
@@ -80,7 +80,7 @@ model users {
 func TestValidate_ShowsSummary(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")
@@ -95,7 +95,7 @@ func TestValidate_ShowsSummary(t *testing.T) {
 func TestValidate_WithCustomSchemaPath(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
 	
@@ -121,7 +121,7 @@ func TestValidate_WithCustomSchemaPath(t *testing.T) {
 func TestValidate_RequiresConfigFile(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	// Don't create config file
 	createTestSchema(t, "")

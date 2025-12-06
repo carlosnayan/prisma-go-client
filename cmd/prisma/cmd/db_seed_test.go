@@ -8,7 +8,7 @@ import (
 func TestDbSeed_RequiresConfigFile(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	// Don't create config file
 
@@ -21,7 +21,7 @@ func TestDbSeed_RequiresConfigFile(t *testing.T) {
 func TestDbSeed_RequiresSeedConfig(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	// Create config without seed
 	createTestConfig(t, "")
@@ -36,7 +36,7 @@ func TestDbSeed_RequiresSeedConfig(t *testing.T) {
 func TestDbSeed_ExecutesSeed(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	// Create config with seed
 	configWithSeed := `schema = "prisma/schema.prisma"
@@ -59,15 +59,13 @@ script = "echo 'seed executed'"
 	err := runDbSeed([]string{})
 	// This will either succeed or fail based on seed script
 	// We just verify it doesn't crash
-	if err != nil {
-		// Expected to fail if seed script doesn't exist or database is not set up
-	}
+	_ = err // Expected to fail if seed script doesn't exist or database is not set up
 }
 
 func TestDbSeed_WithGoSeedScript(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)
-	defer cleanupTestDir(dir)
+	defer func() { _ = cleanupTestDir(dir) }()
 
 	// Create a simple seed script
 	seedScript := `package main
@@ -100,8 +98,6 @@ script = "go run seed.go"
 	err = runDbSeed([]string{})
 	// This will either succeed or fail based on seed script execution
 	// We just verify it doesn't crash
-	if err != nil {
-		// Expected to fail if database is not set up
-	}
+	_ = err // Expected to fail if database is not set up
 }
 
