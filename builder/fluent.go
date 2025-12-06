@@ -601,10 +601,21 @@ func (q *Query) Create(ctx context.Context, value interface{}) error {
 	return errors.SanitizeError(err)
 }
 
-// Save updates or creates a record
+// Save updates or creates a record (upsert)
 func (q *Query) Save(ctx context.Context, value interface{}) error {
-	// TODO: Implement upsert
-	return q.Create(ctx, value)
+	ctx, cancel := contextutil.WithQueryTimeout(ctx)
+	defer cancel()
+
+	if q.primaryKey == "" {
+		// Se não há primary key, apenas criar
+		return q.Create(ctx, value)
+	}
+
+	start := time.Now()
+	query, args := q.buildUpsertQuery(value)
+	q.logQuery(ctx, query, args, start)
+	_, err := q.db.Exec(ctx, query, args...)
+	return errors.SanitizeError(err)
 }
 
 // Update updates records
@@ -885,6 +896,138 @@ func (q *Query) buildInsertQuery(value interface{}) (string, []interface{}) {
 		strings.Join(values, ", "),
 	)
 
+	return query, args
+}
+
+// buildUpsertQuery builds an INSERT ... ON CONFLICT (upsert) query
+func (q *Query) buildUpsertQuery(value interface{}) (string, []interface{}) {
+	val := reflect.ValueOf(value)
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+	if val.Kind() != reflect.Struct {
+		return "", nil
+	}
+
+	var columns []string
+	var values []string
+	var args []interface{}
+	argIndex := 1
+
+	typ := val.Type()
+	var primaryKeyValue interface{}
+	var primaryKeyCol string
+
+	for i := 0; i < val.NumField(); i++ {
+		field := typ.Field(i)
+		fieldVal := val.Field(i)
+		fieldName := toSnakeCase(field.Name)
+
+		// Capturar primary key se existir
+		if fieldName == q.primaryKey {
+			primaryKeyCol = fieldName
+			primaryKeyValue = fieldVal.Interface()
+			continue
+		}
+
+		if fieldVal.IsZero() {
+			continue
+		}
+
+		if fieldName == "created_at" || fieldName == "updated_at" {
+			continue
+		}
+
+		columns = append(columns, fieldName)
+		values = append(values, q.dialect.GetPlaceholder(argIndex))
+		args = append(args, fieldVal.Interface())
+		argIndex++
+	}
+
+	hasCreatedAt := contains(q.columns, "created_at")
+	hasUpdatedAt := contains(q.columns, "updated_at")
+
+	// Se há primary key, adicionar à lista de colunas
+	if primaryKeyCol != "" && primaryKeyValue != nil {
+		columns = append(columns, primaryKeyCol)
+		values = append(values, q.dialect.GetPlaceholder(argIndex))
+		args = append(args, primaryKeyValue)
+		argIndex++
+	}
+
+	if hasCreatedAt {
+		columns = append(columns, "created_at")
+		values = append(values, q.dialect.GetNowFunction())
+	}
+	if hasUpdatedAt {
+		columns = append(columns, "updated_at")
+		values = append(values, q.dialect.GetNowFunction())
+	}
+
+	quotedColumns := make([]string, len(columns))
+	for i, col := range columns {
+		quotedColumns[i] = q.dialect.QuoteIdentifier(col)
+	}
+
+	quotedTable := q.dialect.QuoteIdentifier(q.table)
+	insertPart := fmt.Sprintf(
+		"INSERT INTO %s (%s) VALUES (%s)",
+		quotedTable,
+		strings.Join(quotedColumns, ", "),
+		strings.Join(values, ", "),
+	)
+
+	// Construir parte de conflito baseado no dialect
+	dialectName := q.dialect.Name()
+	var conflictPart string
+
+	if dialectName == "postgresql" || dialectName == "postgres" || dialectName == "sqlite" {
+		// PostgreSQL e SQLite usam ON CONFLICT
+		if primaryKeyCol != "" {
+			quotedPK := q.dialect.QuoteIdentifier(primaryKeyCol)
+			var updateParts []string
+			for _, col := range columns {
+				if col == primaryKeyCol || col == "created_at" {
+					continue
+				}
+				quotedCol := q.dialect.QuoteIdentifier(col)
+				if col == "updated_at" {
+					updateParts = append(updateParts, fmt.Sprintf("%s = %s", quotedCol, q.dialect.GetNowFunction()))
+				} else {
+					updateParts = append(updateParts, fmt.Sprintf("%s = EXCLUDED.%s", quotedCol, quotedCol))
+				}
+			}
+			conflictPart = fmt.Sprintf("ON CONFLICT (%s) DO UPDATE SET %s", quotedPK, strings.Join(updateParts, ", "))
+		} else {
+			// Sem primary key, apenas INSERT
+			return insertPart, args
+		}
+	} else if dialectName == "mysql" || dialectName == "mariadb" {
+		// MySQL usa ON DUPLICATE KEY UPDATE
+		if primaryKeyCol != "" {
+			var updateParts []string
+			for _, col := range columns {
+				if col == primaryKeyCol || col == "created_at" {
+					continue
+				}
+				quotedCol := q.dialect.QuoteIdentifier(col)
+				if col == "updated_at" {
+					updateParts = append(updateParts, fmt.Sprintf("%s = %s", quotedCol, q.dialect.GetNowFunction()))
+				} else {
+					updateParts = append(updateParts, fmt.Sprintf("%s = VALUES(%s)", quotedCol, quotedCol))
+				}
+			}
+			conflictPart = fmt.Sprintf("ON DUPLICATE KEY UPDATE %s", strings.Join(updateParts, ", "))
+		} else {
+			// Sem primary key, apenas INSERT
+			return insertPart, args
+		}
+	} else {
+		// Fallback: apenas INSERT
+		return insertPart, args
+	}
+
+	query := fmt.Sprintf("%s %s", insertPart, conflictPart)
 	return query, args
 }
 

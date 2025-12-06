@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/carlosnayan/prisma-go-client/cli"
 )
@@ -53,8 +55,7 @@ func runInit(args []string) error {
 
 	provider := providerFlag
 	if provider == "" {
-		// TODO: Interactive mode to choose provider
-		provider = "postgresql"
+		provider = promptForProvider()
 	}
 
 	// Create prisma.conf
@@ -131,4 +132,38 @@ generator client {
   output   = "./generated"
 }
 `
+}
+
+// promptForProvider prompts the user to choose a database provider interactively
+func promptForProvider() string {
+	reader := bufio.NewReader(os.Stdin)
+	
+	fmt.Println("Select a database provider:")
+	fmt.Println("  1) PostgreSQL")
+	fmt.Println("  2) MySQL")
+	fmt.Println("  3) SQLite")
+	fmt.Print("Enter choice (1-3) [default: 1]: ")
+	
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		fmt.Println("Error reading input, defaulting to PostgreSQL")
+		return "postgresql"
+	}
+	
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return "postgresql"
+	}
+	
+	switch input {
+	case "1", "postgresql", "postgres":
+		return "postgresql"
+	case "2", "mysql":
+		return "mysql"
+	case "3", "sqlite":
+		return "sqlite"
+	default:
+		fmt.Printf("Invalid choice '%s', defaulting to PostgreSQL\n", input)
+		return "postgresql"
+	}
 }

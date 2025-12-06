@@ -81,14 +81,14 @@ func GenerateClient(schema *parser.Schema, outputDir string) error {
 	// Client struct
 	fmt.Fprintf(file, "// Client is the main Prisma client\n")
 	fmt.Fprintf(file, "type Client struct {\n")
-	fmt.Fprintf(file, "\tdb driver.DB\n")
+	fmt.Fprintf(file, "\tdb builder.DBTX\n")
 	fmt.Fprintf(file, "\traw *raw.Executor\n")
 	fmt.Fprintf(file, "}\n\n")
 
 	// NewClient
 	fmt.Fprintf(file, "// NewClient creates a new Prisma client\n")
-	fmt.Fprintf(file, "// db must be a driver.DB implementation (e.g., driver.NewPgxPool, driver.NewSQLDB)\n")
-	fmt.Fprintf(file, "func NewClient(db driver.DB) *Client {\n")
+	fmt.Fprintf(file, "// db must be a builder.DBTX implementation (e.g., driver.NewPgxPool, driver.NewSQLDB)\n")
+	fmt.Fprintf(file, "func NewClient(db builder.DBTX) *Client {\n")
 	fmt.Fprintf(file, "\treturn &Client{\n")
 	fmt.Fprintf(file, "\t\tdb:  db,\n")
 	fmt.Fprintf(file, "\t\traw: raw.New(db),\n")
@@ -116,8 +116,7 @@ func GenerateClient(schema *parser.Schema, outputDir string) error {
 	generateTransactionClient(file, schema)
 	generateTransactionMethod(file, schema)
 
-	// Generate helper functions for type-safe filters
-	generateHelperFunctions(file)
+	// Helper functions are generated in helpers.go, not here
 
 	return nil
 }
@@ -272,7 +271,6 @@ func determineClientImports(schema *parser.Schema, userModule, outputDir string)
 	imports[queriesPath] = true
 	imports[inputsPath] = true
 	imports["github.com/carlosnayan/prisma-go-client/raw"] = true
-	imports["github.com/carlosnayan/prisma-go-client/internal/driver"] = true
 
 	// Add driver import based on provider (blank import)
 	provider := migrations.GetProviderFromSchema(schema)
@@ -310,53 +308,14 @@ func determineClientImports(schema *parser.Schema, userModule, outputDir string)
 	if imports["github.com/carlosnayan/prisma-go-client/raw"] {
 		result = append(result, "github.com/carlosnayan/prisma-go-client/raw")
 	}
-	if imports["github.com/carlosnayan/prisma-go-client/internal/driver"] {
-		result = append(result, "github.com/carlosnayan/prisma-go-client/internal/driver")
-	}
 
 	return result, driverImports
 }
 
-// generateHelperFunctions generates type-safe helper functions in client.go
+// generateHelperFunctions is no longer used - helper functions are generated in helpers.go
+// This function is kept for backward compatibility but does nothing
 func generateHelperFunctions(file *os.File) {
-	fmt.Fprintf(file, "// Helper functions for type-safe filters\n\n")
-
-	// String helpers
-	fmt.Fprintf(file, "// Contains creates a StringFilter with Contains condition\n")
-	fmt.Fprintf(file, "func Contains(value string) *inputs.StringFilter {\n")
-	fmt.Fprintf(file, "\treturn &inputs.StringFilter{Contains: &value}\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// String creates a StringFilter with Equals condition\n")
-	fmt.Fprintf(file, "func String(value string) *inputs.StringFilter {\n")
-	fmt.Fprintf(file, "\treturn &inputs.StringFilter{Equals: &value}\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	// Int helpers
-	fmt.Fprintf(file, "// Int creates an IntFilter with Equals condition\n")
-	fmt.Fprintf(file, "func Int(value int) *inputs.IntFilter {\n")
-	fmt.Fprintf(file, "\treturn &inputs.IntFilter{Equals: &value}\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// IntGt creates an IntFilter with Gt condition\n")
-	fmt.Fprintf(file, "func IntGt(value int) *inputs.IntFilter {\n")
-	fmt.Fprintf(file, "\treturn &inputs.IntFilter{Gt: &value}\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// IntGte creates an IntFilter with Gte condition\n")
-	fmt.Fprintf(file, "func IntGte(value int) *inputs.IntFilter {\n")
-	fmt.Fprintf(file, "\treturn &inputs.IntFilter{Gte: &value}\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// IntLt creates an IntFilter with Lt condition\n")
-	fmt.Fprintf(file, "func IntLt(value int) *inputs.IntFilter {\n")
-	fmt.Fprintf(file, "\treturn &inputs.IntFilter{Lt: &value}\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// IntLte creates an IntFilter with Lte condition\n")
-	fmt.Fprintf(file, "func IntLte(value int) *inputs.IntFilter {\n")
-	fmt.Fprintf(file, "\treturn &inputs.IntFilter{Lte: &value}\n")
-	fmt.Fprintf(file, "}\n\n")
+	// Helper functions are generated in helpers.go via GenerateHelpers()
 }
 
 // generateFluentAPIMethods generates fluent methods for Create, FindMany, FindFirst, Update, Delete
@@ -385,9 +344,16 @@ func generateFluentAPIMethods(file *os.File, model *parser.Model, pascalModelNam
 			continue
 		}
 		fieldName := toPascalCase(field.Name)
-		fmt.Fprintf(file, "\tif b.data.%s != nil {\n", fieldName)
-		fmt.Fprintf(file, "\t\tuser.%s = *b.data.%s\n", fieldName, fieldName)
-		fmt.Fprintf(file, "\t}\n")
+		// Check if field is optional (pointer) in CreateInput
+		isOptional := field.Type != nil && field.Type.IsOptional
+		if isOptional {
+			fmt.Fprintf(file, "\tif b.data.%s != nil {\n", fieldName)
+			fmt.Fprintf(file, "\t\tuser.%s = *b.data.%s\n", fieldName, fieldName)
+			fmt.Fprintf(file, "\t}\n")
+		} else {
+			// Field is required (not a pointer), assign directly
+			fmt.Fprintf(file, "\tuser.%s = b.data.%s\n", fieldName, fieldName)
+		}
 	}
 	fmt.Fprintf(file, "\tvar query *queries.%sQuery\n", pascalModelName)
 	fmt.Fprintf(file, "\tif b.txClient != nil {\n")
@@ -432,14 +398,27 @@ func generateFluentAPIMethods(file *os.File, model *parser.Model, pascalModelNam
 	fmt.Fprintf(file, "\t\tquery = b.client.%s()\n", methodName)
 	fmt.Fprintf(file, "\t}\n")
 	fmt.Fprintf(file, "\tif b.selectFields != nil {\n")
-	fmt.Fprintf(file, "\t\t// TODO: implement field selection in builder\n")
+	fmt.Fprintf(file, "\t\tvar selectedFields []string\n")
+	for _, field := range model.Fields {
+		if isRelation(field) {
+			continue
+		}
+		fieldName := toPascalCase(field.Name)
+		dbFieldName := field.Name
+		fmt.Fprintf(file, "\t\tif b.selectFields.%s {\n", fieldName)
+		fmt.Fprintf(file, "\t\t\tselectedFields = append(selectedFields, %q)\n", dbFieldName)
+		fmt.Fprintf(file, "\t\t}\n")
+	}
+	fmt.Fprintf(file, "\t\tif len(selectedFields) > 0 {\n")
+	fmt.Fprintf(file, "\t\t\tquery.Select(selectedFields...)\n")
+	fmt.Fprintf(file, "\t\t}\n")
 	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\tvar whereInput inputs.%sWhereInput\n", pascalModelName)
 	fmt.Fprintf(file, "\tif b.whereInput != nil {\n")
-	fmt.Fprintf(file, "\t\twhereMap := queries.Convert%sWhereInputToWhere(*b.whereInput)\n", pascalModelName)
-	fmt.Fprintf(file, "\t\tquery.Where(whereMap)\n")
+	fmt.Fprintf(file, "\t\twhereInput = *b.whereInput\n")
 	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\tvar results []models.%s\n", pascalModelName)
-	fmt.Fprintf(file, "\terr := query.FindMany(ctx, &results)\n")
+	fmt.Fprintf(file, "\tresult := query.FindMany(whereInput)\n")
+	fmt.Fprintf(file, "\tresults, err := result.Exec(ctx)\n")
 	fmt.Fprintf(file, "\treturn results, err\n")
 	fmt.Fprintf(file, "}\n\n")
 
@@ -473,7 +452,20 @@ func generateFluentAPIMethods(file *os.File, model *parser.Model, pascalModelNam
 	fmt.Fprintf(file, "\t\tquery = b.client.%s()\n", methodName)
 	fmt.Fprintf(file, "\t}\n")
 	fmt.Fprintf(file, "\tif b.selectFields != nil {\n")
-	fmt.Fprintf(file, "\t\t// TODO: implement field selection in builder\n")
+	fmt.Fprintf(file, "\t\tvar selectedFields []string\n")
+	for _, field := range model.Fields {
+		if isRelation(field) {
+			continue
+		}
+		fieldName := toPascalCase(field.Name)
+		dbFieldName := field.Name
+		fmt.Fprintf(file, "\t\tif b.selectFields.%s {\n", fieldName)
+		fmt.Fprintf(file, "\t\t\tselectedFields = append(selectedFields, %q)\n", dbFieldName)
+		fmt.Fprintf(file, "\t\t}\n")
+	}
+	fmt.Fprintf(file, "\t\tif len(selectedFields) > 0 {\n")
+	fmt.Fprintf(file, "\t\t\tquery.Select(selectedFields...)\n")
+	fmt.Fprintf(file, "\t\t}\n")
 	fmt.Fprintf(file, "\t}\n")
 	fmt.Fprintf(file, "\tif b.whereInput != nil {\n")
 	fmt.Fprintf(file, "\t\twhereMap := queries.Convert%sWhereInputToWhere(*b.whereInput)\n", pascalModelName)

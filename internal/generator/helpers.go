@@ -17,11 +17,11 @@ func GenerateHelpers(schema *parser.Schema, outputDir string) error {
 	}
 
 	helpersFile := filepath.Join(outputDir, "helpers.go")
-	return generateHelpersFile(helpersFile, userModule, outputDir)
+	return generateHelpersFile(helpersFile, userModule, outputDir, schema)
 }
 
 // generateHelpersFile gera o arquivo com funções helper type-safe
-func generateHelpersFile(filePath string, userModule, outputDir string) error {
+func generateHelpersFile(filePath string, userModule, outputDir string, schema *parser.Schema) error {
 	file, err := os.Create(filePath)
 	if err != nil {
 		return err
@@ -39,37 +39,84 @@ func generateHelpersFile(filePath string, userModule, outputDir string) error {
 		inputsPath = "github.com/carlosnayan/prisma-go-client/db/inputs"
 	}
 
+	// Determine which filter types are needed based on schema
+	neededFilters := determineNeededFilters(schema)
+
+	// Build imports list based on needed filters
+	imports := []string{}
+	if neededFilters["DateTimeFilter"] {
+		imports = append(imports, "time")
+	}
+	if neededFilters["JsonFilter"] {
+		imports = append(imports, "encoding/json")
+	}
+
 	fmt.Fprintf(file, "import (\n")
-	fmt.Fprintf(file, "\t\"time\"\n")
-	fmt.Fprintf(file, "\t\"encoding/json\"\n")
+	for _, imp := range imports {
+		fmt.Fprintf(file, "\t%q\n", imp)
+	}
 	fmt.Fprintf(file, "\tinputs %q\n", inputsPath)
 	fmt.Fprintf(file, ")\n\n")
 
-	// String helpers
-	generateStringHelpers(file)
+	// Generate helpers only for needed filter types
+	if neededFilters["StringFilter"] {
+		generateStringHelpers(file)
+	}
 
-	// Int helpers
-	generateIntHelpers(file)
+	if neededFilters["IntFilter"] {
+		generateIntHelpers(file)
+	}
 
-	// Int64 helpers
-	generateInt64Helpers(file)
+	if neededFilters["Int64Filter"] {
+		generateInt64Helpers(file)
+	}
 
-	// Float helpers
-	generateFloatHelpers(file)
+	if neededFilters["FloatFilter"] {
+		generateFloatHelpers(file)
+	}
 
-	// Boolean helpers
-	generateBooleanHelpers(file)
+	if neededFilters["BooleanFilter"] {
+		generateBooleanHelpers(file)
+	}
 
-	// DateTime helpers
-	generateDateTimeHelpers(file)
+	if neededFilters["DateTimeFilter"] {
+		generateDateTimeHelpers(file)
+	}
 
-	// Json helpers
-	generateJsonHelpers(file)
+	if neededFilters["JsonFilter"] {
+		generateJsonHelpers(file)
+	}
 
-	// Bytes helpers
-	generateBytesHelpers(file)
+	if neededFilters["BytesFilter"] {
+		generateBytesHelpers(file)
+	}
 
 	return nil
+}
+
+// determineNeededFilters determines which filter types are needed based on the schema
+func determineNeededFilters(schema *parser.Schema) map[string]bool {
+	neededFilters := make(map[string]bool)
+	
+	// Always include StringFilter, IntFilter, BooleanFilter, DateTimeFilter as they are commonly used
+	neededFilters["StringFilter"] = true
+	neededFilters["IntFilter"] = true
+	neededFilters["BooleanFilter"] = true
+	neededFilters["DateTimeFilter"] = true
+
+	// Check all models for field types
+	for _, model := range schema.Models {
+		for _, field := range model.Fields {
+			if field.Type == nil || isRelation(field) {
+				continue
+			}
+			
+			filterType := getFilterType(field.Type)
+			neededFilters[filterType] = true
+		}
+	}
+	
+	return neededFilters
 }
 
 func generateStringHelpers(file *os.File) {
