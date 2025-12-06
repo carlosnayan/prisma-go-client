@@ -1,0 +1,30 @@
+package builder
+
+// QueryOptions defines options for FindMany queries, similar to Prisma's findMany options
+type QueryOptions struct {
+	// Where conditions to filter records
+	Where Where
+
+	// OrderBy defines sorting order
+	OrderBy []OrderBy
+
+	// Limit restricts the number of records returned
+	Limit *int
+
+	// Offset skips a number of records
+	Offset *int
+}
+
+// OrderBy defines sorting for a single field
+type OrderBy struct {
+	// Field name to sort by
+	Field string
+
+	// Order direction: "ASC" or "DESC"
+	Order string
+}
+
+// Ptr is a helper function to create a pointer to an int
+func Ptr(i int) *int {
+	return &i
+}

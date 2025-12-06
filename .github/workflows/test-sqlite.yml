@@ -1,0 +1,40 @@
+name: Test SQLite
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test-sqlite:
+    name: Test SQLite
+    runs-on: ubuntu-latest
+    needs: test-mysql
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'go.mod'
+    
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+    
+    - name: Download dependencies
+      run: go mod download
+    
+    - name: Install SQLite driver
+      run: go get github.com/mattn/go-sqlite3
+    
+    - name: Run tests
+      env:
+        TEST_DATABASE_URL_SQLITE: file:./test.db
+      run: go test -v ./...
+
+

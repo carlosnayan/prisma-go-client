@@ -1,0 +1,17 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-go"
+  output   = "../db"
+}
+
+// Example model
+model users {
+  id         String   @id @default(uuid())
+  email      String   @unique
+  name       String?
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+}
