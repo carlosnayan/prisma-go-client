@@ -12,7 +12,7 @@ func TestFormat_FormatsSchema(t *testing.T) {
 	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
-	
+
 	// Create unformatted schema
 	unformattedSchema := `datasource db{provider="postgresql"}
 generator client{provider="prisma-client-go" output="../db"}
@@ -35,7 +35,7 @@ model users{id String @id email String}
 
 	// Read formatted schema
 	formatted := readFile(t, "prisma/schema.prisma")
-	
+
 	// Should have proper formatting
 	if !contains(formatted, "datasource db {") {
 		t.Error("Schema should be formatted with proper spacing")
@@ -48,7 +48,7 @@ func TestFormat_CheckMode(t *testing.T) {
 	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
-	
+
 	// Create unformatted schema
 	unformattedSchema := `datasource db{provider="postgresql"}
 `
@@ -76,7 +76,7 @@ func TestFormat_AlreadyFormatted(t *testing.T) {
 
 	createTestConfig(t, "")
 	createTestSchema(t, "")
-	
+
 	// Format it first to ensure it's properly formatted
 	formatWriteFlag = true
 	formatCheckFlag = false
@@ -100,7 +100,7 @@ func TestFormat_WriteMode(t *testing.T) {
 	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
-	
+
 	// Create unformatted schema
 	unformattedSchema := `datasource db{provider="postgresql"}
 `
@@ -158,4 +158,3 @@ func TestFormat_RequiresConfigFile(t *testing.T) {
 		t.Error("runFormat should fail without config file")
 	}
 }
-

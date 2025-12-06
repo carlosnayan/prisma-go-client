@@ -59,7 +59,7 @@ func (a *App) AddGlobalFlag(flag *Flag) {
 // Execute runs the CLI application
 func (a *App) Execute() error {
 	args := os.Args[1:]
-	
+
 	if len(args) == 0 {
 		a.printUsage()
 		return nil
@@ -165,7 +165,7 @@ func parseFlags(args []string, flags []*Flag) (map[string]interface{}, []string)
 			if flag != nil {
 				// Check if it's a bool flag
 				_, isBool := flag.Value.(*bool)
-				
+
 				// Get value
 				if !isBool && i+1 < len(args) && args[i+1][0] != '-' {
 					value := args[i+1]
@@ -223,7 +223,7 @@ func setFlagValue(flag *Flag, value string) {
 func (a *App) printUsage() {
 	fmt.Printf("%s - %s\n\n", a.Name, a.Description)
 	fmt.Printf("Usage:\n  %s [command] [flags] [arguments]\n\n", a.Name)
-	
+
 	if len(a.Commands) > 0 {
 		fmt.Println("Commands:")
 		for _, cmd := range a.Commands {
@@ -284,4 +284,3 @@ func (cmd *Command) PrintUsage() {
 		fmt.Println()
 	}
 }
-

@@ -66,7 +66,7 @@ type Dialect interface {
 // GetDialect retorna o dialeto apropriado para o provider
 func GetDialect(provider string) Dialect {
 	provider = strings.ToLower(provider)
-	
+
 	switch provider {
 	case "postgresql", "postgres":
 		return &PostgreSQLDialect{}
@@ -79,4 +79,3 @@ func GetDialect(provider string) Dialect {
 		return &PostgreSQLDialect{}
 	}
 }
-

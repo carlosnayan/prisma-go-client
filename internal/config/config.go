@@ -12,22 +12,22 @@ import (
 
 // Config representa a configuração completa do Prisma (equivalente ao prisma.config.ts v7)
 type Config struct {
-	Schema     string            `toml:"schema"`     // Caminho para schema.prisma
-	Migrations *MigrationsConfig `toml:"migrations"`  // Configuração de migrations
-	Datasource *DatasourceConfig `toml:"datasource"` // Configuração do banco de dados
-	Generator  *GeneratorConfig   `toml:"generator,omitempty"` // Configuração do gerador (opcional, pode estar no schema)
-	Log        []string          `toml:"log,omitempty"` // Níveis de log: query, info, warn, error
+	Schema     string            `toml:"schema"`              // Caminho para schema.prisma
+	Migrations *MigrationsConfig `toml:"migrations"`          // Configuração de migrations
+	Datasource *DatasourceConfig `toml:"datasource"`          // Configuração do banco de dados
+	Generator  *GeneratorConfig  `toml:"generator,omitempty"` // Configuração do gerador (opcional, pode estar no schema)
+	Log        []string          `toml:"log,omitempty"`       // Níveis de log: query, info, warn, error
 }
 
 // MigrationsConfig configura as migrations
 type MigrationsConfig struct {
-	Path string `toml:"path"` // Caminho para migrations (ex: "prisma/migrations")
+	Path string `toml:"path"`           // Caminho para migrations (ex: "prisma/migrations")
 	Seed string `toml:"seed,omitempty"` // Script de seed (ex: "go run prisma/seed.go")
 }
 
 // DatasourceConfig configura a fonte de dados
 type DatasourceConfig struct {
-	URL              string `toml:"url"` // URL do banco (pode usar env("DATABASE_URL") ou ${DATABASE_URL})
+	URL               string `toml:"url"` // URL do banco (pode usar env("DATABASE_URL") ou ${DATABASE_URL})
 	ShadowDatabaseURL string `toml:"shadowDatabaseUrl,omitempty"`
 }
 
@@ -46,25 +46,25 @@ func Load(configPath string) (*Config, error) {
 	if wd != "" {
 		dir := wd
 		for {
-		envPath := filepath.Join(dir, ".env")
-		if _, err := os.Stat(envPath); err == nil {
-			// Carregar .env encontrado (ignore errors - optional file)
-			_ = godotenv.Load(envPath)
-			break
-		}
+			envPath := filepath.Join(dir, ".env")
+			if _, err := os.Stat(envPath); err == nil {
+				// Carregar .env encontrado (ignore errors - optional file)
+				_ = godotenv.Load(envPath)
+				break
+			}
 
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			// Não encontrou .env, tenta carregar do diretório atual
-			_ = godotenv.Load()
-			break
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				// Não encontrou .env, tenta carregar do diretório atual
+				_ = godotenv.Load()
+				break
+			}
+			dir = parent
 		}
-		dir = parent
+	} else {
+		// Fallback: tentar carregar .env do diretório atual (ignore errors - optional file)
+		_ = godotenv.Load()
 	}
-} else {
-	// Fallback: tentar carregar .env do diretório atual (ignore errors - optional file)
-	_ = godotenv.Load()
-}
 
 	if configPath == "" {
 		// Procurar prisma.conf na raiz do projeto
@@ -133,7 +133,7 @@ func expandString(s string) string {
 	for {
 		var start int
 		var endQuote string
-		
+
 		// Tentar encontrar env(" ou env('
 		if idx := strings.Index(s, `env("`); idx != -1 {
 			start = idx
@@ -144,7 +144,7 @@ func expandString(s string) string {
 		} else {
 			break
 		}
-		
+
 		end := strings.Index(s[start+5:], endQuote)
 		if end == -1 {
 			break
@@ -243,4 +243,3 @@ func (c *Config) GetDatabaseURL() string {
 	}
 	return ""
 }
-

@@ -5,39 +5,39 @@ type TokenType string
 
 const (
 	// Tokens especiais
-	TokenEOF       TokenType = "EOF"
-	TokenIllegal   TokenType = "ILLEGAL"
+	TokenEOF        TokenType = "EOF"
+	TokenIllegal    TokenType = "ILLEGAL"
 	TokenWhitespace TokenType = "WHITESPACE"
-	TokenNewline   TokenType = "NEWLINE"
+	TokenNewline    TokenType = "NEWLINE"
 
 	// Identificadores e literais
-	TokenIdent    TokenType = "IDENT"
-	TokenString   TokenType = "STRING"
-	TokenInt      TokenType = "INT"
-	TokenFloat    TokenType = "FLOAT"
-	TokenBoolean  TokenType = "BOOLEAN"
+	TokenIdent   TokenType = "IDENT"
+	TokenString  TokenType = "STRING"
+	TokenInt     TokenType = "INT"
+	TokenFloat   TokenType = "FLOAT"
+	TokenBoolean TokenType = "BOOLEAN"
 
 	// Operadores e símbolos
-	TokenAt        TokenType = "@"      // @
-	TokenAtAt      TokenType = "@@"     // @@
-	TokenLParen    TokenType = "("      // (
-	TokenRParen    TokenType = ")"      // )
-	TokenLBrace    TokenType = "{"      // {
-	TokenRBrace    TokenType = "}"      // }
-	TokenLBracket  TokenType = "["      // [
-	TokenRBracket  TokenType = "]"      // ]
-	TokenEqual     TokenType = "="      // =
-	TokenColon     TokenType = ":"      // :
-	TokenQuestion  TokenType = "?"      // ?
-	TokenComma     TokenType = ","      // ,
-	TokenSemicolon TokenType = ";"     // ;
-	TokenDot       TokenType = "."      // .
+	TokenAt        TokenType = "@"  // @
+	TokenAtAt      TokenType = "@@" // @@
+	TokenLParen    TokenType = "("  // (
+	TokenRParen    TokenType = ")"  // )
+	TokenLBrace    TokenType = "{"  // {
+	TokenRBrace    TokenType = "}"  // }
+	TokenLBracket  TokenType = "["  // [
+	TokenRBracket  TokenType = "]"  // ]
+	TokenEqual     TokenType = "="  // =
+	TokenColon     TokenType = ":"  // :
+	TokenQuestion  TokenType = "?"  // ?
+	TokenComma     TokenType = ","  // ,
+	TokenSemicolon TokenType = ";"  // ;
+	TokenDot       TokenType = "."  // .
 
 	// Keywords
-	TokenModel      TokenType = "model"
-	TokenEnum       TokenType = "enum"
-	TokenDatasource TokenType = "datasource"
-	TokenGenerator  TokenType = "generator"
+	TokenModel       TokenType = "model"
+	TokenEnum        TokenType = "enum"
+	TokenDatasource  TokenType = "datasource"
+	TokenGenerator   TokenType = "generator"
 	TokenTypeKeyword TokenType = "type"
 )
 
@@ -75,4 +75,3 @@ func LookupIdent(ident string) TokenType {
 	}
 	return TokenIdent
 }
-

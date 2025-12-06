@@ -210,7 +210,7 @@ func introspectSQLite(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, erro
 // mapPostgreSQLType mapeia tipo PostgreSQL para tipo Prisma
 func mapPostgreSQLType(pgType string) string {
 	pgType = strings.ToLower(pgType)
-	
+
 	switch {
 	case strings.HasPrefix(pgType, "varchar"), pgType == "text", pgType == "char":
 		return "String"
@@ -234,4 +234,3 @@ func mapPostgreSQLType(pgType string) string {
 		return "String" // Default
 	}
 }
-

@@ -49,4 +49,3 @@ func TestMigrateReset_ResetsDatabase(t *testing.T) {
 	// We skip it to avoid destroying test data
 	t.Skip("Skipping reset test to avoid database destruction")
 }
-

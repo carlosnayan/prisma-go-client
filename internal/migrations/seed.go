@@ -29,7 +29,7 @@ func ExecuteSeed(seedCommand string) error {
 
 	// Criar comando
 	cmd := exec.Command(cmdName, args...)
-	
+
 	// Configurar diretório de trabalho (raiz do projeto)
 	wd, err := os.Getwd()
 	if err == nil {
@@ -62,4 +62,3 @@ func ExecuteSeed(seedCommand string) error {
 
 	return nil
 }
-

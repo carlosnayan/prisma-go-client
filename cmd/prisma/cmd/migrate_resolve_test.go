@@ -89,4 +89,3 @@ func TestMigrateResolve_WithRolledBackFlag(t *testing.T) {
 		t.Error("Should not fail with flag requirement when --rolled-back is set")
 	}
 }
-

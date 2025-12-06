@@ -95,7 +95,7 @@ func (l *Logger) Query(query string, args []interface{}, duration time.Duration)
 
 	// Formatar query com argumentos
 	formattedQuery := formatQuery(query, args)
-	
+
 	// Logar com timestamp e duração
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	fmt.Fprintf(l.writer, "[%s] [QUERY] %s (took %v)\n", timestamp, formattedQuery, duration)
@@ -137,7 +137,7 @@ func formatQuery(query string, args []interface{}) string {
 	// Substituir placeholders por valores
 	formatted := query
 	argIndex := 0
-	
+
 	// Para PostgreSQL ($1, $2, ...)
 	if strings.Contains(query, "$") {
 		for i := 1; argIndex < len(args); i++ {
@@ -206,13 +206,13 @@ func isSensitiveData(s string) bool {
 		"ssn", "social_security", "credit_card",
 		"cvv", "pin", "otp",
 	}
-	
+
 	for _, keyword := range sensitiveKeywords {
 		if strings.Contains(s, keyword) {
 			return true
 		}
 	}
-	
+
 	// Verificar padrões comuns de tokens (JWT, API keys, etc.)
 	if len(s) > 20 && (strings.HasPrefix(s, "eyj") || // JWT
 		strings.HasPrefix(s, "sk_") || // Stripe keys
@@ -222,7 +222,7 @@ func isSensitiveData(s string) bool {
 		strings.HasPrefix(s, "xoxp-")) {
 		return true
 	}
-	
+
 	return false
 }
 
@@ -265,4 +265,3 @@ func FileLogger(filename string, levels []string) (*Logger, error) {
 	}
 	return NewLogger(levels, file), nil
 }
-

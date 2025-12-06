@@ -118,4 +118,3 @@ func TestDialect_SQLite(t *testing.T) {
 		t.Errorf("GetPlaceholder(1) = %s, want ?", placeholder)
 	}
 }
-

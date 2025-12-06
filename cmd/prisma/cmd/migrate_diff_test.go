@@ -25,7 +25,7 @@ func TestMigrateDiff_RequiresFromAndTo(t *testing.T) {
 	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
-	
+
 	// Missing required flags
 	diffFrom = ""
 	diffTo = ""
@@ -41,12 +41,12 @@ func TestMigrateDiff_CompareTwoSchemas(t *testing.T) {
 	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
-	
+
 	// Create two different schemas
 	schema1 := `datasource db { provider = "postgresql" }
 generator client { provider = "prisma-client-go" output = "../db" }
 model users { id String @id email String }`
-	
+
 	schema2 := `datasource db { provider = "postgresql" }
 generator client { provider = "prisma-client-go" output = "../db" }
 model users { id String @id email String name String? }`
@@ -55,7 +55,7 @@ model users { id String @id email String name String? }`
 	if err != nil {
 		t.Fatalf("Failed to write schema1: %v", err)
 	}
-	
+
 	err = os.WriteFile("schema2.prisma", []byte(schema2), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write schema2: %v", err)
@@ -77,12 +77,12 @@ func TestMigrateDiff_WithOutputFile(t *testing.T) {
 	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
-	
+
 	// Create two different schemas
 	schema1 := `datasource db { provider = "postgresql" }
 generator client { provider = "prisma-client-go" output = "../db" }
 model users { id String @id }`
-	
+
 	schema2 := `datasource db { provider = "postgresql" }
 generator client { provider = "prisma-client-go" output = "../db" }
 model users { id String @id email String }`
@@ -91,7 +91,7 @@ model users { id String @id email String }`
 	if err != nil {
 		t.Fatalf("Failed to write schema1: %v", err)
 	}
-	
+
 	err = os.WriteFile("schema2.prisma", []byte(schema2), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write schema2: %v", err)
@@ -116,7 +116,7 @@ func TestMigrateDiff_NoDifferences(t *testing.T) {
 	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
-	
+
 	// Create identical schemas
 	schema := `datasource db { provider = "postgresql" }
 generator client { provider = "prisma-client-go" output = "../db" }
@@ -126,7 +126,7 @@ model users { id String @id }`
 	if err != nil {
 		t.Fatalf("Failed to write schema1: %v", err)
 	}
-	
+
 	err = os.WriteFile("schema2.prisma", []byte(schema), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write schema2: %v", err)
@@ -140,4 +140,3 @@ model users { id String @id }`
 	// Should succeed with "No differences found"
 	_ = err // May fail for other reasons, but should handle no differences gracefully
 }
-

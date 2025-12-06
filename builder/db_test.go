@@ -229,21 +229,21 @@ func TestBuilder_AllProviders(t *testing.T) {
 				t.Fatalf("failed to create table: %v", err)
 			}
 
-	// Test basic CRUD
-	type TestRecord struct {
-		ID   int    `json:"id"`
-		Name string `json:"name"`
-	}
+			// Test basic CRUD
+			type TestRecord struct {
+				ID   int    `json:"id"`
+				Name string `json:"name"`
+			}
 
-	builder := NewTableQueryBuilder(db, "test_table", []string{"id", "name"})
-	builder.SetDialect(dialect.GetDialect(provider))
-	builder.SetPrimaryKey("id")
-	builder.SetModelType(reflect.TypeOf(TestRecord{}))
+			builder := NewTableQueryBuilder(db, "test_table", []string{"id", "name"})
+			builder.SetDialect(dialect.GetDialect(provider))
+			builder.SetPrimaryKey("id")
+			builder.SetModelType(reflect.TypeOf(TestRecord{}))
 
-	record := TestRecord{Name: "Test"}
+			record := TestRecord{Name: "Test"}
 
-	// Create
-	created, err := builder.Create(ctx, record)
+			// Create
+			created, err := builder.Create(ctx, record)
 			if err != nil {
 				t.Fatalf("Create failed: %v", err)
 			}

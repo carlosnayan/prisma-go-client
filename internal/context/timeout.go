@@ -31,4 +31,3 @@ func WithTransactionTimeout(ctx context.Context) (context.Context, context.Cance
 func WithMigrationTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, 5*time.Minute)
 }
-

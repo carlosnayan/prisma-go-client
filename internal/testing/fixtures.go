@@ -122,4 +122,3 @@ func WithTestTransaction(t *testing.T, db driver.DB, fn func(tx driver.Tx)) {
 	// Execute test function
 	fn(tx)
 }
-

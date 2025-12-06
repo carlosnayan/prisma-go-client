@@ -54,4 +54,3 @@ func TestMigrateDeploy_AppliesPendingMigrations(t *testing.T) {
 	_ = err // Expected to fail if database is not properly set up
 	// In a real scenario, this would apply pending migrations
 }
-

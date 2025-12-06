@@ -10,11 +10,11 @@ import (
 
 // SchemaDiff representa diferenças entre schema e banco
 type SchemaDiff struct {
-	TablesToCreate    []TableDefinition
-	TablesToAlter     []TableAlteration
-	TablesToDrop      []string
-	IndexesToCreate   []IndexDefinition
-	IndexesToDrop     []string
+	TablesToCreate  []TableDefinition
+	TablesToAlter   []TableAlteration
+	TablesToDrop    []string
+	IndexesToCreate []IndexDefinition
+	IndexesToDrop   []string
 }
 
 // TableDefinition representa uma tabela a ser criada
@@ -35,16 +35,16 @@ type ColumnDefinition struct {
 
 // TableAlteration representa alterações em uma tabela
 type TableAlteration struct {
-	TableName string
-	AddColumns    []ColumnDefinition
-	DropColumns   []string
-	AlterColumns  []ColumnAlteration
+	TableName    string
+	AddColumns   []ColumnDefinition
+	DropColumns  []string
+	AlterColumns []ColumnAlteration
 }
 
 // ColumnAlteration representa alteração em uma coluna
 type ColumnAlteration struct {
-	ColumnName string
-	NewType    string
+	ColumnName  string
+	NewType     string
 	NewNullable bool
 }
 
@@ -66,7 +66,7 @@ func needsUUIDExtension(diff *SchemaDiff) bool {
 			}
 		}
 	}
-	
+
 	// Verificar em colunas a serem adicionadas
 	for _, alter := range diff.TablesToAlter {
 		for _, col := range alter.AddColumns {
@@ -75,7 +75,7 @@ func needsUUIDExtension(diff *SchemaDiff) bool {
 			}
 		}
 	}
-	
+
 	return false
 }
 
@@ -93,34 +93,34 @@ func GenerateMigrationSQL(diff *SchemaDiff, provider string) (string, error) {
 	// Criar tabelas
 	for _, table := range diff.TablesToCreate {
 		sql.WriteString(fmt.Sprintf("CREATE TABLE %s (\n", d.QuoteIdentifier(table.Name)))
-		
+
 		var columns []string
 		var primaryKeys []string
-		
+
 		for _, col := range table.Columns {
 			colDef := fmt.Sprintf("  %s %s", d.QuoteIdentifier(col.Name), d.MapType(col.Type, col.IsNullable))
-			
+
 			if !col.IsNullable {
 				colDef += " NOT NULL"
 			}
-			
+
 			if col.DefaultValue != "" {
 				colDef += " DEFAULT " + col.DefaultValue
 			}
-			
+
 			if col.IsPrimaryKey {
 				primaryKeys = append(primaryKeys, col.Name)
 			}
-			
+
 			if col.IsUnique && !col.IsPrimaryKey {
 				colDef += " UNIQUE"
 			}
-			
+
 			columns = append(columns, colDef)
 		}
-		
+
 		sql.WriteString(strings.Join(columns, ",\n"))
-		
+
 		if len(primaryKeys) > 0 {
 			quotedPKs := make([]string, len(primaryKeys))
 			for i, pk := range primaryKeys {
@@ -128,7 +128,7 @@ func GenerateMigrationSQL(diff *SchemaDiff, provider string) (string, error) {
 			}
 			sql.WriteString(fmt.Sprintf(",\n  PRIMARY KEY (%s)", strings.Join(quotedPKs, ", ")))
 		}
-		
+
 		sql.WriteString("\n);\n\n")
 	}
 
@@ -136,29 +136,29 @@ func GenerateMigrationSQL(diff *SchemaDiff, provider string) (string, error) {
 	for _, alter := range diff.TablesToAlter {
 		// Adicionar colunas
 		for _, col := range alter.AddColumns {
-			colDef := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", 
+			colDef := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s",
 				d.QuoteIdentifier(alter.TableName),
 				d.QuoteIdentifier(col.Name),
 				d.MapType(col.Type, col.IsNullable))
-			
+
 			if !col.IsNullable {
 				colDef += " NOT NULL"
 			}
-			
+
 			if col.DefaultValue != "" {
 				colDef += " DEFAULT " + col.DefaultValue
 			}
-			
+
 			sql.WriteString(colDef + ";\n")
 		}
-		
+
 		// Remover colunas
 		for _, colName := range alter.DropColumns {
 			sql.WriteString(fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s;\n",
 				d.QuoteIdentifier(alter.TableName),
 				d.QuoteIdentifier(colName)))
 		}
-		
+
 		sql.WriteString("\n")
 	}
 
@@ -235,7 +235,7 @@ func extractDefaultValue(arg *parser.AttributeArgument) string {
 	if str, ok := arg.Value.(string); ok {
 		return fmt.Sprintf("'%s'", strings.ReplaceAll(str, "'", "''"))
 	}
-	
+
 	// Se for função (autoincrement, now, dbgenerated, etc.)
 	if m, ok := arg.Value.(map[string]interface{}); ok {
 		if fn, ok := m["function"].(string); ok {
@@ -258,7 +258,7 @@ func extractDefaultValue(arg *parser.AttributeArgument) string {
 			}
 		}
 	}
-	
+
 	return ""
 }
 
@@ -370,5 +370,3 @@ func quoteIdentifier(name string, provider string) string {
 		return fmt.Sprintf(`"%s"`, name)
 	}
 }
-
-

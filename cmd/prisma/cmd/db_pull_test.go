@@ -46,4 +46,3 @@ func TestDbPull_GeneratesSchema(t *testing.T) {
 	// We skip it to avoid needing full database setup
 	t.Skip("Requires database with existing tables")
 }
-

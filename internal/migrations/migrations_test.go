@@ -97,4 +97,3 @@ func TestMigrations_MySQL(t *testing.T) {
 }
 
 // TestMigrations_SQLite is tested in migrations_test_sqlite.go (requires build tag)
-

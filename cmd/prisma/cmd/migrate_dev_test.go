@@ -105,4 +105,3 @@ func TestMigrateDev_NoChangesDetected(t *testing.T) {
 	// This requires a full database setup, so we'll skip for now
 	t.Skip("Requires full database setup with schema already applied")
 }
-

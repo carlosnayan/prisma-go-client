@@ -207,4 +207,3 @@ func TestIntegration_WithCustomPaths(t *testing.T) {
 		t.Fatalf("Validate with custom paths failed: %v", err)
 	}
 }
-

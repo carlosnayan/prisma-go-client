@@ -18,7 +18,7 @@ func (q *Query) Restore(ctx context.Context, id interface{}) error {
 	deletedAtField := q.dialect.QuoteIdentifier("deleted_at")
 	tableName := q.dialect.QuoteIdentifier(q.table)
 	primaryKeyField := q.dialect.QuoteIdentifier(q.primaryKey)
-	query := fmt.Sprintf("UPDATE %s SET %s = NULL WHERE %s = %s AND %s IS NOT NULL", 
+	query := fmt.Sprintf("UPDATE %s SET %s = NULL WHERE %s = %s AND %s IS NOT NULL",
 		tableName, deletedAtField, primaryKeyField, q.dialect.GetPlaceholder(1), deletedAtField)
 	_, err := q.db.Exec(ctx, query, id)
 	return err

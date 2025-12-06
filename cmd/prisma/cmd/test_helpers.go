@@ -13,23 +13,23 @@ func setupTestDir(t testingT) string {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	
+
 	oldDir, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Failed to get current dir: %v", err)
 	}
-	
+
 	err = os.Chdir(dir)
 	if err != nil {
 		t.Fatalf("Failed to change to temp dir: %v", err)
 	}
-	
+
 	// Store old dir for cleanup
 	t.Cleanup(func() {
 		_ = os.Chdir(oldDir)
 		_ = os.RemoveAll(dir)
 	})
-	
+
 	return dir
 }
 
@@ -59,18 +59,18 @@ model users {
 }
 `
 	}
-	
+
 	schemaPath := "prisma/schema.prisma"
 	err := os.MkdirAll(filepath.Dir(schemaPath), 0755)
 	if err != nil {
 		t.Fatalf("Failed to create prisma dir: %v", err)
 	}
-	
+
 	err = os.WriteFile(schemaPath, []byte(content), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write schema file: %v", err)
 	}
-	
+
 	return schemaPath
 }
 
@@ -86,13 +86,13 @@ path = "prisma/migrations"
 url = "env('DATABASE_URL')"
 `
 	}
-	
+
 	configPath := "prisma.conf"
 	err := os.WriteFile(configPath, []byte(content), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write config file: %v", err)
 	}
-	
+
 	return configPath
 }
 
@@ -110,18 +110,18 @@ func createTestMigrationsDir(t testingT) string {
 func createTestMigration(t testingT, name, sql string) string {
 	migrationsPath := createTestMigrationsDir(t)
 	migrationPath := filepath.Join(migrationsPath, name)
-	
+
 	err := os.MkdirAll(migrationPath, 0755)
 	if err != nil {
 		t.Fatalf("Failed to create migration dir: %v", err)
 	}
-	
+
 	sqlPath := filepath.Join(migrationPath, "migration.sql")
 	err = os.WriteFile(sqlPath, []byte(sql), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write migration file: %v", err)
 	}
-	
+
 	return migrationPath
 }
 
@@ -252,15 +252,14 @@ func createTestGoMod(t testingT, moduleName string) string {
 	if moduleName == "" {
 		moduleName = "test-module"
 	}
-	
+
 	content := fmt.Sprintf("module %s\n\ngo 1.21\n", moduleName)
-	
+
 	goModPath := "go.mod"
 	err := os.WriteFile(goModPath, []byte(content), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write go.mod file: %v", err)
 	}
-	
+
 	return goModPath
 }
-

@@ -71,7 +71,7 @@ func TestDbSeed_WithGoSeedScript(t *testing.T) {
 	seedScript := `package main
 import "fmt"
 func main() { fmt.Println("Seed executed") }`
-	
+
 	err := os.WriteFile("seed.go", []byte(seedScript), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write seed script: %v", err)
@@ -100,4 +100,3 @@ script = "go run seed.go"
 	// We just verify it doesn't crash
 	_ = err // Expected to fail if database is not set up
 }
-

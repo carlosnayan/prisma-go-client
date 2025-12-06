@@ -93,4 +93,3 @@ func calculateImportPath(userModule, outputDir string) (modelsPath, queriesPath,
 
 	return modelsPath, queriesPath, inputsPath, nil
 }
-

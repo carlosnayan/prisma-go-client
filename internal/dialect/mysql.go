@@ -108,4 +108,3 @@ func (d *MySQLDialect) GetLimitOffsetSyntax(limit, offset int) string {
 	}
 	return ""
 }
-

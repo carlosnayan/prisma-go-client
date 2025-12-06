@@ -56,4 +56,3 @@ func formatErrors(errors []string) string {
 	}
 	return result
 }
-

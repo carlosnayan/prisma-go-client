@@ -16,8 +16,8 @@ type StmtCache struct {
 
 // CachedStmt representa um prepared statement em cache
 type CachedStmt struct {
-	Query      string
-	LastUsed   time.Time
+	Query       string
+	LastUsed    time.Time
 	AccessCount int64
 }
 
@@ -133,4 +133,3 @@ func (c *StmtCache) Stats() (size int, totalAccesses int64) {
 	}
 	return size, totalAccesses
 }
-

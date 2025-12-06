@@ -41,7 +41,7 @@ func TestValidate_ValidationErrors(t *testing.T) {
 	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
-	
+
 	// Create schema with a relation to non-existent model
 	// This should trigger a validation error
 	schemaWithError := `datasource db {
@@ -98,7 +98,7 @@ func TestValidate_WithCustomSchemaPath(t *testing.T) {
 	defer func() { _ = cleanupTestDir(dir) }()
 
 	createTestConfig(t, "")
-	
+
 	// Create schema in custom location
 	customSchemaPath := "custom/schema.prisma"
 	err := os.MkdirAll(filepath.Dir(customSchemaPath), 0755)
@@ -134,4 +134,3 @@ func TestValidate_RequiresConfigFile(t *testing.T) {
 		t.Errorf("Error should mention prisma.conf, got: %v", err)
 	}
 }
-

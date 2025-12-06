@@ -9,4 +9,3 @@ package driver
 
 // TestSQLDBAdapter_SQLite is tested in driver_test_sqlite.go (requires build tag)
 // TestPgxPoolAdapter is tested in driver_test_pgx.go (requires build tag)
-

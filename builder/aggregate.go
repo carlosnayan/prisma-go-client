@@ -73,7 +73,7 @@ func (q *Query) Aggregate(ctx context.Context, field string, aggType string) (in
 
 	// Executar query
 	row := q.db.QueryRow(ctx, query, args...)
-	
+
 	var result interface{}
 	err := row.Scan(&result)
 	if err != nil {
@@ -128,4 +128,3 @@ func (q *Query) Min(ctx context.Context, field string) (interface{}, error) {
 func (q *Query) Max(ctx context.Context, field string) (interface{}, error) {
 	return q.Aggregate(ctx, field, "MAX")
 }
-

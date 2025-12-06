@@ -9,10 +9,10 @@ import (
 
 // HealthCheck representa o resultado de um health check
 type HealthCheck struct {
-	Status      string        `json:"status"`       // "healthy", "unhealthy"
-	Database    string        `json:"database"`    // Nome do banco
-	ResponseTime time.Duration `json:"response_time"` // Tempo de resposta
-	Error       string        `json:"error,omitempty"` // Erro se houver
+	Status       string        `json:"status"`          // "healthy", "unhealthy"
+	Database     string        `json:"database"`        // Nome do banco
+	ResponseTime time.Duration `json:"response_time"`   // Tempo de resposta
+	Error        string        `json:"error,omitempty"` // Erro se houver
 }
 
 // CheckHealth verifica a saúde da conexão com o banco
@@ -21,7 +21,7 @@ func CheckHealth(db *sql.DB, timeout time.Duration) (*HealthCheck, error) {
 	defer cancel()
 
 	start := time.Now()
-	
+
 	// Tentar fazer ping
 	err := db.PingContext(ctx)
 	responseTime := time.Since(start)
@@ -83,4 +83,3 @@ func PrintHealthCheck(check *HealthCheck) {
 		fmt.Printf("  Error: %s\n", check.Error)
 	}
 }
-

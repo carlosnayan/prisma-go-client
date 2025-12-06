@@ -29,5 +29,3 @@ func GetProviderFromEnv() string {
 	}
 	return provider
 }
-
-

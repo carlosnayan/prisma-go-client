@@ -55,4 +55,3 @@ func TestMigrateStatus_ListsMigrations(t *testing.T) {
 	_ = err // Expected to fail if database is not properly set up
 	// In a real scenario, this would list migrations
 }
-

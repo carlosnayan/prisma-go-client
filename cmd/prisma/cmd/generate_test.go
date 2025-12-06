@@ -170,7 +170,7 @@ func TestGenerate_WithCustomSchemaPath(t *testing.T) {
 
 	createTestGoMod(t, "test-module")
 	createTestConfig(t, "")
-	
+
 	// Create schema in custom location
 	customSchemaPath := "custom/schema.prisma"
 	err := os.MkdirAll(filepath.Dir(customSchemaPath), 0755)
@@ -243,7 +243,7 @@ func TestGenerate_NoUnusedImports(t *testing.T) {
 	// Check client.go doesn't have unused context import
 	clientFile := "./db/client.go"
 	content := readFile(t, clientFile)
-	
+
 	// Should not import context if not used
 	if contains(content, "import (") {
 		// Check that context is not imported if not used
@@ -282,4 +282,3 @@ func TestGenerate_RequiresConfigFile(t *testing.T) {
 		t.Error("runGenerate should fail without config file")
 	}
 }
-

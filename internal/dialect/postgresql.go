@@ -111,4 +111,3 @@ func (d *PostgreSQLDialect) GetLimitOffsetSyntax(limit, offset int) string {
 	}
 	return ""
 }
-

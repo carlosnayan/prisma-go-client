@@ -106,4 +106,3 @@ func TestSQLDBAdapter_SQLite(t *testing.T) {
 		t.Fatalf("Commit failed: %v", err)
 	}
 }
-

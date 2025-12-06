@@ -58,6 +58,7 @@ func CleanupTestDB(t *testing.T, db driver.DB, provider string) {
 // Helper functions
 
 // replaceDatabaseName replaces database name in URL
+//
 //nolint:unused // Used by test files with build tags
 func replaceDatabaseName(url, dbName string) string {
 	// Simple implementation - works for most cases
@@ -97,6 +98,7 @@ func replaceDatabaseName(url, dbName string) string {
 }
 
 // removeDatabaseFromURL removes database name from URL
+//
 //nolint:unused // Used by test files with build tags
 func removeDatabaseFromURL(url string) string {
 	// Find last / and remove everything after it (except query string)
@@ -127,4 +129,3 @@ func removeDatabaseFromURL(url string) string {
 
 	return url[:lastSlash+1]
 }
-

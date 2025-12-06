@@ -138,4 +138,3 @@ func (t *SQLTx) QueryRow(ctx context.Context, query string, args ...interface{})
 	row := t.tx.QueryRowContext(ctx, query, args...)
 	return &SQLRow{row: row}
 }
-

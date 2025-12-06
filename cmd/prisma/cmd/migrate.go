@@ -63,7 +63,7 @@ func parseDatabaseURL(dbURL string) *DatabaseInfo {
 }
 
 var (
-	migrateResolveAppliedFlag string
+	migrateResolveAppliedFlag    string
 	migrateResolveRolledBackFlag string
 )
 

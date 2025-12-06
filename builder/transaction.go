@@ -86,7 +86,7 @@ func ExecuteTransaction(ctx context.Context, db DBTX, fn TransactionFunc) error 
 	if err != nil {
 		return err
 	}
-	
+
 	// Always rollback at the end, unless commit is successful
 	defer func() {
 		if r := recover(); r != nil {
@@ -94,13 +94,13 @@ func ExecuteTransaction(ctx context.Context, db DBTX, fn TransactionFunc) error 
 			panic(r)
 		}
 	}()
-	
+
 	// Execute function
 	if err := fn(tx); err != nil {
 		_ = tx.Rollback(ctx)
 		return err
 	}
-	
+
 	// Commit if everything went well
 	return tx.Commit(ctx)
 }
@@ -116,4 +116,3 @@ func ExecuteSequentialTransactions(ctx context.Context, db DBTX, operations []Tr
 		return nil
 	})
 }
-

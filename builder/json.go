@@ -28,14 +28,14 @@ func (j *JSONField) Get(ctx context.Context, key string) (interface{}, error) {
 	if err := validateJSONKey(key); err != nil {
 		return nil, fmt.Errorf("invalid JSON key: %w", err)
 	}
-	
+
 	// Escapar identificadores e usar parâmetro preparado para a key
 	quotedField := j.query.dialect.QuoteIdentifier(j.field)
 	quotedTable := j.query.dialect.QuoteIdentifier(j.query.table)
 	// Usar parâmetro preparado para a key JSON
 	query := fmt.Sprintf("SELECT %s->>$1 FROM %s", quotedField, quotedTable)
 	row := j.query.db.QueryRow(ctx, query, key)
-	
+
 	var result interface{}
 	err := row.Scan(&result)
 	return result, err
@@ -53,12 +53,12 @@ func (j *JSONField) Set(ctx context.Context, key string, value interface{}) erro
 	quotedTable := j.query.dialect.QuoteIdentifier(j.query.table)
 	quotedField := j.query.dialect.QuoteIdentifier(j.field)
 	quotedPK := j.query.dialect.QuoteIdentifier(j.query.primaryKey)
-	
+
 	// Usar parâmetros preparados para key e value
 	// jsonb_set precisa de uma string JSON válida, então usamos $2::jsonb
 	query := fmt.Sprintf("UPDATE %s SET %s = jsonb_set(%s, ARRAY[$1], $2::jsonb) WHERE %s = $3",
 		quotedTable, quotedField, quotedField, quotedPK)
-	
+
 	// Nota: isso requer um ID, então precisamos de uma forma melhor
 	// Por enquanto, retornar erro se não houver condições WHERE
 	if len(j.query.whereConditions) == 0 {
@@ -109,7 +109,7 @@ func (j *JSONField) Path(keys ...string) *JSONField {
 			}
 		}
 	}
-	
+
 	// Construir caminho JSON usando parâmetros preparados
 	quotedField := j.query.dialect.QuoteIdentifier(j.field)
 	path := quotedField
@@ -129,7 +129,7 @@ func (j *JSONField) Path(keys ...string) *JSONField {
 			or:    false,
 		})
 	}
-	
+
 	return &JSONField{
 		field: path,
 		query: j.query,
@@ -141,7 +141,7 @@ func validateJSONKey(key string) error {
 	if key == "" {
 		return fmt.Errorf("JSON key cannot be empty")
 	}
-	
+
 	// Rejeitar caracteres perigosos que podem ser usados em SQL injection
 	dangerousChars := []string{"'", "\"", "\\", ";", "--", "/*", "*/", "xp_", "sp_", "exec", "select", "insert", "update", "delete", "drop", "create", "alter"}
 	keyLower := strings.ToLower(key)
@@ -150,12 +150,11 @@ func validateJSONKey(key string) error {
 			return fmt.Errorf("JSON key contains dangerous characters: %s", char)
 		}
 	}
-	
+
 	// Limitar tamanho da key
 	if len(key) > 255 {
 		return fmt.Errorf("JSON key too long (max 255 characters)")
 	}
-	
+
 	return nil
 }
-

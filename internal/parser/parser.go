@@ -6,10 +6,10 @@ import (
 
 // Parser parseia tokens e constrói a AST
 type Parser struct {
-	lexer        *Lexer
-	errors       []string
-	curToken     Token
-	peekToken    Token
+	lexer     *Lexer
+	errors    []string
+	curToken  Token
+	peekToken Token
 }
 
 // NewParser cria um novo parser
@@ -533,4 +533,3 @@ func (p *Parser) parseField() *Field {
 
 	return field
 }
-

@@ -140,15 +140,15 @@ func (v *Validator) validateFieldType(fieldType *FieldType, modelName, fieldName
 	}
 
 	validTypes := map[string]bool{
-		"String":    true,
-		"Int":       true,
-		"BigInt":    true,
-		"Float":    true,
-		"Decimal":   true,
-		"Boolean":   true,
-		"DateTime":  true,
-		"Json":      true,
-		"Bytes":     true,
+		"String":      true,
+		"Int":         true,
+		"BigInt":      true,
+		"Float":       true,
+		"Decimal":     true,
+		"Boolean":     true,
+		"DateTime":    true,
+		"Json":        true,
+		"Bytes":       true,
 		"Unsupported": true,
 	}
 
@@ -200,10 +200,10 @@ func (v *Validator) validateFieldAttribute(attr *Attribute, modelName, fieldName
 // validateModelAttribute valida um atributo de model
 func (v *Validator) validateModelAttribute(attr *Attribute, modelName string) {
 	validAttributes := map[string]bool{
-		"id":      true,
-		"unique":  true,
-		"index":   true,
-		"map":     true,
+		"id":     true,
+		"unique": true,
+		"index":  true,
+		"map":    true,
 	}
 
 	// Note: Unknown attributes are allowed (may be custom attributes)
@@ -328,15 +328,15 @@ func IsValidType(typeName string) bool {
 // GetTypeGoMapping retorna o mapeamento de tipos Prisma para Go
 func GetTypeGoMapping() map[string]string {
 	return map[string]string{
-		"String":    "string",
-		"Int":       "int",
-		"BigInt":    "int64",
-		"Float":     "float64",
-		"Decimal":   "float64", // ou usar uma biblioteca de decimal
-		"Boolean":   "bool",
-		"DateTime":  "time.Time",
-		"Json":      "json.RawMessage",
-		"Bytes":     "[]byte",
+		"String":      "string",
+		"Int":         "int",
+		"BigInt":      "int64",
+		"Float":       "float64",
+		"Decimal":     "float64", // ou usar uma biblioteca de decimal
+		"Boolean":     "bool",
+		"DateTime":    "time.Time",
+		"Json":        "json.RawMessage",
+		"Bytes":       "[]byte",
 		"Unsupported": "string",
 	}
 }
@@ -355,4 +355,3 @@ func GetTypeGoMappingNullable() map[string]string {
 	}
 	return nullable
 }
-

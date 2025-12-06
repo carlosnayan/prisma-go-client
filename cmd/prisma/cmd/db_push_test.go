@@ -89,4 +89,3 @@ func TestDbPush_WithSkipGenerate(t *testing.T) {
 	// We skip to avoid needing full database setup
 	t.Skip("Requires full database setup")
 }
-

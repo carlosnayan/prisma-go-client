@@ -144,4 +144,3 @@ func (t *PgxTx) QueryRow(ctx context.Context, query string, args ...interface{})
 	row := t.tx.QueryRow(ctx, query, args...)
 	return &PgxRow{row: row}
 }
-

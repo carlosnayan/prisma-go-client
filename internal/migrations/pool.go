@@ -20,7 +20,7 @@ func DefaultPoolConfig() *PoolConfig {
 		MaxOpenConns:    25,
 		MaxIdleConns:    5,
 		ConnMaxLifetime: 5 * time.Minute,
-		ConnMaxIdleTime:  10 * time.Minute,
+		ConnMaxIdleTime: 10 * time.Minute,
 	}
 }
 
@@ -66,4 +66,3 @@ func PrintPoolStats(db *sql.DB) {
 	fmt.Printf("  Max Idle Time Closed: %d\n", stats.MaxIdleTimeClosed)
 	fmt.Printf("  Max Lifetime Closed: %d\n", stats.MaxLifetimeClosed)
 }
-

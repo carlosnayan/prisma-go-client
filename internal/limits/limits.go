@@ -24,4 +24,3 @@ const (
 	// MaxSelectFields is the maximum number of SELECT fields
 	MaxSelectFields = 100
 )
-

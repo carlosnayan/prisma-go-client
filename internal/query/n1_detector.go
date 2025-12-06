@@ -9,11 +9,11 @@ import (
 
 // N1Detector detecta padrões de N+1 queries
 type N1Detector struct {
-	mu          sync.RWMutex
-	queries     map[string]*QueryInfo
-	maxSize     int           // Número máximo de padrões a rastrear (previne crescimento ilimitado)
-	threshold   int           // Número mínimo de queries similares para alertar
-	timeWindow  time.Duration // Janela de tempo para análise
+	mu         sync.RWMutex
+	queries    map[string]*QueryInfo
+	maxSize    int           // Número máximo de padrões a rastrear (previne crescimento ilimitado)
+	threshold  int           // Número mínimo de queries similares para alertar
+	timeWindow time.Duration // Janela de tempo para análise
 }
 
 // QueryInfo armazena informações sobre uma query
@@ -69,7 +69,7 @@ func (d *N1Detector) Record(query string, tableName string) {
 		if len(d.queries) >= d.maxSize {
 			d.evictOldest()
 		}
-		
+
 		info = &QueryInfo{
 			Pattern:    pattern,
 			Count:      0,
@@ -82,7 +82,7 @@ func (d *N1Detector) Record(query string, tableName string) {
 
 	info.Count++
 	info.LastSeen = time.Now()
-	
+
 	// Adicionar nome da tabela se não existir (com limite para prevenir crescimento ilimitado)
 	found := false
 	for _, tn := range info.TableNames {

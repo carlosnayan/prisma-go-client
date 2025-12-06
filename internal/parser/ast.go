@@ -41,10 +41,10 @@ type ModelField struct {
 
 // FieldType representa o tipo de um campo
 type FieldType struct {
-	Name      string   // String, Int, Boolean, etc.
-	IsArray   bool     // [] prefix
-	IsOptional bool    // ? suffix
-	IsUnsupported bool // Unsupported("...")
+	Name             string // String, Int, Boolean, etc.
+	IsArray          bool   // [] prefix
+	IsOptional       bool   // ? suffix
+	IsUnsupported    bool   // Unsupported("...")
 	UnsupportedValue string
 }
 
@@ -68,7 +68,7 @@ type Attribute struct {
 
 // AttributeArgument representa um argumento de atributo
 type AttributeArgument struct {
-	Name  string // opcional, para named arguments
+	Name  string      // opcional, para named arguments
 	Value interface{} // string, int, float, bool, ou função (env, autoincrement, etc.)
 }
 
@@ -116,4 +116,3 @@ func (m *Model) String() string {
 func (e *Enum) String() string {
 	return "Enum(" + e.Name + ")"
 }
-

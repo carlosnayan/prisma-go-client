@@ -13,10 +13,10 @@ type Validator interface {
 
 // ValidationRule representa uma regra de validação
 type ValidationRule struct {
-	Field    string
-	Rule     string
-	Value    interface{}
-	Message  string
+	Field     string
+	Rule      string
+	Value     interface{}
+	Message   string
 	Validator Validator
 }
 
@@ -73,7 +73,7 @@ func ValidateStruct(s interface{}) error {
 		rules := strings.Split(validateTag, ",")
 		for _, rule := range rules {
 			rule = strings.TrimSpace(rule)
-			
+
 			if err := validateField(field.Name, value, rule); err != nil {
 				errors = append(errors, *err)
 			}
@@ -194,4 +194,3 @@ func parseIntRule(rule, prefix string) int {
 func isValidEmail(email string) bool {
 	return strings.Contains(email, "@") && strings.Contains(email, ".")
 }
-

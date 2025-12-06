@@ -43,7 +43,7 @@ func TestInit_CreatesCorrectConfig(t *testing.T) {
 	}
 
 	configContent := readFile(t, "prisma.conf")
-	
+
 	// Check for required sections
 	if !contains(configContent, "schema =") {
 		t.Error("Config should contain schema path")
@@ -70,7 +70,7 @@ func TestInit_CreatesCorrectSchema(t *testing.T) {
 	}
 
 	schemaContent := readFile(t, "prisma/schema.prisma")
-	
+
 	// Check for required sections
 	if !contains(schemaContent, "datasource db") {
 		t.Error("Schema should contain datasource")
@@ -162,7 +162,7 @@ func TestInit_CreatesMigrationsDirectory(t *testing.T) {
 
 func TestInit_WithDifferentProviders(t *testing.T) {
 	providers := []string{"postgresql", "mysql", "sqlite"}
-	
+
 	for _, provider := range providers {
 		t.Run(provider, func(t *testing.T) {
 			resetGlobalFlags()
@@ -183,4 +183,3 @@ func TestInit_WithDifferentProviders(t *testing.T) {
 		})
 	}
 }
-

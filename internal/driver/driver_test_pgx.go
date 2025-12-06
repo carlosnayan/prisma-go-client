@@ -131,7 +131,7 @@ func TestPgxPoolAdapter(t *testing.T) {
 		t.Skip("TEST_DATABASE_URL_POSTGRESQL not set, skipping pgx pool test")
 		return
 	}
-	
+
 	// This test requires pgx pool setup
 	// For now, we'll test the SQL adapter which works with pgx stdlib driver
 	// Full pgx pool adapter test would require additional setup
