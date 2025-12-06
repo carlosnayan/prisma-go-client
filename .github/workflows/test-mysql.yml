@@ -8,7 +8,6 @@ jobs:
   test-mysql:
     name: Test MySQL
     runs-on: ubuntu-latest
-    needs: test-postgresql
     
     services:
       mysql:
@@ -56,6 +55,6 @@ jobs:
     - name: Run tests
       env:
         TEST_DATABASE_URL_MYSQL: mysql://root:password@localhost:3306/prisma_test
-      run: go test -v ./...
+      run: go test -tags=mysql -v ./...
 
 

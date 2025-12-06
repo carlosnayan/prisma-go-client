@@ -3,6 +3,7 @@ package builder
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/carlosnayan/prisma-go-client/internal/dialect"
@@ -92,14 +93,14 @@ func TestTransactionCommit(t *testing.T) {
 			}
 
 			// Insert data within transaction
-			query := tx.Query("test_transactions", []string{"id", "name"})
-			query.SetDialect(dialect.GetDialect(provider))
-			query.SetPrimaryKey("id")
-
 			type TestRecord struct {
 				ID   int    `json:"id"`
 				Name string `json:"name"`
 			}
+
+			query := tx.Query("test_transactions", []string{"id", "name"})
+			query.SetDialect(dialect.GetDialect(provider))
+			query.SetPrimaryKey("id")
 
 			record := TestRecord{Name: "Transaction Test"}
 			err = query.Create(ctx, record)
@@ -117,6 +118,7 @@ func TestTransactionCommit(t *testing.T) {
 			builder := NewTableQueryBuilder(db, "test_transactions", []string{"id", "name"})
 			builder.SetDialect(dialect.GetDialect(provider))
 			builder.SetPrimaryKey("id")
+			builder.SetModelType(reflect.TypeOf(TestRecord{}))
 
 			found, err := builder.FindFirst(ctx, Where{"name": "Transaction Test"})
 			if err != nil {
@@ -188,14 +190,14 @@ func TestTransactionRollback(t *testing.T) {
 			}
 
 			// Insert data within transaction
-			query := tx.Query("test_rollback", []string{"id", "name"})
-			query.SetDialect(dialect.GetDialect(provider))
-			query.SetPrimaryKey("id")
-
 			type TestRecord struct {
 				ID   int    `json:"id"`
 				Name string `json:"name"`
 			}
+
+			query := tx.Query("test_rollback", []string{"id", "name"})
+			query.SetDialect(dialect.GetDialect(provider))
+			query.SetPrimaryKey("id")
 
 			record := TestRecord{Name: "Rollback Test"}
 			err = query.Create(ctx, record)
@@ -213,6 +215,7 @@ func TestTransactionRollback(t *testing.T) {
 			builder := NewTableQueryBuilder(db, "test_rollback", []string{"id", "name"})
 			builder.SetDialect(dialect.GetDialect(provider))
 			builder.SetPrimaryKey("id")
+			builder.SetModelType(reflect.TypeOf(TestRecord{}))
 
 			_, err = builder.FindFirst(ctx, Where{"name": "Rollback Test"})
 			if err == nil {
@@ -290,9 +293,15 @@ func TestExecuteTransaction(t *testing.T) {
 			}
 
 			// Verify data is persisted
+			type TestRecord struct {
+				ID   int    `json:"id"`
+				Name string `json:"name"`
+			}
+
 			builder := NewTableQueryBuilder(db, "test_execute", []string{"id", "name"})
 			builder.SetDialect(dialect.GetDialect(provider))
 			builder.SetPrimaryKey("id")
+			builder.SetModelType(reflect.TypeOf(TestRecord{}))
 
 			found, err := builder.FindFirst(ctx, Where{"name": "Execute Test"})
 			if err != nil {
@@ -390,9 +399,15 @@ func TestExecuteTransactionRollback(t *testing.T) {
 			}
 
 			// Verify data is NOT persisted
+			type TestRecord struct {
+				ID   int    `json:"id"`
+				Name string `json:"name"`
+			}
+
 			builder := NewTableQueryBuilder(db, "test_execute_rollback", []string{"id", "name"})
 			builder.SetDialect(dialect.GetDialect(provider))
 			builder.SetPrimaryKey("id")
+			builder.SetModelType(reflect.TypeOf(TestRecord{}))
 
 			_, err = builder.FindFirst(ctx, Where{"name": "Should Not Persist"})
 			if err == nil {
@@ -483,9 +498,15 @@ func TestExecuteTransactionPanic(t *testing.T) {
 			}()
 
 			// Verify data is NOT persisted
+			type TestRecord struct {
+				ID   int    `json:"id"`
+				Name string `json:"name"`
+			}
+
 			builder := NewTableQueryBuilder(db, "test_panic", []string{"id", "name"})
 			builder.SetDialect(dialect.GetDialect(provider))
 			builder.SetPrimaryKey("id")
+			builder.SetModelType(reflect.TypeOf(TestRecord{}))
 
 			_, err = builder.FindFirst(ctx, Where{"name": "Panic Test"})
 			if err == nil {
@@ -649,14 +670,14 @@ func TestTransactionIsolation(t *testing.T) {
 			}
 
 			// Insert data within transaction
-			query := tx.Query("test_isolation", []string{"id", "name"})
-			query.SetDialect(dialect.GetDialect(provider))
-			query.SetPrimaryKey("id")
-
 			type TestRecord struct {
 				ID   int    `json:"id"`
 				Name string `json:"name"`
 			}
+
+			query := tx.Query("test_isolation", []string{"id", "name"})
+			query.SetDialect(dialect.GetDialect(provider))
+			query.SetPrimaryKey("id")
 
 			record := TestRecord{Name: "Isolation Test"}
 			err = query.Create(ctx, record)
@@ -669,6 +690,7 @@ func TestTransactionIsolation(t *testing.T) {
 			builder := NewTableQueryBuilder(db, "test_isolation", []string{"id", "name"})
 			builder.SetDialect(dialect.GetDialect(provider))
 			builder.SetPrimaryKey("id")
+			builder.SetModelType(reflect.TypeOf(TestRecord{}))
 
 			// Note: Isolation level depends on database configuration
 			// Some databases may show uncommitted data, so we just verify commit works

@@ -4,6 +4,7 @@ package builder
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -38,10 +39,6 @@ func TestBuilder_SQLite(t *testing.T) {
 	}
 
 	// Test basic operations
-	builder := NewTableQueryBuilder(db, "users", []string{"id", "email", "name", "created_at", "updated_at"})
-	builder.SetDialect(dialect.GetDialect("sqlite"))
-	builder.SetPrimaryKey("id")
-
 	type User struct {
 		ID        int       `json:"id"`
 		Email     string    `json:"email"`
@@ -49,6 +46,11 @@ func TestBuilder_SQLite(t *testing.T) {
 		CreatedAt time.Time `json:"created_at"`
 		UpdatedAt time.Time `json:"updated_at"`
 	}
+
+	builder := NewTableQueryBuilder(db, "users", []string{"id", "email", "name", "created_at", "updated_at"})
+	builder.SetDialect(dialect.GetDialect("sqlite"))
+	builder.SetPrimaryKey("id")
+	builder.SetModelType(reflect.TypeOf(User{}))
 
 	user := User{
 		Email: "test@example.com",

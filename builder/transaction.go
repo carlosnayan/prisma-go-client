@@ -7,7 +7,6 @@ import (
 
 	"github.com/carlosnayan/prisma-go-client/internal/driver"
 	"github.com/carlosnayan/prisma-go-client/internal/errors"
-	contextutil "github.com/carlosnayan/prisma-go-client/internal/context"
 )
 
 // Transaction represents a database transaction
@@ -20,11 +19,8 @@ type TransactionFunc func(*Transaction) error
 
 // BeginTransaction starts a new database transaction
 func BeginTransaction(ctx context.Context, db DBTX) (*Transaction, error) {
-	// Add timeout for transactions
-	ctx, cancel := contextutil.WithTransactionTimeout(ctx)
-	defer cancel()
-
 	// driver.DB already has Begin method that returns driver.Tx
+	// Note: We don't add timeout here as the transaction context should be managed by the caller
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return nil, errors.WrapError(err, "failed to begin transaction")

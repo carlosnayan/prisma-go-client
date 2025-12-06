@@ -2,6 +2,7 @@ package builder
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -35,10 +36,6 @@ func TestBuilder_PostgreSQL(t *testing.T) {
 	}
 
 	// Test Create
-	builder := NewTableQueryBuilder(db, "users", []string{"id", "email", "name", "created_at", "updated_at"})
-	builder.SetDialect(dialect.GetDialect("postgresql"))
-	builder.SetPrimaryKey("id")
-
 	type User struct {
 		ID        int       `json:"id"`
 		Email     string    `json:"email"`
@@ -46,6 +43,11 @@ func TestBuilder_PostgreSQL(t *testing.T) {
 		CreatedAt time.Time `json:"created_at"`
 		UpdatedAt time.Time `json:"updated_at"`
 	}
+
+	builder := NewTableQueryBuilder(db, "users", []string{"id", "email", "name", "created_at", "updated_at"})
+	builder.SetDialect(dialect.GetDialect("postgresql"))
+	builder.SetPrimaryKey("id")
+	builder.SetModelType(reflect.TypeOf(User{}))
 
 	user := User{
 		Email: "test@example.com",
@@ -148,10 +150,6 @@ func TestBuilder_MySQL(t *testing.T) {
 	}
 
 	// Test basic operations (similar to PostgreSQL test)
-	builder := NewTableQueryBuilder(db, "users", []string{"id", "email", "name", "created_at", "updated_at"})
-	builder.SetDialect(dialect.GetDialect("mysql"))
-	builder.SetPrimaryKey("id")
-
 	type User struct {
 		ID        int       `json:"id"`
 		Email     string    `json:"email"`
@@ -159,6 +157,11 @@ func TestBuilder_MySQL(t *testing.T) {
 		CreatedAt time.Time `json:"created_at"`
 		UpdatedAt time.Time `json:"updated_at"`
 	}
+
+	builder := NewTableQueryBuilder(db, "users", []string{"id", "email", "name", "created_at", "updated_at"})
+	builder.SetDialect(dialect.GetDialect("mysql"))
+	builder.SetPrimaryKey("id")
+	builder.SetModelType(reflect.TypeOf(User{}))
 
 	user := User{
 		Email: "test@example.com",
@@ -226,20 +229,21 @@ func TestBuilder_AllProviders(t *testing.T) {
 				t.Fatalf("failed to create table: %v", err)
 			}
 
-			// Test basic CRUD
-			builder := NewTableQueryBuilder(db, "test_table", []string{"id", "name"})
-			builder.SetDialect(dialect.GetDialect(provider))
-			builder.SetPrimaryKey("id")
+	// Test basic CRUD
+	type TestRecord struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	}
 
-			type TestRecord struct {
-				ID   int    `json:"id"`
-				Name string `json:"name"`
-			}
+	builder := NewTableQueryBuilder(db, "test_table", []string{"id", "name"})
+	builder.SetDialect(dialect.GetDialect(provider))
+	builder.SetPrimaryKey("id")
+	builder.SetModelType(reflect.TypeOf(TestRecord{}))
 
-			record := TestRecord{Name: "Test"}
+	record := TestRecord{Name: "Test"}
 
-			// Create
-			created, err := builder.Create(ctx, record)
+	// Create
+	created, err := builder.Create(ctx, record)
 			if err != nil {
 				t.Fatalf("Create failed: %v", err)
 			}

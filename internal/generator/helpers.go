@@ -42,7 +42,7 @@ func generateHelpersFile(filePath string, userModule, outputDir string) error {
 	fmt.Fprintf(file, "import (\n")
 	fmt.Fprintf(file, "\t\"time\"\n")
 	fmt.Fprintf(file, "\t\"encoding/json\"\n")
-	fmt.Fprintf(file, "\t%q\n", inputsPath)
+	fmt.Fprintf(file, "\tinputs %q\n", inputsPath)
 	fmt.Fprintf(file, ")\n\n")
 
 	// String helpers
@@ -247,5 +247,3 @@ func generateBytesHelpers(file *os.File) {
 	fmt.Fprintf(file, "\treturn &inputs.BytesFilter{Equals: &value}\n")
 	fmt.Fprintf(file, "}\n\n")
 }
-
-
