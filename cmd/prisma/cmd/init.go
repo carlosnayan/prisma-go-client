@@ -128,7 +128,7 @@ datasource db {
 
 generator client {
   provider = "prisma-client-go"
-  output   = "../db"
+  output   = "./generated"
 }
 `
 }

@@ -15,6 +15,12 @@ func GenerateQueries(schema *parser.Schema, outputDir string) error {
 		return fmt.Errorf("erro ao criar diretório queries: %w", err)
 	}
 
+	// Detect user module
+	userModule, err := detectUserModule(outputDir)
+	if err != nil {
+		return fmt.Errorf("failed to detect user module: %w", err)
+	}
+
 	queryResultFile := filepath.Join(queriesDir, "query_result.go")
 	if err := generateQueryResultFile(queryResultFile); err != nil {
 		return fmt.Errorf("erro ao gerar query_result.go: %w", err)
@@ -22,7 +28,7 @@ func GenerateQueries(schema *parser.Schema, outputDir string) error {
 
 	for _, model := range schema.Models {
 		queryFile := filepath.Join(queriesDir, toSnakeCase(model.Name)+"_query.go")
-		if err := generateQueryFile(queryFile, model); err != nil {
+		if err := generateQueryFile(queryFile, model, userModule, outputDir); err != nil {
 			return fmt.Errorf("erro ao gerar query para %s: %w", model.Name, err)
 		}
 	}
@@ -62,7 +68,7 @@ func generateQueryResultFile(filePath string) error {
 }
 
 // generateQueryFile gera o arquivo de query builder para um model
-func generateQueryFile(filePath string, model *parser.Model) error {
+func generateQueryFile(filePath string, model *parser.Model, userModule, outputDir string) error {
 	file, err := os.Create(filePath)
 	if err != nil {
 		return err
@@ -74,7 +80,7 @@ func generateQueryFile(filePath string, model *parser.Model) error {
 	fmt.Fprintf(file, "package queries\n\n")
 
 	// Determine required imports
-	imports := determineQueryImports()
+	imports := determineQueryImports(userModule, outputDir)
 	if len(imports) > 0 {
 		fmt.Fprintf(file, "import (\n")
 		// Separate stdlib and third-party imports
@@ -334,7 +340,15 @@ func generateFilterConverter(file *os.File, filterType, fieldName string) {
 }
 
 // determineQueryImports determines which imports are needed for query files
-func determineQueryImports() []string {
+func determineQueryImports(userModule, outputDir string) []string {
+	// Calculate import paths for generated packages
+	modelsPath, _, inputsPath, err := calculateImportPath(userModule, outputDir)
+	if err != nil {
+		// Fallback to old paths if detection fails
+		modelsPath = "github.com/carlosnayan/prisma-go-client/db/models"
+		inputsPath = "github.com/carlosnayan/prisma-go-client/db/inputs"
+	}
+
 	// context is always needed for all query methods
 	// builder is always needed for Query embedding
 	// models is always needed for type references
@@ -342,7 +356,7 @@ func determineQueryImports() []string {
 	return []string{
 		"context",
 		"github.com/carlosnayan/prisma-go-client/builder",
-		"github.com/carlosnayan/prisma-go-client/db/models",
-		"github.com/carlosnayan/prisma-go-client/db/inputs",
+		modelsPath,
+		inputsPath,
 	}
 }

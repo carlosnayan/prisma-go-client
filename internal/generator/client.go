@@ -17,6 +17,12 @@ func GenerateClient(schema *parser.Schema, outputDir string) error {
 		return fmt.Errorf("erro ao criar diretório: %w", err)
 	}
 
+	// Detect user module
+	userModule, err := detectUserModule(outputDir)
+	if err != nil {
+		return fmt.Errorf("failed to detect user module: %w", err)
+	}
+
 	file, err := os.Create(clientFile)
 	if err != nil {
 		return err
@@ -28,7 +34,7 @@ func GenerateClient(schema *parser.Schema, outputDir string) error {
 	fmt.Fprintf(file, "package db\n\n")
 
 	// Determine required imports
-	imports, driverImports := determineClientImports(schema)
+	imports, driverImports := determineClientImports(schema, userModule, outputDir)
 	if len(imports) > 0 || len(driverImports) > 0 {
 		fmt.Fprintf(file, "import (\n")
 		// Separate stdlib and third-party imports
@@ -241,7 +247,7 @@ func formatColumns(columns []string) string {
 
 // determineClientImports determines which imports are needed for client.go
 // Returns regular imports and driver imports (blank imports) separately
-func determineClientImports(schema *parser.Schema) ([]string, []string) {
+func determineClientImports(schema *parser.Schema, userModule, outputDir string) ([]string, []string) {
 	imports := make(map[string]bool)
 	var driverImports []string
 
@@ -251,11 +257,20 @@ func determineClientImports(schema *parser.Schema) ([]string, []string) {
 	// reflect is always needed for SetModelType
 	imports["reflect"] = true
 
+	// Calculate import paths for generated packages
+	modelsPath, queriesPath, inputsPath, err := calculateImportPath(userModule, outputDir)
+	if err != nil {
+		// Fallback to old paths if detection fails
+		modelsPath = "github.com/carlosnayan/prisma-go-client/db/models"
+		queriesPath = "github.com/carlosnayan/prisma-go-client/db/queries"
+		inputsPath = "github.com/carlosnayan/prisma-go-client/db/inputs"
+	}
+
 	// These are always needed
 	imports["github.com/carlosnayan/prisma-go-client/builder"] = true
-	imports["github.com/carlosnayan/prisma-go-client/db/models"] = true
-	imports["github.com/carlosnayan/prisma-go-client/db/queries"] = true
-	imports["github.com/carlosnayan/prisma-go-client/db/inputs"] = true
+	imports[modelsPath] = true
+	imports[queriesPath] = true
+	imports[inputsPath] = true
 	imports["github.com/carlosnayan/prisma-go-client/raw"] = true
 	imports["github.com/carlosnayan/prisma-go-client/internal/driver"] = true
 
@@ -283,14 +298,14 @@ func determineClientImports(schema *parser.Schema) ([]string, []string) {
 	if imports["github.com/carlosnayan/prisma-go-client/builder"] {
 		result = append(result, "github.com/carlosnayan/prisma-go-client/builder")
 	}
-	if imports["github.com/carlosnayan/prisma-go-client/db/models"] {
-		result = append(result, "github.com/carlosnayan/prisma-go-client/db/models")
+	if imports[modelsPath] {
+		result = append(result, modelsPath)
 	}
-	if imports["github.com/carlosnayan/prisma-go-client/db/queries"] {
-		result = append(result, "github.com/carlosnayan/prisma-go-client/db/queries")
+	if imports[queriesPath] {
+		result = append(result, queriesPath)
 	}
-	if imports["github.com/carlosnayan/prisma-go-client/db/inputs"] {
-		result = append(result, "github.com/carlosnayan/prisma-go-client/db/inputs")
+	if imports[inputsPath] {
+		result = append(result, inputsPath)
 	}
 	if imports["github.com/carlosnayan/prisma-go-client/raw"] {
 		result = append(result, "github.com/carlosnayan/prisma-go-client/raw")
