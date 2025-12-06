@@ -10,7 +10,7 @@ import (
 	"github.com/carlosnayan/prisma-go-client/internal/parser"
 )
 
-const version = "0.1.3"
+const version = "0.1.4"
 
 var generateCmd = &cli.Command{
 	Name:  "generate",
