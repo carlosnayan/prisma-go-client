@@ -327,12 +327,12 @@ func generateFiltersFile(filePath string, schema *parser.Schema) error {
 	// Determine which filter types are needed across all models
 	neededFilters := make(map[string]bool)
 	for _, model := range schema.Models {
-		for _, field := range model.Fields {
-			if !isRelation(field) && field.Type != nil {
-				filterType := getFilterType(field.Type)
-				neededFilters[filterType] = true
-			}
+	for _, field := range model.Fields {
+		if !isRelation(field) && field.Type != nil {
+			filterType := getFilterType(field.Type)
+			neededFilters[filterType] = true
 		}
+	}
 	}
 
 	// Determine required imports

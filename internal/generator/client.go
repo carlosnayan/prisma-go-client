@@ -347,9 +347,9 @@ func generateFluentAPIMethods(file *os.File, model *parser.Model, pascalModelNam
 		// Check if field is optional (pointer) in CreateInput
 		isOptional := field.Type != nil && field.Type.IsOptional
 		if isOptional {
-			fmt.Fprintf(file, "\tif b.data.%s != nil {\n", fieldName)
-			fmt.Fprintf(file, "\t\tuser.%s = *b.data.%s\n", fieldName, fieldName)
-			fmt.Fprintf(file, "\t}\n")
+		fmt.Fprintf(file, "\tif b.data.%s != nil {\n", fieldName)
+		fmt.Fprintf(file, "\t\tuser.%s = *b.data.%s\n", fieldName, fieldName)
+		fmt.Fprintf(file, "\t}\n")
 		} else {
 			// Field is required (not a pointer), assign directly
 			fmt.Fprintf(file, "\tuser.%s = b.data.%s\n", fieldName, fieldName)

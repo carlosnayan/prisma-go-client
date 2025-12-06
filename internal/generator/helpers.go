@@ -60,35 +60,35 @@ func generateHelpersFile(filePath string, userModule, outputDir string, schema *
 
 	// Generate helpers only for needed filter types
 	if neededFilters["StringFilter"] {
-		generateStringHelpers(file)
+	generateStringHelpers(file)
 	}
 
 	if neededFilters["IntFilter"] {
-		generateIntHelpers(file)
+	generateIntHelpers(file)
 	}
 
 	if neededFilters["Int64Filter"] {
-		generateInt64Helpers(file)
+	generateInt64Helpers(file)
 	}
 
 	if neededFilters["FloatFilter"] {
-		generateFloatHelpers(file)
+	generateFloatHelpers(file)
 	}
 
 	if neededFilters["BooleanFilter"] {
-		generateBooleanHelpers(file)
+	generateBooleanHelpers(file)
 	}
 
 	if neededFilters["DateTimeFilter"] {
-		generateDateTimeHelpers(file)
+	generateDateTimeHelpers(file)
 	}
 
 	if neededFilters["JsonFilter"] {
-		generateJsonHelpers(file)
+	generateJsonHelpers(file)
 	}
 
 	if neededFilters["BytesFilter"] {
-		generateBytesHelpers(file)
+	generateBytesHelpers(file)
 	}
 
 	return nil

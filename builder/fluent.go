@@ -608,7 +608,7 @@ func (q *Query) Save(ctx context.Context, value interface{}) error {
 
 	if q.primaryKey == "" {
 		// Se não há primary key, apenas criar
-		return q.Create(ctx, value)
+	return q.Create(ctx, value)
 	}
 
 	start := time.Now()

@@ -149,17 +149,23 @@ var (
 
 func SetupPrismaClient() {
     ctx := context.Background()
+
+    // Automatic setup - handles pool creation, configuration, and connection
+    var err error
+    Client, _, err = db.SetupClient(ctx)
+    if err != nil {
+        log.Fatalf("Error setting up client: %v", err)
+    }
+}
+
+// Alternative: Manual setup if you need more control
+// Note: NewPgxPoolFromURL automatically configures PgBouncer compatibility
+func SetupPrismaClientManual() {
+    ctx := context.Background()
     databaseURL := os.Getenv("DATABASE_URL")
 
-    cfg, err := pgxpool.ParseConfig(databaseURL)
-    if err != nil {
-        log.Fatalf("Error parsing database URL: %v", err)
-    }
-
-    // Disable prepared statements for PgBouncer compatibility
-    cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
-
-    pool, err := pgxpool.NewWithConfig(ctx, cfg)
+    // NewPgxPoolFromURL creates pool with PgBouncer-compatible settings by default
+    pool, err := db.NewPgxPoolFromURL(ctx, databaseURL)
     if err != nil {
         log.Fatalf("Error creating pool: %v", err)
     }
@@ -250,12 +256,10 @@ func main() {
 package database
 
 import (
-    "database/sql"
+    "context"
     "log"
-    "os"
 
     db "my-app/db"
-    _ "github.com/go-sql-driver/mysql"
 )
 
 var (
@@ -263,14 +267,14 @@ var (
 )
 
 func SetupPrismaClient() {
-    databaseURL := os.Getenv("DATABASE_URL")
-    sqlDB, err := sql.Open("mysql", databaseURL)
-    if err != nil {
-        log.Fatalf("Error opening database: %v", err)
-    }
+    ctx := context.Background()
 
-    dbDriver := db.NewSQLDriver(sqlDB)
-    Client = db.NewClient(dbDriver)
+    // Automatic setup - handles connection and configuration
+    var err error
+    Client, _, err = db.SetupClient(ctx)
+    if err != nil {
+        log.Fatalf("Error setting up client: %v", err)
+    }
 }
 ```
 
@@ -280,11 +284,10 @@ func SetupPrismaClient() {
 package database
 
 import (
-    "database/sql"
+    "context"
     "log"
 
     db "my-app/db"
-    _ "github.com/mattn/go-sqlite3"
 )
 
 var (
@@ -292,10 +295,15 @@ var (
 )
 
 func SetupPrismaClient() {
-    sqlDB, err := sql.Open("sqlite3", "./database.db")
+    ctx := context.Background()
+
+    // Automatic setup - handles connection and configuration
+    var err error
+    Client, _, err = db.SetupClient(ctx)
     if err != nil {
-        log.Fatalf("Error opening database: %v", err)
+        log.Fatalf("Error setting up client: %v", err)
     }
+}
 
     dbDriver := db.NewSQLDriver(sqlDB)
     Client = db.NewClient(dbDriver)
