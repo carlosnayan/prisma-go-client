@@ -106,7 +106,7 @@ func determineNeededFilters(schema *parser.Schema) map[string]bool {
 			}
 
 			// Check if it's a relation using the same logic as inputs.go
-			if isRelationForHelpers(field) {
+			if isRelationForHelpers(field, schema) {
 				continue
 			}
 
@@ -126,8 +126,10 @@ func getFilterTypeForHelpers(fieldType *parser.FieldType) string {
 
 // isRelationForHelpers checks if a field is a relationship (non-primitive type)
 // Uses the shared isRelation function from inputs.go
-func isRelationForHelpers(field *parser.ModelField) bool {
-	return isRelation(field)
+// Note: This function requires schema to be passed, but for backward compatibility
+// it accepts nil schema (will treat enums as relations in that case)
+func isRelationForHelpers(field *parser.ModelField, schema *parser.Schema) bool {
+	return isRelation(field, schema)
 }
 
 func generateStringHelpers(file *os.File) {

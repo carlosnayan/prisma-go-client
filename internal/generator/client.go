@@ -118,7 +118,7 @@ func GenerateClient(schema *parser.Schema, outputDir string) error {
 		if model == nil {
 			continue
 		}
-		columns := getModelColumns(model)
+		columns := getModelColumns(model, schema)
 		primaryKey := getPrimaryKey(model)
 		hasDeleted := hasDeletedAt(model)
 		pascalModelName := toPascalCase(modelName)
@@ -162,11 +162,11 @@ func GenerateClient(schema *parser.Schema, outputDir string) error {
 // This allows for a cleaner API: client.Users.Update() instead of client.Users().Update()
 
 // getModelColumns returns the columns of a model
-func getModelColumns(model *parser.Model) []string {
+func getModelColumns(model *parser.Model, schema *parser.Schema) []string {
 	columns := []string{}
 	for _, field := range model.Fields {
 		// Skip relations - only include actual database columns
-		if isRelation(field) {
+		if isRelation(field, schema) {
 			continue
 		}
 		columnName := field.Name
@@ -484,7 +484,7 @@ func generateTransactionMethod(file *os.File, schema *parser.Schema) {
 		if model == nil {
 			continue
 		}
-		columns := getModelColumns(model)
+		columns := getModelColumns(model, schema)
 		primaryKey := getPrimaryKey(model)
 		hasDeleted := hasDeletedAt(model)
 		pascalModelName := toPascalCase(modelName)

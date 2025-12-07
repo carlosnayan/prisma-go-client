@@ -28,7 +28,7 @@ func GenerateQueries(schema *parser.Schema, outputDir string) error {
 
 	for _, model := range schema.Models {
 		queryFile := filepath.Join(queriesDir, toSnakeCase(model.Name)+"_query.go")
-		if err := generateQueryFile(queryFile, model, userModule, outputDir); err != nil {
+		if err := generateQueryFile(queryFile, model, schema, userModule, outputDir); err != nil {
 			return fmt.Errorf("failed to generate query for %s: %w", model.Name, err)
 		}
 	}
@@ -71,7 +71,7 @@ func generateQueryResultFile(filePath string, userModule, outputDir string) erro
 }
 
 // generateQueryFile generates the query builder file for a model
-func generateQueryFile(filePath string, model *parser.Model, userModule, outputDir string) error {
+func generateQueryFile(filePath string, model *parser.Model, schema *parser.Schema, userModule, outputDir string) error {
 	file, err := createGeneratedFile(filePath, "queries")
 	if err != nil {
 		return err
@@ -108,13 +108,13 @@ func generateQueryFile(filePath string, model *parser.Model, userModule, outputD
 	fmt.Fprintf(file, "}\n\n")
 
 	// Query builder methods
-	generateQueryMethods(file, model)
+	generateQueryMethods(file, model, schema)
 
 	return nil
 }
 
 // generateQueryMethods generates the query builder methods with fluent API
-func generateQueryMethods(file *os.File, model *parser.Model) {
+func generateQueryMethods(file *os.File, model *parser.Model, schema *parser.Schema) {
 	pascalModelName := toPascalCase(model.Name)
 
 	// First
@@ -141,7 +141,7 @@ func generateQueryMethods(file *os.File, model *parser.Model) {
 	// FindMany - removed to avoid conflict with Prisma-style FindMany() builder
 	// Use FindMany() builder pattern instead: q.FindMany().Where(...).Exec(ctx)
 
-	generateWhereInputConverter(file, model)
+	generateWhereInputConverter(file, model, schema)
 	// Count - removed to avoid conflict with Prisma-style Count() builder
 	// Use Count() builder pattern instead
 
@@ -167,11 +167,11 @@ func generateQueryMethods(file *os.File, model *parser.Model) {
 	// Use Delete() builder pattern instead
 
 	// Generate Prisma-style builder methods
-	generatePrismaBuilders(file, model)
+	generatePrismaBuilders(file, model, schema)
 }
 
 // generateWhereInputConverter generates function to convert WhereInput to builder.Where
-func generateWhereInputConverter(file *os.File, model *parser.Model) {
+func generateWhereInputConverter(file *os.File, model *parser.Model, schema *parser.Schema) {
 	pascalModelName := toPascalCase(model.Name)
 
 	fmt.Fprintf(file, "// Convert%sWhereInputToWhere converts WhereInput to builder.Where\n", pascalModelName)
@@ -179,7 +179,7 @@ func generateWhereInputConverter(file *os.File, model *parser.Model) {
 	fmt.Fprintf(file, "\tresult := builder.Where{}\n\n")
 
 	for _, field := range model.Fields {
-		if isRelation(field) {
+		if isRelation(field, schema) {
 			continue
 		}
 		fieldName := toPascalCase(field.Name)
@@ -460,7 +460,7 @@ func generateFilterConverter(file *os.File, filterType, fieldName string) {
 }
 
 // generatePrismaBuilders generates Prisma-style builder methods for FindFirst, FindMany, Count, Delete, Update, Create
-func generatePrismaBuilders(file *os.File, model *parser.Model) {
+func generatePrismaBuilders(file *os.File, model *parser.Model, schema *parser.Schema) {
 	pascalModelName := toPascalCase(model.Name)
 
 	// FindFirst builder
@@ -500,7 +500,7 @@ func generatePrismaBuilders(file *os.File, model *parser.Model) {
 	fmt.Fprintf(file, "\tif b.selectFields != nil {\n")
 	fmt.Fprintf(file, "\t\tvar selectedFields []string\n")
 	for _, field := range model.Fields {
-		if isRelation(field) {
+		if isRelation(field, schema) {
 			continue
 		}
 		fieldName := toPascalCase(field.Name)
@@ -543,7 +543,7 @@ func generatePrismaBuilders(file *os.File, model *parser.Model) {
 	fmt.Fprintf(file, "\tif b.selectFields != nil {\n")
 	fmt.Fprintf(file, "\t\tvar selectedFields []string\n")
 	for _, field := range model.Fields {
-		if isRelation(field) {
+		if isRelation(field, schema) {
 			continue
 		}
 		fieldName := toPascalCase(field.Name)
@@ -625,7 +625,7 @@ func generatePrismaBuilders(file *os.File, model *parser.Model) {
 	fmt.Fprintf(file, "\tif b.selectFields != nil {\n")
 	fmt.Fprintf(file, "\t\tvar selectedFields []string\n")
 	for _, field := range model.Fields {
-		if isRelation(field) {
+		if isRelation(field, schema) {
 			continue
 		}
 		fieldName := toPascalCase(field.Name)
@@ -665,7 +665,7 @@ func generatePrismaBuilders(file *os.File, model *parser.Model) {
 	fmt.Fprintf(file, "\tif b.selectFields != nil {\n")
 	fmt.Fprintf(file, "\t\tvar selectedFields []string\n")
 	for _, field := range model.Fields {
-		if isRelation(field) {
+		if isRelation(field, schema) {
 			continue
 		}
 		fieldName := toPascalCase(field.Name)
@@ -805,7 +805,7 @@ func generatePrismaBuilders(file *os.File, model *parser.Model) {
 	fmt.Fprintf(file, "\tb.query.Where(whereMap)\n")
 	fmt.Fprintf(file, "\tupdateData := make(map[string]interface{})\n")
 	for _, field := range model.Fields {
-		if isAutoGenerated(field) || isPrimaryKey(field) || isRelation(field) {
+		if isAutoGenerated(field) || isPrimaryKey(field) || isRelation(field, schema) {
 			continue
 		}
 		fieldName := toPascalCase(field.Name)
@@ -843,7 +843,7 @@ func generatePrismaBuilders(file *os.File, model *parser.Model) {
 	fmt.Fprintf(file, "\t}\n")
 	fmt.Fprintf(file, "\tresult := &models.%s{}\n", pascalModelName)
 	for _, field := range model.Fields {
-		if isAutoGenerated(field) || isRelation(field) {
+		if isAutoGenerated(field) || isRelation(field, schema) {
 			continue
 		}
 		fieldName := toPascalCase(field.Name)
