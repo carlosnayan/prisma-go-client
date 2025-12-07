@@ -10,12 +10,6 @@ Get started with Prisma for Go in minutes. This complete beginner-friendly guide
 
 ## Step 1: Install Prisma for Go
 
-### Install the Library
-
-```bash
-go get github.com/carlosnayan/prisma-go-client
-```
-
 ### Install the CLI
 
 ```bash
@@ -58,7 +52,6 @@ Create a new directory for your project:
 mkdir my-prisma-app
 cd my-prisma-app
 go mod init my-prisma-app
-go get github.com/carlosnayan/prisma-go-client
 ```
 
 ## Step 3: Initialize Prisma
@@ -179,11 +172,9 @@ package main
 import (
 	"context"
 	"log"
-	"os"
 
 	"my-prisma-app/db"
 	"my-prisma-app/db/inputs"
-	"github.com/carlosnayan/prisma-go-client/internal/driver"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -196,15 +187,15 @@ func main() {
 		log.Fatal("DATABASE_URL not set")
 	}
 
-	// Connect to PostgreSQL
-	pool, err := pgxpool.New(ctx, databaseURL)
+	// Connect to PostgreSQL using generated helper
+	pool, err := db.NewPgxPoolFromURL(ctx, databaseURL)
 	if err != nil {
 		log.Fatalf("Failed to connect: %v", err)
 	}
 	defer pool.Close()
 
-	// Wrap with driver adapter
-	dbDriver := driver.NewPgxPool(pool)
+	// Wrap with generated driver adapter
+	dbDriver := db.NewPgxPoolDriver(pool)
 
 	// Create Prisma client
 	client := db.NewClient(dbDriver)
@@ -286,41 +277,22 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"log"
-	"os"
 
 	"my-prisma-app/db"
 	"my-prisma-app/db/inputs"
-	"github.com/carlosnayan/prisma-go-client/internal/driver"
 	_ "github.com/go-sql-driver/mysql"
 )
 
 func main() {
 	ctx := context.Background()
 
-	databaseURL := os.Getenv("DATABASE_URL")
-	if databaseURL == "" {
-		log.Fatal("DATABASE_URL not set")
-	}
-
-	// Connect to MySQL
-	sqlDB, err := sql.Open("mysql", databaseURL)
+	// Automatic setup from DATABASE_URL
+	client, sqlDB, err := db.SetupClient(ctx)
 	if err != nil {
-		log.Fatalf("Failed to connect: %v", err)
+		log.Fatalf("Failed to setup client: %v", err)
 	}
 	defer sqlDB.Close()
-
-	// Test connection
-	if err := sqlDB.Ping(); err != nil {
-		log.Fatalf("Failed to ping database: %v", err)
-	}
-
-	// Wrap with driver adapter
-	dbDriver := driver.NewSQLDB(sqlDB)
-
-	// Create Prisma client
-	client := db.NewClient(dbDriver)
 
 	// Use the same fluent API
 	user, err := client.User.Create().
@@ -343,36 +315,22 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"log"
-	"os"
 
 	"my-prisma-app/db"
 	"my-prisma-app/db/inputs"
-	"github.com/carlosnayan/prisma-go-client/internal/driver"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 func main() {
 	ctx := context.Background()
 
-	databaseURL := os.Getenv("DATABASE_URL")
-	if databaseURL == "" {
-		log.Fatal("DATABASE_URL not set")
-	}
-
-	// Connect to SQLite
-	sqlDB, err := sql.Open("sqlite3", databaseURL)
+	// Automatic setup from DATABASE_URL
+	client, sqlDB, err := db.SetupClient(ctx)
 	if err != nil {
-		log.Fatalf("Failed to connect: %v", err)
+		log.Fatalf("Failed to setup client: %v", err)
 	}
 	defer sqlDB.Close()
-
-	// Wrap with driver adapter
-	dbDriver := driver.NewSQLDB(sqlDB)
-
-	// Create Prisma client
-	client := db.NewClient(dbDriver)
 
 	// Use the same fluent API
 	user, err := client.User.Create().

@@ -19,12 +19,6 @@ A type-safe ORM library for Go inspired by Prisma, offering an intuitive API for
 
 ## 📦 Installation
 
-### Library
-
-```bash
-go get github.com/carlosnayan/prisma-go-client
-```
-
 ### CLI
 
 ```bash
@@ -139,8 +133,6 @@ import (
     "os"
 
     db "my-app/db" // Your generated client
-    "github.com/jackc/pgx/v5"
-    "github.com/jackc/pgx/v5/pgxpool"
 )
 
 var (

@@ -11,13 +11,12 @@ import (
     "context"
     "my-app/db"
     "my-app/db/inputs"
-    "github.com/carlosnayan/prisma-go-client/internal/driver"
     "github.com/jackc/pgx/v5/pgxpool"
 )
 
 ctx := context.Background()
-pool, _ := pgxpool.New(ctx, databaseURL)
-dbDriver := driver.NewPgxPool(pool)
+pool, _ := db.NewPgxPoolFromURL(ctx, databaseURL)
+dbDriver := db.NewPgxPoolDriver(pool)
 client := db.NewClient(dbDriver)
 
 // Create a user
@@ -322,23 +321,22 @@ import (
 	"os"
 
 	"my-app/db"
-	"github.com/carlosnayan/prisma-go-client/internal/driver"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
 	ctx := context.Background()
 
-	// Connect to database
+	// Connect to database using generated helper
 	databaseURL := os.Getenv("DATABASE_URL")
-	pool, err := pgxpool.New(ctx, databaseURL)
+	pool, err := db.NewPgxPoolFromURL(ctx, databaseURL)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer pool.Close()
 
-	// Create Prisma client
-	dbDriver := driver.NewPgxPool(pool)
+	// Create Prisma client using generated driver adapter
+	dbDriver := db.NewPgxPoolDriver(pool)
 	client := db.NewClient(dbDriver)
 
 	// === Query Builder Examples ===
@@ -423,11 +421,11 @@ func main() {
 ```go
 import (
     "github.com/jackc/pgx/v5/pgxpool"
-    "github.com/carlosnayan/prisma-go-client/internal/driver"
+    "my-app/db"
 )
 
-pool, _ := pgxpool.New(ctx, databaseURL)
-dbDriver := driver.NewPgxPool(pool)
+pool, _ := db.NewPgxPoolFromURL(ctx, databaseURL)
+dbDriver := db.NewPgxPoolDriver(pool)
 client := db.NewClient(dbDriver)
 ```
 
@@ -437,11 +435,11 @@ client := db.NewClient(dbDriver)
 import (
     "database/sql"
     _ "github.com/go-sql-driver/mysql"
-    "github.com/carlosnayan/prisma-go-client/internal/driver"
+    "my-app/db"
 )
 
 sqlDB, _ := sql.Open("mysql", databaseURL)
-dbDriver := driver.NewSQLDB(sqlDB)
+dbDriver := db.NewSQLDriver(sqlDB)
 client := db.NewClient(dbDriver)
 ```
 
@@ -451,11 +449,11 @@ client := db.NewClient(dbDriver)
 import (
     "database/sql"
     _ "github.com/mattn/go-sqlite3"
-    "github.com/carlosnayan/prisma-go-client/internal/driver"
+    "my-app/db"
 )
 
 sqlDB, _ := sql.Open("sqlite3", "./database.db")
-dbDriver := driver.NewSQLDB(sqlDB)
+dbDriver := db.NewSQLDriver(sqlDB)
 client := db.NewClient(dbDriver)
 ```
 

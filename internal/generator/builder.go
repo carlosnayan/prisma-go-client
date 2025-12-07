@@ -14,42 +14,42 @@ import (
 func GenerateBuilder(schema *parser.Schema, outputDir string) error {
 	builderDir := filepath.Join(outputDir, "builder")
 	if err := os.MkdirAll(builderDir, 0755); err != nil {
-		return fmt.Errorf("erro ao criar diretório builder: %w", err)
+		return fmt.Errorf("failed to create builder directory: %w", err)
 	}
 
 	// Generate all builder files
 	if err := generateBuilderWhere(builderDir); err != nil {
-		return fmt.Errorf("erro ao gerar where.go: %w", err)
+		return fmt.Errorf("failed to generate where.go: %w", err)
 	}
 
 	if err := generateBuilderOptions(builderDir); err != nil {
-		return fmt.Errorf("erro ao gerar options.go: %w", err)
+		return fmt.Errorf("failed to generate options.go: %w", err)
 	}
 
 	if err := generateBuilderDialect(builderDir); err != nil {
-		return fmt.Errorf("erro ao gerar dialect.go: %w", err)
+		return fmt.Errorf("failed to generate dialect.go: %w", err)
 	}
 
 	if err := generateBuilderErrors(builderDir); err != nil {
-		return fmt.Errorf("erro ao gerar errors.go: %w", err)
+		return fmt.Errorf("failed to generate errors.go: %w", err)
 	}
 
 	if err := generateBuilderLimits(builderDir); err != nil {
-		return fmt.Errorf("erro ao gerar limits.go: %w", err)
+		return fmt.Errorf("failed to generate limits.go: %w", err)
 	}
 
 	if err := generateBuilderContext(builderDir); err != nil {
-		return fmt.Errorf("erro ao gerar context.go: %w", err)
+		return fmt.Errorf("failed to generate context.go: %w", err)
 	}
 
 	// Get provider from schema to generate appropriate builder
 	provider := getProviderFromSchema(schema)
 	if err := generateBuilderMain(builderDir, provider); err != nil {
-		return fmt.Errorf("erro ao gerar builder.go: %w", err)
+		return fmt.Errorf("failed to generate builder.go: %w", err)
 	}
 
 	if err := generateBuilderFluent(builderDir, provider); err != nil {
-		return fmt.Errorf("erro ao gerar fluent.go: %w", err)
+		return fmt.Errorf("failed to generate fluent.go: %w", err)
 	}
 
 	return nil

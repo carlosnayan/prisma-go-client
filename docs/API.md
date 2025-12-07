@@ -11,19 +11,30 @@ The Prisma client is the main entry point for all database operations.
 ```go
 import (
 	"context"
-	"github.com/jackc/pgx/v5"
+	"log"
+	"os"
+
 	"my-app/db"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Connect to database
-conn, err := pgx.Connect(context.Background(), dbURL)
+// Option 1: Automatic setup from DATABASE_URL
+client, pool, err := db.SetupClient(context.Background())
 if err != nil {
 	log.Fatal(err)
 }
-defer conn.Close()
+defer pool.Close()
 
-// Create client
-client := db.NewClient(conn)
+// Option 2: Manual setup with more control
+databaseURL := os.Getenv("DATABASE_URL")
+pool, err := db.NewPgxPoolFromURL(context.Background(), databaseURL)
+if err != nil {
+	log.Fatal(err)
+}
+defer pool.Close()
+
+dbDriver := db.NewPgxPoolDriver(pool)
+client := db.NewClient(dbDriver)
 ```
 
 ## Fluent API
@@ -462,12 +473,36 @@ if err != nil {
 For complex queries, you can use raw SQL:
 
 ```go
-rows, err := conn.Query(context.Background(), `
+// Query with results
+rows, err := client.Raw().Query(ctx, `
 	SELECT u.*, COUNT(p.id) as post_count
 	FROM users u
 	LEFT JOIN posts p ON p.author_id = u.id
 	GROUP BY u.id
 `)
+if err != nil {
+	log.Fatal(err)
+}
+defer rows.Close()
+
+// Process rows
+for rows.Next() {
+	// Scan results
+}
+
+// Query single row
+row := client.Raw().QueryRow(ctx, "SELECT COUNT(*) FROM users")
+var count int
+if err := row.Scan(&count); err != nil {
+	log.Fatal(err)
+}
+
+// Execute (INSERT, UPDATE, DELETE)
+result, err := client.Raw().Exec(ctx, "UPDATE users SET name = $1 WHERE id = $2", "New Name", userID)
+if err != nil {
+	log.Fatal(err)
+}
+rowsAffected := result.RowsAffected()
 ```
 
 ## Soft Deletes
