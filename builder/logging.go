@@ -50,6 +50,39 @@ func (q *Query) logQuery(ctx context.Context, query string, args []interface{}, 
 	}
 }
 
+// logQueryWithTiming loga query time e process time separadamente para transparência
+// queryStart: início da chamada ao banco
+// processStart: início de todo o processamento (incluindo construção da query)
+// queryDuration: tempo de execução no banco (já calculado, pode ser diferente de time.Since(queryStart) para QueryRow)
+func (q *Query) logQueryWithTiming(ctx context.Context, query string, args []interface{}, queryStart, processStart time.Time, queryDuration time.Duration) {
+	logger := q.getLogger()
+	if logger == nil {
+		return
+	}
+	
+	processDuration := time.Since(processStart)
+	overheadDuration := processDuration - queryDuration
+	
+	// Log QUERY (já existente) - usa query time (tempo real no banco)
+	logger.Query(query, args, queryDuration)
+	
+	// Log INFO com query time, overhead e tempo total
+	queryType := detectQueryType(query)
+	logger.Info("%s query: %v, overhead: %v (total: %v)", queryType, queryDuration, overheadDuration, processDuration)
+	
+	// Log WARN se query for lenta (> 1000ms)
+	if queryDuration > 1000*time.Millisecond {
+		logger.Warn("Slow query detected: %s took %v", queryType, queryDuration)
+	}
+	
+	// Log WARN se overhead do ORM for muito grande (> 2x o tempo da query)
+	if overheadDuration > 0 && queryDuration > 0 && overheadDuration > queryDuration*2 {
+		logger.Warn("ORM overhead high: %v (query: %v, overhead: %v, %.1f%% overhead)", 
+			processDuration, queryDuration, overheadDuration, 
+			float64(overheadDuration)/float64(queryDuration)*100)
+	}
+}
+
 // setLogger define o logger para a query
 func (q *Query) SetLogger(l *logger.Logger) *Query {
 	q.logger = l
