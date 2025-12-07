@@ -22,6 +22,34 @@ func ConnectDatabase(url string) (*sql.DB, error) {
 	d := dialect.GetDialect(provider)
 	driverName := d.GetDriverName()
 
+	// For PostgreSQL, ensure we're using the correct driver
+	// The pgx driver via stdlib requires the driver to be imported
+	if provider == "postgresql" {
+		// Check if pgx driver is available by trying to open
+		// If driver is not registered, sql.Open will fail with "sql: unknown driver"
+		db, err := sql.Open(driverName, url)
+		if err != nil {
+			// Check if it's a driver registration error
+			if strings.Contains(err.Error(), "unknown driver") || strings.Contains(err.Error(), "sql: unknown driver") {
+				return nil, fmt.Errorf(`driver "pgx" não está registrado. Importe o driver no seu código:
+  import _ "github.com/jackc/pgx/v5/stdlib"
+  
+Ou use o driver padrão do PostgreSQL alterando o dialect para usar "postgres" em vez de "pgx"`)
+			}
+			return nil, fmt.Errorf("failed to open database connection: %w", err)
+		}
+
+		// Test connection with timeout context
+		if err := db.Ping(); err != nil {
+			db.Close()
+			// Provide more detailed error information
+			return nil, fmt.Errorf("failed to connect to database server: %w\n\nVerifique:\n  - Se o servidor PostgreSQL está rodando\n  - Se a URL está correta: %s\n  - Se as credenciais estão corretas\n  - Se a porta está acessível", err, url)
+		}
+
+		return db, nil
+	}
+
+	// For other databases
 	db, err := sql.Open(driverName, url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database connection: %w", err)
@@ -29,6 +57,7 @@ func ConnectDatabase(url string) (*sql.DB, error) {
 
 	// Test connection
 	if err := db.Ping(); err != nil {
+		db.Close()
 		return nil, fmt.Errorf("failed to connect to database server: %w", err)
 	}
 

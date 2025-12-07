@@ -21,3 +21,9 @@ func (q *Query) SetLogger(l *logger.Logger) *Query {
 	q.logger = l
 	return q
 }
+
+// SetLogLevels configura os níveis de log do logger padrão
+// Esta é uma função pública que pode ser usada no código gerado
+func SetLogLevels(levels []string) {
+	logger.SetLogLevels(levels)
+}

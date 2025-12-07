@@ -402,7 +402,46 @@ func runMigrateReset(args []string) error {
 	if err != nil {
 		fmt.Println()
 		fmt.Printf("Error: P1001: Can't reach database server at `%s`\n\n", dbInfo.Host)
+		
+		// Show parsed URL info for debugging
+		fmt.Printf("Connection details:\n")
+		fmt.Printf("  Provider: %s\n", dbInfo.Provider)
+		fmt.Printf("  Host: %s\n", dbInfo.Host)
+		fmt.Printf("  Database: %s\n", dbInfo.Database)
+		fmt.Printf("  Schema: %s\n", dbInfo.Schema)
+		
+		// Show masked URL (hide password)
+		maskedURL := dbURL
+		if strings.Contains(maskedURL, "@") {
+			parts := strings.Split(maskedURL, "@")
+			if len(parts) > 0 && strings.Contains(parts[0], ":") {
+				authParts := strings.Split(parts[0], ":")
+				if len(authParts) >= 3 {
+					authParts[2] = "***"
+					maskedURL = strings.Join(authParts, ":") + "@" + strings.Join(parts[1:], "@")
+				} else if len(authParts) >= 2 {
+					authParts[1] = "***"
+					maskedURL = strings.Join(authParts, ":") + "@" + strings.Join(parts[1:], "@")
+				}
+			}
+		}
+		fmt.Printf("  URL: %s\n\n", maskedURL)
+		
 		fmt.Printf("Please make sure your database server is running at `%s`.\n", dbInfo.Host)
+		fmt.Printf("\nTroubleshooting:\n")
+		fmt.Printf("  1. Verify PostgreSQL is running: pg_isready -h localhost -p 5432\n")
+		fmt.Printf("  2. Check if the host and port are correct: %s\n", dbInfo.Host)
+		fmt.Printf("  3. Verify credentials (user: %s)\n", func() string {
+			if strings.Contains(dbURL, "@") {
+				parts := strings.Split(strings.Split(dbURL, "@")[0], ":")
+				if len(parts) > 0 {
+					return strings.TrimPrefix(parts[0], "postgresql://")
+				}
+			}
+			return "unknown"
+		}())
+		fmt.Printf("  4. Check firewall/network settings\n")
+		fmt.Printf("  5. Verify the database '%s' exists\n", dbInfo.Database)
 		return err
 	}
 	defer db.Close()

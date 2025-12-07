@@ -4,8 +4,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/carlosnayan/prisma-go-client/internal/config"
 )
 
 // LogLevel representa o nível de log
@@ -41,7 +45,10 @@ type Logger struct {
 	queryLog bool
 }
 
-var defaultLogger *Logger
+var (
+	defaultLogger *Logger
+	configOnce    sync.Once
+)
 
 func init() {
 	defaultLogger = &Logger{
@@ -264,4 +271,44 @@ func FileLogger(filename string, levels []string) (*Logger, error) {
 		return nil, fmt.Errorf("erro ao abrir arquivo de log: %w", err)
 	}
 	return NewLogger(levels, file), nil
+}
+
+// ConfigureFromConfigFile configura o logger a partir do prisma.conf
+// Esta função procura o prisma.conf na raiz do projeto e configura o logger
+// se a configuração de log estiver presente. A configuração é feita apenas uma vez
+// mesmo que a função seja chamada múltiplas vezes.
+func ConfigureFromConfigFile() {
+	configOnce.Do(func() {
+		// Procurar prisma.conf na raiz do projeto
+		wd, err := os.Getwd()
+		if err != nil {
+			return // Silenciosamente falha se não conseguir obter o diretório
+		}
+
+		// Procurar subindo os diretórios
+		dir := wd
+		for {
+			configPath := filepath.Join(dir, "prisma.conf")
+			if _, err := os.Stat(configPath); err == nil {
+				// Arquivo encontrado, tentar carregar
+				cfg, err := config.Load(configPath)
+				if err != nil {
+					return // Silenciosamente falha se não conseguir carregar
+				}
+
+				// Configurar logger se especificado
+				if len(cfg.Log) > 0 {
+					SetLogLevels(cfg.Log)
+				}
+				return
+			}
+
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				// Chegou na raiz, não encontrou
+				return
+			}
+			dir = parent
+		}
+	})
 }

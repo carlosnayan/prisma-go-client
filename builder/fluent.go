@@ -60,6 +60,7 @@ func NewQuery(db DBTX, table string, columns []string) *Query {
 		table:           table,
 		columns:         columns,
 		dialect:         dialect.GetDialect("postgresql"), // Default
+		logger:          logger.GetDefaultLogger(),        // Use default logger
 		whereConditions: []whereCondition{},
 		orderBy:         []OrderBy{},
 		joins:           []join{},
@@ -537,7 +538,9 @@ func (q *Query) First(ctx context.Context, dest interface{}) error {
 	ctx, cancel := contextutil.WithQueryTimeout(ctx)
 	defer cancel()
 
+	start := time.Now()
 	query, args := q.buildSelectQuery(true)
+	q.logQuery(ctx, query, args, start)
 	row := q.db.QueryRow(ctx, query, args...)
 
 	if q.modelType != nil {
@@ -623,7 +626,9 @@ func (q *Query) Update(ctx context.Context, column string, value interface{}) er
 	ctx, cancel := contextutil.WithQueryTimeout(ctx)
 	defer cancel()
 
+	start := time.Now()
 	query, args := q.buildUpdateQuery(column, value)
+	q.logQuery(ctx, query, args, start)
 	_, err := q.db.Exec(ctx, query, args...)
 	return errors.SanitizeError(err)
 }
@@ -633,7 +638,9 @@ func (q *Query) Updates(ctx context.Context, values map[string]interface{}) erro
 	ctx, cancel := contextutil.WithQueryTimeout(ctx)
 	defer cancel()
 
+	start := time.Now()
 	query, args := q.buildUpdatesQuery(values)
+	q.logQuery(ctx, query, args, start)
 	_, err := q.db.Exec(ctx, query, args...)
 	return errors.SanitizeError(err)
 }
@@ -643,7 +650,9 @@ func (q *Query) Delete(ctx context.Context, value interface{}) error {
 	ctx, cancel := contextutil.WithQueryTimeout(ctx)
 	defer cancel()
 
+	start := time.Now()
 	query, args := q.buildDeleteQuery()
+	q.logQuery(ctx, query, args, start)
 	_, err := q.db.Exec(ctx, query, args...)
 	return errors.SanitizeError(err)
 }

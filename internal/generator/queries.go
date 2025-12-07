@@ -141,11 +141,8 @@ func generateQueryMethods(file *os.File, model *parser.Model) {
 	fmt.Fprintf(file, "\treturn q.Query.First(ctx, dest)\n")
 	fmt.Fprintf(file, "}\n\n")
 
-	// FindFirst - alias for First
-	fmt.Fprintf(file, "// FindFirst is an alias for First\n")
-	fmt.Fprintf(file, "func (q *%sQuery) FindFirst(ctx context.Context, dest *models.%s) error {\n", pascalModelName, pascalModelName)
-	fmt.Fprintf(file, "\treturn q.Query.FindFirst(ctx, dest)\n")
-	fmt.Fprintf(file, "}\n\n")
+	// FindFirst - removed to avoid conflict with Prisma-style FindFirst() builder
+	// Use First() for direct execution or FindFirst() for builder pattern
 
 	// Find
 	fmt.Fprintf(file, "// Find finds all records\n")
@@ -156,29 +153,15 @@ func generateQueryMethods(file *os.File, model *parser.Model) {
 	fmt.Fprintf(file, "\treturn q.Query.Find(ctx, dest)\n")
 	fmt.Fprintf(file, "}\n\n")
 
-	// FindMany - type-safe with WhereInput, returns QueryResult for .Exec()
-	fmt.Fprintf(file, "// FindMany returns a QueryResult that can be executed with .Exec(ctx)\n")
-	fmt.Fprintf(file, "// Example: users, err := q.FindMany(inputs.UserWhereInput{Email: db.Contains(\"example.com\")}).Exec(ctx)\n")
-	fmt.Fprintf(file, "func (q *%sQuery) FindMany(where inputs.%sWhereInput) *QueryResult[models.%s] {\n", pascalModelName, pascalModelName, pascalModelName)
-	fmt.Fprintf(file, "\twhereMap := Convert%sWhereInputToWhere(where)\n", pascalModelName)
-	fmt.Fprintf(file, "\tq.Where(whereMap)\n")
-	fmt.Fprintf(file, "\treturn &QueryResult[models.%s]{\n", pascalModelName)
-	fmt.Fprintf(file, "\t\tquery: q.Query,\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "}\n\n")
+	// FindMany - removed to avoid conflict with Prisma-style FindMany() builder
+	// Use FindMany() builder pattern instead: q.FindMany().Where(...).Exec(ctx)
 
 	generateWhereInputConverter(file, model)
-	fmt.Fprintf(file, "// Count counts records\n")
-	fmt.Fprintf(file, "// Example: q.Where(\"active = ?\", true).Count(ctx)\n")
-	fmt.Fprintf(file, "func (q *%sQuery) Count(ctx context.Context) (int64, error) {\n", pascalModelName)
-	fmt.Fprintf(file, "\treturn q.Query.Count(ctx)\n")
-	fmt.Fprintf(file, "}\n\n")
+	// Count - removed to avoid conflict with Prisma-style Count() builder
+	// Use Count() builder pattern instead
 
-	fmt.Fprintf(file, "// Create inserts a new record\n")
-	fmt.Fprintf(file, "// Example: q.Create(ctx, &user)\n")
-	fmt.Fprintf(file, "func (q *%sQuery) Create(ctx context.Context, value *models.%s) error {\n", pascalModelName, pascalModelName)
-	fmt.Fprintf(file, "\treturn q.Query.Create(ctx, value)\n")
-	fmt.Fprintf(file, "}\n\n")
+	// Create - removed to avoid conflict with Prisma-style Create() builder
+	// Use Create() builder pattern instead
 
 	fmt.Fprintf(file, "// Save saves a record (create or update)\n")
 	fmt.Fprintf(file, "// Example: q.Save(ctx, &user)\n")
@@ -186,11 +169,8 @@ func generateQueryMethods(file *os.File, model *parser.Model) {
 	fmt.Fprintf(file, "\treturn q.Query.Save(ctx, value)\n")
 	fmt.Fprintf(file, "}\n\n")
 
-	fmt.Fprintf(file, "// Update updates a column\n")
-	fmt.Fprintf(file, "// Example: q.Where(\"id = ?\", 1).Update(ctx, \"name\", \"New Name\")\n")
-	fmt.Fprintf(file, "func (q *%sQuery) Update(ctx context.Context, column string, value interface{}) error {\n", pascalModelName)
-	fmt.Fprintf(file, "\treturn q.Query.Update(ctx, column, value)\n")
-	fmt.Fprintf(file, "}\n\n")
+	// Update - removed to avoid conflict with Prisma-style Update() builder
+	// Use Updates() for direct updates or Update() builder pattern
 
 	fmt.Fprintf(file, "// Updates updates multiple columns\n")
 	fmt.Fprintf(file, "// Example: q.Where(\"id = ?\", 1).Updates(ctx, map[string]interface{}{\"name\": \"New\", \"age\": 30})\n")
@@ -198,11 +178,11 @@ func generateQueryMethods(file *os.File, model *parser.Model) {
 	fmt.Fprintf(file, "\treturn q.Query.Updates(ctx, values)\n")
 	fmt.Fprintf(file, "}\n\n")
 
-	fmt.Fprintf(file, "// Delete removes records\n")
-	fmt.Fprintf(file, "// Example: q.Where(\"id = ?\", 1).Delete(ctx, &models.%s{})\n", pascalModelName)
-	fmt.Fprintf(file, "func (q *%sQuery) Delete(ctx context.Context, value *models.%s) error {\n", pascalModelName, pascalModelName)
-	fmt.Fprintf(file, "\treturn q.Query.Delete(ctx, value)\n")
-	fmt.Fprintf(file, "}\n\n")
+	// Delete - removed to avoid conflict with Prisma-style Delete() builder
+	// Use Delete() builder pattern instead
+
+	// Generate Prisma-style builder methods
+	generatePrismaBuilders(file, model)
 }
 
 // generateWhereInputConverter generates function to convert WhereInput to builder.Where
@@ -494,6 +474,275 @@ func generateFilterConverter(file *os.File, filterType, fieldName string) {
 	}
 }
 
+// generatePrismaBuilders generates Prisma-style builder methods for FindFirst, FindMany, Count, Delete, Update, Create
+func generatePrismaBuilders(file *os.File, model *parser.Model) {
+	pascalModelName := toPascalCase(model.Name)
+
+	// FindFirst builder
+	fmt.Fprintf(file, "// FindFirst returns a builder for finding a single %s record (Prisma-style)\n", pascalModelName)
+	fmt.Fprintf(file, "// Example: tenant, err := q.FindFirst().Where(inputs.%sWhereInput{...}).Exec(ctx)\n", pascalModelName)
+	fmt.Fprintf(file, "func (q *%sQuery) FindFirst() *%sFindFirstBuilder {\n", pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "\treturn &%sFindFirstBuilder{query: q}\n", pascalModelName)
+	fmt.Fprintf(file, "}\n\n")
+
+	fmt.Fprintf(file, "// %sFindFirstBuilder is a builder for finding a single %s record\n", pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "type %sFindFirstBuilder struct {\n", pascalModelName)
+	fmt.Fprintf(file, "\tquery     *%sQuery\n", pascalModelName)
+	fmt.Fprintf(file, "\twhereInput *inputs.%sWhereInput\n", pascalModelName)
+	fmt.Fprintf(file, "\tselectFields *inputs.%sSelect\n", pascalModelName)
+	fmt.Fprintf(file, "}\n\n")
+
+	fmt.Fprintf(file, "// Where sets the where conditions\n")
+	fmt.Fprintf(file, "func (b *%sFindFirstBuilder) Where(where inputs.%sWhereInput) *%sFindFirstBuilder {\n", pascalModelName, pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "\tb.whereInput = &where\n")
+	fmt.Fprintf(file, "\treturn b\n")
+	fmt.Fprintf(file, "}\n\n")
+
+	fmt.Fprintf(file, "// Select sets which fields to return\n")
+	fmt.Fprintf(file, "func (b *%sFindFirstBuilder) Select(selectFields inputs.%sSelect) *%sFindFirstBuilder {\n", pascalModelName, pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "\tb.selectFields = &selectFields\n")
+	fmt.Fprintf(file, "\treturn b\n")
+	fmt.Fprintf(file, "}\n\n")
+
+	fmt.Fprintf(file, "// Exec executes the find first operation\n")
+	fmt.Fprintf(file, "func (b *%sFindFirstBuilder) Exec(ctx context.Context) (*models.%s, error) {\n", pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "\tif b.whereInput != nil {\n")
+	fmt.Fprintf(file, "\t\twhereMap := Convert%sWhereInputToWhere(*b.whereInput)\n", pascalModelName)
+	fmt.Fprintf(file, "\t\tb.query.Where(whereMap)\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\tif b.selectFields != nil {\n")
+	fmt.Fprintf(file, "\t\tvar selectedFields []string\n")
+	for _, field := range model.Fields {
+		if isRelation(field) {
+			continue
+		}
+		fieldName := toPascalCase(field.Name)
+		dbFieldName := field.Name
+		fmt.Fprintf(file, "\t\tif b.selectFields.%s {\n", fieldName)
+		fmt.Fprintf(file, "\t\t\tselectedFields = append(selectedFields, %q)\n", dbFieldName)
+		fmt.Fprintf(file, "\t\t}\n")
+	}
+	fmt.Fprintf(file, "\t\tif len(selectedFields) > 0 {\n")
+	fmt.Fprintf(file, "\t\t\tb.query.Select(selectedFields...)\n")
+	fmt.Fprintf(file, "\t\t}\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\tvar result models.%s\n", pascalModelName)
+	fmt.Fprintf(file, "\terr := b.query.First(ctx, &result)\n")
+	fmt.Fprintf(file, "\tif err != nil {\n")
+	fmt.Fprintf(file, "\t\treturn nil, err\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\treturn &result, nil\n")
+	fmt.Fprintf(file, "}\n\n")
+
+	// FindMany builder
+	fmt.Fprintf(file, "// FindMany returns a builder for finding multiple %s records (Prisma-style)\n", pascalModelName)
+	fmt.Fprintf(file, "// Example: tenants, err := q.FindMany().Where(inputs.%sWhereInput{...}).Exec(ctx)\n", pascalModelName)
+	fmt.Fprintf(file, "func (q *%sQuery) FindMany() *%sFindManyBuilder {\n", pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "\treturn &%sFindManyBuilder{query: q}\n", pascalModelName)
+	fmt.Fprintf(file, "}\n\n")
+
+	fmt.Fprintf(file, "// %sFindManyBuilder is a builder for finding multiple %s records\n", pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "type %sFindManyBuilder struct {\n", pascalModelName)
+	fmt.Fprintf(file, "\tquery       *%sQuery\n", pascalModelName)
+	fmt.Fprintf(file, "\twhereInput  *inputs.%sWhereInput\n", pascalModelName)
+	fmt.Fprintf(file, "\tselectFields *inputs.%sSelect\n", pascalModelName)
+	fmt.Fprintf(file, "}\n\n")
+
+	fmt.Fprintf(file, "// Where sets the where conditions\n")
+	fmt.Fprintf(file, "func (b *%sFindManyBuilder) Where(where inputs.%sWhereInput) *%sFindManyBuilder {\n", pascalModelName, pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "\tb.whereInput = &where\n")
+	fmt.Fprintf(file, "\treturn b\n")
+	fmt.Fprintf(file, "}\n\n")
+
+	fmt.Fprintf(file, "// Select sets which fields to return\n")
+	fmt.Fprintf(file, "func (b *%sFindManyBuilder) Select(selectFields inputs.%sSelect) *%sFindManyBuilder {\n", pascalModelName, pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "\tb.selectFields = &selectFields\n")
+	fmt.Fprintf(file, "\treturn b\n")
+	fmt.Fprintf(file, "}\n\n")
+
+	fmt.Fprintf(file, "// Exec executes the find many operation\n")
+	fmt.Fprintf(file, "func (b *%sFindManyBuilder) Exec(ctx context.Context) ([]models.%s, error) {\n", pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "\tif b.whereInput != nil {\n")
+	fmt.Fprintf(file, "\t\twhereMap := Convert%sWhereInputToWhere(*b.whereInput)\n", pascalModelName)
+	fmt.Fprintf(file, "\t\tb.query.Where(whereMap)\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\tif b.selectFields != nil {\n")
+	fmt.Fprintf(file, "\t\tvar selectedFields []string\n")
+	for _, field := range model.Fields {
+		if isRelation(field) {
+			continue
+		}
+		fieldName := toPascalCase(field.Name)
+		dbFieldName := field.Name
+		fmt.Fprintf(file, "\t\tif b.selectFields.%s {\n", fieldName)
+		fmt.Fprintf(file, "\t\t\tselectedFields = append(selectedFields, %q)\n", dbFieldName)
+		fmt.Fprintf(file, "\t\t}\n")
+	}
+	fmt.Fprintf(file, "\t\tif len(selectedFields) > 0 {\n")
+	fmt.Fprintf(file, "\t\t\tb.query.Select(selectedFields...)\n")
+	fmt.Fprintf(file, "\t\t}\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\tvar results []models.%s\n", pascalModelName)
+	fmt.Fprintf(file, "\terr := b.query.Find(ctx, &results)\n")
+	fmt.Fprintf(file, "\treturn results, err\n")
+	fmt.Fprintf(file, "}\n\n")
+
+	// Count builder
+	fmt.Fprintf(file, "// Count returns a builder for counting %s records (Prisma-style)\n", pascalModelName)
+	fmt.Fprintf(file, "// Example: count, err := q.Count().Where(inputs.%sWhereInput{...}).Exec(ctx)\n", pascalModelName)
+	fmt.Fprintf(file, "func (q *%sQuery) Count() *%sCountBuilder {\n", pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "\treturn &%sCountBuilder{query: q}\n", pascalModelName)
+	fmt.Fprintf(file, "}\n\n")
+
+	fmt.Fprintf(file, "// %sCountBuilder is a builder for counting %s records\n", pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "type %sCountBuilder struct {\n", pascalModelName)
+	fmt.Fprintf(file, "\tquery      *%sQuery\n", pascalModelName)
+	fmt.Fprintf(file, "\twhereInput *inputs.%sWhereInput\n", pascalModelName)
+	fmt.Fprintf(file, "}\n\n")
+
+	fmt.Fprintf(file, "// Where sets the where conditions\n")
+	fmt.Fprintf(file, "func (b *%sCountBuilder) Where(where inputs.%sWhereInput) *%sCountBuilder {\n", pascalModelName, pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "\tb.whereInput = &where\n")
+	fmt.Fprintf(file, "\treturn b\n")
+	fmt.Fprintf(file, "}\n\n")
+
+	fmt.Fprintf(file, "// Exec executes the count operation\n")
+	fmt.Fprintf(file, "func (b *%sCountBuilder) Exec(ctx context.Context) (int64, error) {\n", pascalModelName)
+	fmt.Fprintf(file, "\tif b.whereInput != nil {\n")
+	fmt.Fprintf(file, "\t\twhereMap := Convert%sWhereInputToWhere(*b.whereInput)\n", pascalModelName)
+	fmt.Fprintf(file, "\t\tb.query.Where(whereMap)\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\treturn b.query.Query.Count(ctx)\n")
+	fmt.Fprintf(file, "}\n\n")
+
+	// Delete builder
+	fmt.Fprintf(file, "// Delete returns a builder for deleting %s records (Prisma-style)\n", pascalModelName)
+	fmt.Fprintf(file, "// Example: err := q.Delete().Where(inputs.%sWhereInput{...}).Exec(ctx)\n", pascalModelName)
+	fmt.Fprintf(file, "func (q *%sQuery) Delete() *%sDeleteBuilder {\n", pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "\treturn &%sDeleteBuilder{query: q}\n", pascalModelName)
+	fmt.Fprintf(file, "}\n\n")
+
+	fmt.Fprintf(file, "// %sDeleteBuilder is a builder for deleting %s records\n", pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "type %sDeleteBuilder struct {\n", pascalModelName)
+	fmt.Fprintf(file, "\tquery      *%sQuery\n", pascalModelName)
+	fmt.Fprintf(file, "\twhereInput *inputs.%sWhereInput\n", pascalModelName)
+	fmt.Fprintf(file, "}\n\n")
+
+	fmt.Fprintf(file, "// Where sets the where conditions\n")
+	fmt.Fprintf(file, "func (b *%sDeleteBuilder) Where(where inputs.%sWhereInput) *%sDeleteBuilder {\n", pascalModelName, pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "\tb.whereInput = &where\n")
+	fmt.Fprintf(file, "\treturn b\n")
+	fmt.Fprintf(file, "}\n\n")
+
+	fmt.Fprintf(file, "// Exec executes the delete operation\n")
+	fmt.Fprintf(file, "func (b *%sDeleteBuilder) Exec(ctx context.Context) error {\n", pascalModelName)
+	fmt.Fprintf(file, "\tif b.whereInput == nil {\n")
+	fmt.Fprintf(file, "\t\treturn fmt.Errorf(\"where condition is required for delete\")\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\twhereMap := Convert%sWhereInputToWhere(*b.whereInput)\n", pascalModelName)
+	fmt.Fprintf(file, "\tb.query.Where(whereMap)\n")
+	fmt.Fprintf(file, "\treturn b.query.Query.Delete(ctx, &models.%s{})\n", pascalModelName)
+	fmt.Fprintf(file, "}\n\n")
+
+	// Update builder
+	fmt.Fprintf(file, "// Update returns a builder for updating %s records (Prisma-style)\n", pascalModelName)
+	fmt.Fprintf(file, "// Example: err := q.Update().Where(inputs.%sWhereInput{...}).Data(inputs.%sUpdateInput{...}).Exec(ctx)\n", pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "func (q *%sQuery) Update() *%sUpdateBuilder {\n", pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "\treturn &%sUpdateBuilder{query: q}\n", pascalModelName)
+	fmt.Fprintf(file, "}\n\n")
+
+	fmt.Fprintf(file, "// %sUpdateBuilder is a builder for updating %s records\n", pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "type %sUpdateBuilder struct {\n", pascalModelName)
+	fmt.Fprintf(file, "\tquery      *%sQuery\n", pascalModelName)
+	fmt.Fprintf(file, "\twhereInput *inputs.%sWhereInput\n", pascalModelName)
+	fmt.Fprintf(file, "\tdata       *inputs.%sUpdateInput\n", pascalModelName)
+	fmt.Fprintf(file, "}\n\n")
+
+	fmt.Fprintf(file, "// Where sets the where conditions\n")
+	fmt.Fprintf(file, "func (b *%sUpdateBuilder) Where(where inputs.%sWhereInput) *%sUpdateBuilder {\n", pascalModelName, pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "\tb.whereInput = &where\n")
+	fmt.Fprintf(file, "\treturn b\n")
+	fmt.Fprintf(file, "}\n\n")
+
+	fmt.Fprintf(file, "// Data sets the data for updating\n")
+	fmt.Fprintf(file, "func (b *%sUpdateBuilder) Data(data inputs.%sUpdateInput) *%sUpdateBuilder {\n", pascalModelName, pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "\tb.data = &data\n")
+	fmt.Fprintf(file, "\treturn b\n")
+	fmt.Fprintf(file, "}\n\n")
+
+	fmt.Fprintf(file, "// Exec executes the update operation\n")
+	fmt.Fprintf(file, "func (b *%sUpdateBuilder) Exec(ctx context.Context) error {\n", pascalModelName)
+	fmt.Fprintf(file, "\tif b.whereInput == nil {\n")
+	fmt.Fprintf(file, "\t\treturn fmt.Errorf(\"where condition is required for update\")\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\tif b.data == nil {\n")
+	fmt.Fprintf(file, "\t\treturn fmt.Errorf(\"data is required for update\")\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\twhereMap := Convert%sWhereInputToWhere(*b.whereInput)\n", pascalModelName)
+	fmt.Fprintf(file, "\tb.query.Where(whereMap)\n")
+	fmt.Fprintf(file, "\tupdateData := make(map[string]interface{})\n")
+	for _, field := range model.Fields {
+		if isAutoGenerated(field) || isPrimaryKey(field) || isRelation(field) {
+			continue
+		}
+		fieldName := toPascalCase(field.Name)
+		dbFieldName := field.Name
+		fmt.Fprintf(file, "\tif b.data.%s != nil {\n", fieldName)
+		fmt.Fprintf(file, "\t\tupdateData[%q] = *b.data.%s\n", dbFieldName, fieldName)
+		fmt.Fprintf(file, "\t}\n")
+	}
+	fmt.Fprintf(file, "\treturn b.query.Updates(ctx, updateData)\n")
+	fmt.Fprintf(file, "}\n\n")
+
+	// Create builder
+	fmt.Fprintf(file, "// Create returns a builder for creating %s records (Prisma-style)\n", pascalModelName)
+	fmt.Fprintf(file, "// Example: tenant, err := q.Create().Data(inputs.%sCreateInput{...}).Exec(ctx)\n", pascalModelName)
+	fmt.Fprintf(file, "func (q *%sQuery) Create() *%sCreateBuilder {\n", pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "\treturn &%sCreateBuilder{query: q}\n", pascalModelName)
+	fmt.Fprintf(file, "}\n\n")
+
+	fmt.Fprintf(file, "// %sCreateBuilder is a builder for creating %s records\n", pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "type %sCreateBuilder struct {\n", pascalModelName)
+	fmt.Fprintf(file, "\tquery *%sQuery\n", pascalModelName)
+	fmt.Fprintf(file, "\tdata  *inputs.%sCreateInput\n", pascalModelName)
+	fmt.Fprintf(file, "}\n\n")
+
+	fmt.Fprintf(file, "// Data sets the data for creating\n")
+	fmt.Fprintf(file, "func (b *%sCreateBuilder) Data(data inputs.%sCreateInput) *%sCreateBuilder {\n", pascalModelName, pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "\tb.data = &data\n")
+	fmt.Fprintf(file, "\treturn b\n")
+	fmt.Fprintf(file, "}\n\n")
+
+	fmt.Fprintf(file, "// Exec executes the create operation\n")
+	fmt.Fprintf(file, "func (b *%sCreateBuilder) Exec(ctx context.Context) (*models.%s, error) {\n", pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "\tif b.data == nil {\n")
+	fmt.Fprintf(file, "\t\treturn nil, fmt.Errorf(\"data is required for create\")\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\tresult := &models.%s{}\n", pascalModelName)
+	for _, field := range model.Fields {
+		if isAutoGenerated(field) || isRelation(field) {
+			continue
+		}
+		fieldName := toPascalCase(field.Name)
+		// Check if field is optional (pointer) in CreateInput
+		isOptional := field.Type != nil && field.Type.IsOptional
+		if isOptional {
+			fmt.Fprintf(file, "\tif b.data.%s != nil {\n", fieldName)
+			fmt.Fprintf(file, "\t\tresult.%s = *b.data.%s\n", fieldName, fieldName)
+			fmt.Fprintf(file, "\t}\n")
+		} else {
+			// Field is required (not a pointer), assign directly
+			fmt.Fprintf(file, "\tresult.%s = b.data.%s\n", fieldName, fieldName)
+		}
+	}
+	fmt.Fprintf(file, "\terr := b.query.Query.Create(ctx, result)\n")
+	fmt.Fprintf(file, "\tif err != nil {\n")
+	fmt.Fprintf(file, "\t\treturn nil, err\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\treturn result, nil\n")
+	fmt.Fprintf(file, "}\n\n")
+}
+
 // determineQueryImports determines which imports are needed for query files
 func determineQueryImports(userModule, outputDir string) []string {
 	// Calculate import paths for generated packages
@@ -505,11 +754,13 @@ func determineQueryImports(userModule, outputDir string) []string {
 	}
 
 	// context is always needed for all query methods
+	// fmt is needed for fmt.Errorf in builders
 	// builder is always needed for Query embedding
 	// models is always needed for type references
 	// inputs is needed for WhereInput
 	return []string{
 		"context",
+		"fmt",
 		"github.com/carlosnayan/prisma-go-client/builder",
 		modelsPath,
 		inputsPath,

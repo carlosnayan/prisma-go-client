@@ -85,10 +85,16 @@ func GenerateClient(schema *parser.Schema, outputDir string) error {
 	fmt.Fprintf(file, "\traw *raw.Executor\n")
 	fmt.Fprintf(file, "}\n\n")
 
+	// Generate logger configuration helper
+	generateLoggerConfigHelper(file)
+
 	// NewClient
 	fmt.Fprintf(file, "// NewClient creates a new Prisma client\n")
 	fmt.Fprintf(file, "// db must be a builder.DBTX implementation (e.g., driver.NewPgxPool, driver.NewSQLDB)\n")
+	fmt.Fprintf(file, "// The logger is automatically configured from prisma.conf if present\n")
 	fmt.Fprintf(file, "func NewClient(db builder.DBTX) *Client {\n")
+	fmt.Fprintf(file, "\t// Configure logger from prisma.conf if available (only once)\n")
+	fmt.Fprintf(file, "\tconfigureLoggerFromConfig()\n")
 	fmt.Fprintf(file, "\treturn &Client{\n")
 	fmt.Fprintf(file, "\t\tdb:  db,\n")
 	fmt.Fprintf(file, "\t\traw: raw.New(db),\n")
@@ -271,6 +277,13 @@ func determineClientImports(schema *parser.Schema, userModule, outputDir string)
 	imports[queriesPath] = true
 	imports[inputsPath] = true
 	imports["github.com/carlosnayan/prisma-go-client/raw"] = true
+	// Add imports for logger configuration
+	imports["os"] = true
+	imports["path/filepath"] = true
+	imports["strings"] = true
+	imports["sync"] = true
+	imports["github.com/BurntSushi/toml"] = true
+	imports["github.com/joho/godotenv"] = true
 
 	// Add driver import based on provider (blank import)
 	provider := migrations.GetProviderFromSchema(schema)
@@ -299,6 +312,25 @@ func determineClientImports(schema *parser.Schema, userModule, outputDir string)
 	if imports[modelsPath] {
 		result = append(result, modelsPath)
 	}
+	// Add logger config imports
+	if imports["os"] {
+		result = append(result, "os")
+	}
+	if imports["path/filepath"] {
+		result = append(result, "path/filepath")
+	}
+	if imports["strings"] {
+		result = append(result, "strings")
+	}
+	if imports["sync"] {
+		result = append(result, "sync")
+	}
+	if imports["github.com/BurntSushi/toml"] {
+		result = append(result, "github.com/BurntSushi/toml")
+	}
+	if imports["github.com/joho/godotenv"] {
+		result = append(result, "github.com/joho/godotenv")
+	}
 	if imports[queriesPath] {
 		result = append(result, queriesPath)
 	}
@@ -316,6 +348,67 @@ func determineClientImports(schema *parser.Schema, userModule, outputDir string)
 // This function is kept for backward compatibility but does nothing
 func generateHelperFunctions(file *os.File) {
 	// Helper functions are generated in helpers.go via GenerateHelpers()
+}
+
+// generateLoggerConfigHelper generates the logger configuration helper function
+func generateLoggerConfigHelper(file *os.File) {
+	fmt.Fprintf(file, "var (\n")
+	fmt.Fprintf(file, "\tloggerConfigOnce sync.Once\n")
+	fmt.Fprintf(file, ")\n\n")
+
+	fmt.Fprintf(file, "// configureLoggerFromConfig configures the logger from prisma.conf\n")
+	fmt.Fprintf(file, "// This function is called automatically when NewClient is created\n")
+	fmt.Fprintf(file, "func configureLoggerFromConfig() {\n")
+	fmt.Fprintf(file, "\tloggerConfigOnce.Do(func() {\n")
+	fmt.Fprintf(file, "\t\t// Look for prisma.conf in project root\n")
+	fmt.Fprintf(file, "\t\twd, err := os.Getwd()\n")
+	fmt.Fprintf(file, "\t\tif err != nil {\n")
+	fmt.Fprintf(file, "\t\t\treturn\n")
+	fmt.Fprintf(file, "\t\t}\n\n")
+
+	fmt.Fprintf(file, "\t\t// Search up directories for prisma.conf\n")
+	fmt.Fprintf(file, "\t\tdir := wd\n")
+	fmt.Fprintf(file, "\t\tfor {\n")
+	fmt.Fprintf(file, "\t\t\tconfigPath := filepath.Join(dir, \"prisma.conf\")\n")
+	fmt.Fprintf(file, "\t\t\tif _, err := os.Stat(configPath); err == nil {\n")
+	fmt.Fprintf(file, "\t\t\t\t// Load .env if exists\n")
+	fmt.Fprintf(file, "\t\t\t\tconfigDir := filepath.Dir(configPath)\n")
+	fmt.Fprintf(file, "\t\t\t\tenvPath := filepath.Join(configDir, \".env\")\n")
+	fmt.Fprintf(file, "\t\t\t\tif _, err := os.Stat(envPath); err == nil {\n")
+	fmt.Fprintf(file, "\t\t\t\t\t_ = godotenv.Load(envPath)\n")
+	fmt.Fprintf(file, "\t\t\t\t}\n\n")
+
+	fmt.Fprintf(file, "\t\t\t\t// Read and parse prisma.conf\n")
+	fmt.Fprintf(file, "\t\t\t\tdata, err := os.ReadFile(configPath)\n")
+	fmt.Fprintf(file, "\t\t\t\tif err != nil {\n")
+	fmt.Fprintf(file, "\t\t\t\t\treturn\n")
+	fmt.Fprintf(file, "\t\t\t\t}\n\n")
+
+	fmt.Fprintf(file, "\t\t\t\t// Parse TOML config\n")
+	fmt.Fprintf(file, "\t\t\t\ttype Config struct {\n")
+	fmt.Fprintf(file, "\t\t\t\t\tLog []string `toml:\"log,omitempty\"`\n")
+	fmt.Fprintf(file, "\t\t\t\t}\n")
+	fmt.Fprintf(file, "\t\t\t\tvar cfg Config\n")
+	fmt.Fprintf(file, "\t\t\t\tif _, err := toml.Decode(string(data), &cfg); err != nil {\n")
+	fmt.Fprintf(file, "\t\t\t\t\treturn\n")
+	fmt.Fprintf(file, "\t\t\t\t}\n\n")
+
+	fmt.Fprintf(file, "\t\t\t\t// Configure logger if log levels are specified\n")
+	fmt.Fprintf(file, "\t\t\t\tif len(cfg.Log) > 0 {\n")
+	fmt.Fprintf(file, "\t\t\t\t\tbuilder.SetLogLevels(cfg.Log)\n")
+	fmt.Fprintf(file, "\t\t\t\t}\n")
+	fmt.Fprintf(file, "\t\t\t\treturn\n")
+	fmt.Fprintf(file, "\t\t\t}\n\n")
+
+	fmt.Fprintf(file, "\t\t\tparent := filepath.Dir(dir)\n")
+	fmt.Fprintf(file, "\t\t\tif parent == dir {\n")
+	fmt.Fprintf(file, "\t\t\t\t// Reached root, not found\n")
+	fmt.Fprintf(file, "\t\t\t\treturn\n")
+	fmt.Fprintf(file, "\t\t\t}\n")
+	fmt.Fprintf(file, "\t\t\tdir = parent\n")
+	fmt.Fprintf(file, "\t\t}\n")
+	fmt.Fprintf(file, "\t})\n")
+	fmt.Fprintf(file, "}\n\n")
 }
 
 // generateFluentAPIMethods generates fluent methods for Create, FindMany, FindFirst, Update, Delete
@@ -338,34 +431,13 @@ func generateFluentAPIMethods(file *os.File, model *parser.Model, pascalModelNam
 	fmt.Fprintf(file, "\tif b.data == nil {\n")
 	fmt.Fprintf(file, "\t\treturn nil, fmt.Errorf(\"data is required\")\n")
 	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\tuser := &models.%s{}\n", pascalModelName)
-	for _, field := range model.Fields {
-		if isAutoGenerated(field) || isRelation(field) {
-			continue
-		}
-		fieldName := toPascalCase(field.Name)
-		// Check if field is optional (pointer) in CreateInput
-		isOptional := field.Type != nil && field.Type.IsOptional
-		if isOptional {
-		fmt.Fprintf(file, "\tif b.data.%s != nil {\n", fieldName)
-		fmt.Fprintf(file, "\t\tuser.%s = *b.data.%s\n", fieldName, fieldName)
-		fmt.Fprintf(file, "\t}\n")
-		} else {
-			// Field is required (not a pointer), assign directly
-			fmt.Fprintf(file, "\tuser.%s = b.data.%s\n", fieldName, fieldName)
-		}
-	}
 	fmt.Fprintf(file, "\tvar query *queries.%sQuery\n", pascalModelName)
 	fmt.Fprintf(file, "\tif b.txClient != nil {\n")
 	fmt.Fprintf(file, "\t\tquery = b.txClient.%s()\n", methodName)
 	fmt.Fprintf(file, "\t} else {\n")
 	fmt.Fprintf(file, "\t\tquery = b.client.%s()\n", methodName)
 	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\terr := query.Create(ctx, user)\n")
-	fmt.Fprintf(file, "\tif err != nil {\n")
-	fmt.Fprintf(file, "\t\treturn nil, err\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\treturn user, nil\n")
+	fmt.Fprintf(file, "\treturn query.Create().Data(*b.data).Exec(ctx)\n")
 	fmt.Fprintf(file, "}\n\n")
 
 	// FindMany builder
@@ -397,29 +469,14 @@ func generateFluentAPIMethods(file *os.File, model *parser.Model, pascalModelNam
 	fmt.Fprintf(file, "\t} else {\n")
 	fmt.Fprintf(file, "\t\tquery = b.client.%s()\n", methodName)
 	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\tfindManyBuilder := query.FindMany()\n")
 	fmt.Fprintf(file, "\tif b.selectFields != nil {\n")
-	fmt.Fprintf(file, "\t\tvar selectedFields []string\n")
-	for _, field := range model.Fields {
-		if isRelation(field) {
-			continue
-		}
-		fieldName := toPascalCase(field.Name)
-		dbFieldName := field.Name
-		fmt.Fprintf(file, "\t\tif b.selectFields.%s {\n", fieldName)
-		fmt.Fprintf(file, "\t\t\tselectedFields = append(selectedFields, %q)\n", dbFieldName)
-		fmt.Fprintf(file, "\t\t}\n")
-	}
-	fmt.Fprintf(file, "\t\tif len(selectedFields) > 0 {\n")
-	fmt.Fprintf(file, "\t\t\tquery.Select(selectedFields...)\n")
-	fmt.Fprintf(file, "\t\t}\n")
+	fmt.Fprintf(file, "\t\tfindManyBuilder = findManyBuilder.Select(*b.selectFields)\n")
 	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\tvar whereInput inputs.%sWhereInput\n", pascalModelName)
 	fmt.Fprintf(file, "\tif b.whereInput != nil {\n")
-	fmt.Fprintf(file, "\t\twhereInput = *b.whereInput\n")
+	fmt.Fprintf(file, "\t\tfindManyBuilder = findManyBuilder.Where(*b.whereInput)\n")
 	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\tresult := query.FindMany(whereInput)\n")
-	fmt.Fprintf(file, "\tresults, err := result.Exec(ctx)\n")
-	fmt.Fprintf(file, "\treturn results, err\n")
+	fmt.Fprintf(file, "\treturn findManyBuilder.Exec(ctx)\n")
 	fmt.Fprintf(file, "}\n\n")
 
 	// FindFirst builder
@@ -467,16 +524,14 @@ func generateFluentAPIMethods(file *os.File, model *parser.Model, pascalModelNam
 	fmt.Fprintf(file, "\t\t\tquery.Select(selectedFields...)\n")
 	fmt.Fprintf(file, "\t\t}\n")
 	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\tfindFirstBuilder := query.FindFirst()\n")
+	fmt.Fprintf(file, "\tif b.selectFields != nil {\n")
+	fmt.Fprintf(file, "\t\tfindFirstBuilder = findFirstBuilder.Select(*b.selectFields)\n")
+	fmt.Fprintf(file, "\t}\n")
 	fmt.Fprintf(file, "\tif b.whereInput != nil {\n")
-	fmt.Fprintf(file, "\t\twhereMap := queries.Convert%sWhereInputToWhere(*b.whereInput)\n", pascalModelName)
-	fmt.Fprintf(file, "\t\tquery.Where(whereMap)\n")
+	fmt.Fprintf(file, "\t\tfindFirstBuilder = findFirstBuilder.Where(*b.whereInput)\n")
 	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\tvar result models.%s\n", pascalModelName)
-	fmt.Fprintf(file, "\terr := query.FindFirst(ctx, &result)\n")
-	fmt.Fprintf(file, "\tif err != nil {\n")
-	fmt.Fprintf(file, "\t\treturn nil, err\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\treturn &result, nil\n")
+	fmt.Fprintf(file, "\treturn findFirstBuilder.Exec(ctx)\n")
 	fmt.Fprintf(file, "}\n\n")
 
 	fmt.Fprintf(file, "// %sUpdateBuilder is a fluent builder for updating %s records\n", pascalModelName, pascalModelName)
@@ -553,9 +608,7 @@ func generateFluentAPIMethods(file *os.File, model *parser.Model, pascalModelNam
 	fmt.Fprintf(file, "\t} else {\n")
 	fmt.Fprintf(file, "\t\tquery = b.client.%s()\n", methodName)
 	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\twhereMap := queries.Convert%sWhereInputToWhere(*b.whereInput)\n", pascalModelName)
-	fmt.Fprintf(file, "\tquery.Where(whereMap)\n")
-	fmt.Fprintf(file, "\treturn query.Delete(ctx, &models.%s{})\n", pascalModelName)
+	fmt.Fprintf(file, "\treturn query.Delete().Where(*b.whereInput).Exec(ctx)\n")
 	fmt.Fprintf(file, "}\n\n")
 
 	// Generate methods on Client

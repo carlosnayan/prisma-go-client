@@ -40,30 +40,69 @@ type GeneratorConfig struct {
 
 // Load carrega a configuração do arquivo prisma.conf
 func Load(configPath string) (*Config, error) {
-	// Carregar arquivo .env se existir (ignora erro se não existir)
-	// Procura .env na raiz do projeto, subindo os diretórios
-	wd, _ := os.Getwd()
-	if wd != "" {
-		dir := wd
-		for {
-			envPath := filepath.Join(dir, ".env")
-			if _, err := os.Stat(envPath); err == nil {
-				// Carregar .env encontrado (ignore errors - optional file)
-				_ = godotenv.Load(envPath)
-				break
-			}
-
-			parent := filepath.Dir(dir)
-			if parent == dir {
-				// Não encontrou .env, tenta carregar do diretório atual
-				_ = godotenv.Load()
-				break
-			}
-			dir = parent
-		}
+	// Primeiro, determinar onde está o prisma.conf para procurar .env no mesmo diretório
+	var configDir string
+	if configPath != "" {
+		configDir = filepath.Dir(configPath)
 	} else {
-		// Fallback: tentar carregar .env do diretório atual (ignore errors - optional file)
-		_ = godotenv.Load()
+		// Procurar prisma.conf para determinar o diretório
+		wd, _ := os.Getwd()
+		if wd != "" {
+			dir := wd
+			for {
+				testPath := filepath.Join(dir, "prisma.conf")
+				if _, err := os.Stat(testPath); err == nil {
+					configDir = dir
+					break
+				}
+				parent := filepath.Dir(dir)
+				if parent == dir {
+					break
+				}
+				dir = parent
+			}
+		}
+	}
+
+	// Carregar arquivo .env se existir
+	// Primeiro tenta no mesmo diretório do prisma.conf, depois sobe os diretórios
+	envLoaded := false
+	if configDir != "" {
+		// Tentar carregar .env do diretório do prisma.conf
+		envPath := filepath.Join(configDir, ".env")
+		if _, err := os.Stat(envPath); err == nil {
+			if err := godotenv.Load(envPath); err == nil {
+				envLoaded = true
+			}
+		}
+	}
+
+	// Se não carregou, procurar subindo os diretórios a partir do diretório atual
+	if !envLoaded {
+		wd, _ := os.Getwd()
+		if wd != "" {
+			dir := wd
+			for {
+				envPath := filepath.Join(dir, ".env")
+				if _, err := os.Stat(envPath); err == nil {
+					if err := godotenv.Load(envPath); err == nil {
+						envLoaded = true
+						break
+					}
+				}
+
+				parent := filepath.Dir(dir)
+				if parent == dir {
+					// Não encontrou .env, tenta carregar do diretório atual
+					_ = godotenv.Load()
+					break
+				}
+				dir = parent
+			}
+		} else {
+			// Fallback: tentar carregar .env do diretório atual
+			_ = godotenv.Load()
+		}
 	}
 
 	if configPath == "" {
@@ -106,6 +145,33 @@ func Load(configPath string) (*Config, error) {
 
 	// Validar configuração
 	if err := config.Validate(); err != nil {
+		// Se a validação falhou por causa de DATABASE_URL, verificar se o .env foi carregado
+		if strings.Contains(err.Error(), "DATABASE_URL") {
+			// Verificar se a variável existe no ambiente
+			dbURL := os.Getenv("DATABASE_URL")
+			if dbURL == "" {
+				// Tentar diagnosticar o problema
+				wd, _ := os.Getwd()
+				envPath := filepath.Join(wd, ".env")
+				if _, statErr := os.Stat(envPath); statErr == nil {
+					// Arquivo .env existe, mas variável não foi carregada
+					return nil, fmt.Errorf(`%w
+
+Diagnóstico:
+  - Arquivo .env encontrado em: %s
+  - Mas a variável DATABASE_URL não foi carregada
+
+Possíveis causas:
+  1. Formato incorreto no .env (use: DATABASE_URL=postgresql://... sem aspas)
+  2. Espaços em branco antes ou depois do sinal de igual
+  3. Comentários ou linhas vazias causando problemas
+
+Verifique o formato do seu .env:
+  DATABASE_URL=postgresql://user:password@localhost:5432/database?sslmode=disable
+  (sem aspas, sem espaços ao redor do =)`, err, envPath)
+				}
+			}
+		}
 		return nil, fmt.Errorf("configuração inválida: %w", err)
 	}
 
@@ -128,7 +194,10 @@ func (c *Config) expandEnvVars() error {
 
 // expandString expande variáveis de ambiente em uma string
 // Suporta: ${VAR}, $VAR, env("VAR") e env('VAR')
+// Retorna a string original se a variável não foi encontrada (para validação detectar)
 func expandString(s string) string {
+	original := s
+	
 	// Primeiro, expandir formato env("VAR") ou env('VAR')
 	for {
 		var start int
@@ -153,6 +222,10 @@ func expandString(s string) string {
 
 		varName := s[start+5 : end]
 		value := os.Getenv(varName)
+		if value == "" {
+			// Variável não encontrada, manter original para validação detectar
+			return original
+		}
 		s = s[:start] + value + s[end+2:]
 	}
 
@@ -173,6 +246,10 @@ func expandString(s string) string {
 
 		varName := s[start+2 : end]
 		value := os.Getenv(varName)
+		if value == "" {
+			// Variável não encontrada, retornar original
+			return original
+		}
 		s = s[:start] + value + s[end+1:]
 	}
 
@@ -202,10 +279,20 @@ func (c *Config) Validate() error {
 	}
 
 	// Validar se a URL foi expandida corretamente (não deve conter env(" ou ${ sem ser expandido)
-	if strings.Contains(c.Datasource.URL, `env("`) || (strings.Contains(c.Datasource.URL, "${") && !strings.Contains(c.Datasource.URL, "://")) {
+	if strings.Contains(c.Datasource.URL, `env("`) || strings.Contains(c.Datasource.URL, `env('`) || (strings.Contains(c.Datasource.URL, "${") && !strings.Contains(c.Datasource.URL, "://")) {
 		// Se ainda contém env(" ou ${, significa que a variável não foi encontrada
-		if strings.Contains(c.Datasource.URL, `env("DATABASE_URL")`) || c.Datasource.URL == "${DATABASE_URL}" {
-			return fmt.Errorf("variável de ambiente DATABASE_URL não está definida")
+		if strings.Contains(c.Datasource.URL, `env("DATABASE_URL")`) || strings.Contains(c.Datasource.URL, `env('DATABASE_URL')`) || c.Datasource.URL == "${DATABASE_URL}" {
+			return fmt.Errorf(`variável de ambiente DATABASE_URL não está definida ou não foi exportada
+
+Para resolver:
+  1. Exporte a variável no shell:
+     export DATABASE_URL='postgresql://user:password@localhost:5432/database?sslmode=disable'
+  
+  2. Ou crie um arquivo .env na raiz do projeto com:
+     DATABASE_URL=postgresql://user:password@localhost:5432/database?sslmode=disable
+
+  3. Ou defina diretamente no prisma.conf:
+     url = "postgresql://user:password@localhost:5432/database?sslmode=disable"`)
 		}
 	}
 

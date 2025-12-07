@@ -66,17 +66,17 @@ for file in "${FILES[@]}"; do
             ;;
         "cmd/prisma/cmd/root.go")
             # Update line: "0.1.0", -> "0.1.3",
-            sed -i '' "s/\"[0-9]\+\.[0-9]\+\.[0-9]\+\"/\"$NEW_VERSION\"/g" "$file"
+            sed -i '' -E "s/\"[0-9]+\.[0-9]+\.[0-9]+\"/\"$NEW_VERSION\"/g" "$file"
             echo -e "${GREEN}✓${NC} Updated $file"
             ;;
         "cmd/prisma/cmd/generate.go")
             # Update: const version = "0.1.0"
-            sed -i '' "s/const version = \"[0-9]\+\.[0-9]\+\.[0-9]\+\"/const version = \"$NEW_VERSION\"/g" "$file"
+            sed -i '' -E "s/const version = \"[0-9]+\.[0-9]+\.[0-9]+\"/const version = \"$NEW_VERSION\"/g" "$file"
             echo -e "${GREEN}✓${NC} Updated $file"
             ;;
         "prisma.go")
             # Update: const Version = "0.1.0"
-            sed -i '' "s/const Version = \"[0-9]\+\.[0-9]\+\.[0-9]\+\"/const Version = \"$NEW_VERSION\"/g" "$file"
+            sed -i '' -E "s/const Version = \"[0-9]+\.[0-9]+\.[0-9]+\"/const Version = \"$NEW_VERSION\"/g" "$file"
             echo -e "${GREEN}✓${NC} Updated $file"
             ;;
     esac
