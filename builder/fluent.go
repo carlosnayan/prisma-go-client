@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	contextutil "github.com/carlosnayan/prisma-go-client/internal/context"
@@ -14,6 +15,12 @@ import (
 	"github.com/carlosnayan/prisma-go-client/internal/errors"
 	"github.com/carlosnayan/prisma-go-client/internal/limits"
 	"github.com/carlosnayan/prisma-go-client/internal/logger"
+)
+
+// fieldCache caches field lookups by type and column name
+var (
+	fieldCache      = make(map[string]map[string]int) // type string -> column name -> field index
+	fieldCacheMutex sync.RWMutex
 )
 
 // Query represents a query builder with fluent (chainable) API
@@ -554,8 +561,6 @@ func (q *Query) First(ctx context.Context, dest interface{}) error {
 	processStart := time.Now()
 	query, args := q.buildSelectQuery(true)
 
-	// Medir query time: desde o início da chamada ao banco até o retorno do Scan
-	// Para QueryRow, a execução real acontece durante o Scan()
 	queryStart := time.Now()
 	row := q.db.QueryRow(ctx, query, args...)
 
@@ -568,7 +573,6 @@ func (q *Query) First(ctx context.Context, dest interface{}) error {
 	queryEnd := time.Now()
 	queryDuration := queryEnd.Sub(queryStart)
 
-	// Log com tempos separados (query time e process time)
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
 
 	if err != nil {
@@ -589,7 +593,6 @@ func (q *Query) Find(ctx context.Context, dest interface{}) error {
 	processStart := time.Now()
 	query, args := q.buildSelectQuery(false)
 
-	// Medir query time: desde o início da chamada ao banco até o retorno
 	queryStart := time.Now()
 	rows, err := q.db.Query(ctx, query, args...)
 	queryEnd := time.Now()
@@ -609,7 +612,6 @@ func (q *Query) Find(ctx context.Context, dest interface{}) error {
 		err = q.scanRowsDirect(rows, dest)
 	}
 
-	// Log com tempos separados (query time e process time)
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
 
 	if err != nil {
@@ -636,8 +638,6 @@ func (q *Query) Count(ctx context.Context) (int64, error) {
 	processStart := time.Now()
 	query, args := q.buildCountQuery()
 
-	// Medir query time: desde o início da chamada ao banco até o retorno do Scan
-	// Para QueryRow, a execução real acontece durante o Scan()
 	queryStart := time.Now()
 	row := q.db.QueryRow(ctx, query, args...)
 	var count int64
@@ -645,7 +645,6 @@ func (q *Query) Count(ctx context.Context) (int64, error) {
 	queryEnd := time.Now()
 	queryDuration := queryEnd.Sub(queryStart)
 
-	// Log com tempos separados (query time e process time)
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
 
 	if err != nil {
@@ -664,13 +663,11 @@ func (q *Query) Create(ctx context.Context, value interface{}) error {
 	processStart := time.Now()
 	query, args := q.buildInsertQuery(value)
 
-	// Medir query time: desde o início da chamada ao banco até o retorno
 	queryStart := time.Now()
 	_, err := q.db.Exec(ctx, query, args...)
 	queryEnd := time.Now()
 	queryDuration := queryEnd.Sub(queryStart)
 
-	// Log com tempos separados (query time e process time)
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
 
 	if err != nil {
@@ -694,13 +691,11 @@ func (q *Query) Save(ctx context.Context, value interface{}) error {
 	processStart := time.Now()
 	query, args := q.buildUpsertQuery(value)
 
-	// Medir query time: desde o início da chamada ao banco até o retorno
 	queryStart := time.Now()
 	_, err := q.db.Exec(ctx, query, args...)
 	queryEnd := time.Now()
 	queryDuration := queryEnd.Sub(queryStart)
 
-	// Log com tempos separados (query time e process time)
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
 
 	if err != nil {
@@ -719,13 +714,11 @@ func (q *Query) Update(ctx context.Context, column string, value interface{}) er
 	processStart := time.Now()
 	query, args := q.buildUpdateQuery(column, value)
 
-	// Medir query time: desde o início da chamada ao banco até o retorno
 	queryStart := time.Now()
 	_, err := q.db.Exec(ctx, query, args...)
 	queryEnd := time.Now()
 	queryDuration := queryEnd.Sub(queryStart)
 
-	// Log com tempos separados (query time e process time)
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
 
 	if err != nil {
@@ -744,13 +737,11 @@ func (q *Query) Updates(ctx context.Context, values map[string]interface{}) erro
 	processStart := time.Now()
 	query, args := q.buildUpdatesQuery(values)
 
-	// Medir query time: desde o início da chamada ao banco até o retorno
 	queryStart := time.Now()
 	_, err := q.db.Exec(ctx, query, args...)
 	queryEnd := time.Now()
 	queryDuration := queryEnd.Sub(queryStart)
 
-	// Log com tempos separados (query time e process time)
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
 
 	if err != nil {
@@ -769,13 +760,11 @@ func (q *Query) Delete(ctx context.Context, value interface{}) error {
 	processStart := time.Now()
 	query, args := q.buildDeleteQuery()
 
-	// Medir query time: desde o início da chamada ao banco até o retorno
 	queryStart := time.Now()
 	_, err := q.db.Exec(ctx, query, args...)
 	queryEnd := time.Now()
 	queryDuration := queryEnd.Sub(queryStart)
 
-	// Log com tempos separados (query time e process time)
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
 
 	if err != nil {
@@ -788,80 +777,98 @@ func (q *Query) Delete(ctx context.Context, value interface{}) error {
 
 // buildSelectQuery builds the SELECT query
 func (q *Query) buildSelectQuery(single bool) (string, []interface{}) {
-	var parts []string
 	var args []interface{}
 	argIndex := 1
 
-	// SELECT
-	parts = append(parts, "SELECT")
+	// Estimar tamanho inicial do query builder
+	estimatedSize := 256
+	if len(q.columns) > 0 {
+		estimatedSize += len(q.columns) * 20 // Estimativa por coluna
+	}
+	var queryBuilder strings.Builder
+	queryBuilder.Grow(estimatedSize)
+
+	queryBuilder.WriteString("SELECT ")
 	if len(q.selectFields) > 0 {
-		quotedFields := make([]string, len(q.selectFields))
 		for i, field := range q.selectFields {
-			quotedFields[i] = q.dialect.QuoteIdentifier(field)
+			if i > 0 {
+				queryBuilder.WriteString(", ")
+			}
+			queryBuilder.WriteString(q.dialect.QuoteIdentifier(field))
 		}
-		parts = append(parts, strings.Join(quotedFields, ", "))
 	} else {
-		quotedColumns := make([]string, len(q.columns))
 		for i, col := range q.columns {
-			quotedColumns[i] = q.dialect.QuoteIdentifier(col)
+			if i > 0 {
+				queryBuilder.WriteString(", ")
+			}
+			queryBuilder.WriteString(q.dialect.QuoteIdentifier(col))
 		}
-		parts = append(parts, strings.Join(quotedColumns, ", "))
 	}
 
-	// FROM
-	parts = append(parts, "FROM", q.dialect.QuoteIdentifier(q.table))
+	queryBuilder.WriteString(" FROM ")
+	queryBuilder.WriteString(q.dialect.QuoteIdentifier(q.table))
 
-	// JOINs
 	for _, join := range q.joins {
-		parts = append(parts, fmt.Sprintf("%s JOIN %s ON %s", join.joinType, q.dialect.QuoteIdentifier(join.table), join.on))
+		queryBuilder.WriteString(" ")
+		queryBuilder.WriteString(join.joinType)
+		queryBuilder.WriteString(" JOIN ")
+		queryBuilder.WriteString(q.dialect.QuoteIdentifier(join.table))
+		queryBuilder.WriteString(" ON ")
+		queryBuilder.WriteString(join.on)
 		args = append(args, join.args...)
 		argIndex += len(join.args)
 	}
 
-	// WHERE
 	if len(q.whereConditions) > 0 {
 		whereClause, whereArgs := q.buildWhereClause(&argIndex)
-		parts = append(parts, "WHERE", whereClause)
+		queryBuilder.WriteString(" WHERE ")
+		queryBuilder.WriteString(whereClause)
 		args = append(args, whereArgs...)
 
-		// Se tem deleted_at e não queremos incluir deletados, adicionar condição
 		if q.hasDeleted && !q.includeDeleted {
 			deletedAtField := q.dialect.QuoteIdentifier("deleted_at")
-			parts = append(parts, fmt.Sprintf("AND %s IS NULL", deletedAtField))
+			queryBuilder.WriteString(" AND ")
+			queryBuilder.WriteString(deletedAtField)
+			queryBuilder.WriteString(" IS NULL")
 		}
 	} else if q.hasDeleted && !q.includeDeleted {
-		// Se tem deleted_at mas não tem WHERE, adicionar condição para não mostrar deletados
 		deletedAtField := q.dialect.QuoteIdentifier("deleted_at")
-		parts = append(parts, fmt.Sprintf("WHERE %s IS NULL", deletedAtField))
+		queryBuilder.WriteString(" WHERE ")
+		queryBuilder.WriteString(deletedAtField)
+		queryBuilder.WriteString(" IS NULL")
 	}
 
-	// GROUP BY
 	if len(q.groupBy) > 0 {
-		quotedGroupBy := make([]string, len(q.groupBy))
+		queryBuilder.WriteString(" GROUP BY ")
 		for i, field := range q.groupBy {
-			quotedGroupBy[i] = q.dialect.QuoteIdentifier(field)
+			if i > 0 {
+				queryBuilder.WriteString(", ")
+			}
+			queryBuilder.WriteString(q.dialect.QuoteIdentifier(field))
 		}
-		parts = append(parts, "GROUP BY", strings.Join(quotedGroupBy, ", "))
 	}
 
-	// HAVING
 	if len(q.having) > 0 {
 		havingClause, havingArgs := q.buildHavingClause(&argIndex)
-		parts = append(parts, "HAVING", havingClause)
+		queryBuilder.WriteString(" HAVING ")
+		queryBuilder.WriteString(havingClause)
 		args = append(args, havingArgs...)
 	}
 
-	// ORDER BY
 	if len(q.orderBy) > 0 {
-		var orderParts []string
-		for _, order := range q.orderBy {
-			orderParts = append(orderParts, fmt.Sprintf("%s %s", q.dialect.QuoteIdentifier(order.Field), order.Order))
+		queryBuilder.WriteString(" ORDER BY ")
+		for i, order := range q.orderBy {
+			if i > 0 {
+				queryBuilder.WriteString(", ")
+			}
+			queryBuilder.WriteString(q.dialect.QuoteIdentifier(order.Field))
+			queryBuilder.WriteString(" ")
+			queryBuilder.WriteString(order.Order)
 		}
-		parts = append(parts, "ORDER BY", strings.Join(orderParts, ", "))
 	}
 
 	if single {
-		parts = append(parts, "LIMIT 1")
+		queryBuilder.WriteString(" LIMIT 1")
 	} else if q.limit != nil || q.offset != nil {
 		limit := 0
 		offset := 0
@@ -872,7 +879,8 @@ func (q *Query) buildSelectQuery(single bool) (string, []interface{}) {
 			offset = *q.offset
 		}
 		limitOffset := q.dialect.GetLimitOffsetSyntax(limit, offset)
-		parts = append(parts, limitOffset)
+		queryBuilder.WriteString(" ")
+		queryBuilder.WriteString(limitOffset)
 		if q.limit != nil {
 			args = append(args, *q.limit)
 		}
@@ -881,7 +889,7 @@ func (q *Query) buildSelectQuery(single bool) (string, []interface{}) {
 		}
 	}
 
-	return strings.Join(parts, " "), args
+	return queryBuilder.String(), args
 }
 
 // buildWhereClause builds the WHERE clause
@@ -950,14 +958,12 @@ func (q *Query) buildCountQuery() (string, []interface{}) {
 
 	parts = append(parts, "SELECT COUNT(*) FROM", q.dialect.QuoteIdentifier(q.table))
 
-	// JOINs
 	for _, join := range q.joins {
 		parts = append(parts, fmt.Sprintf("%s JOIN %s ON %s", join.joinType, q.dialect.QuoteIdentifier(join.table), join.on))
 		args = append(args, join.args...)
 		argIndex += len(join.args)
 	}
 
-	// WHERE
 	if len(q.whereConditions) > 0 {
 		whereClause, whereArgs := q.buildWhereClause(&argIndex)
 		parts = append(parts, "WHERE", whereClause)
@@ -1350,7 +1356,7 @@ func (q *Query) scanRowsIntoModel(rows interface{}, dest interface{}) error {
 
 		for driverRows.Next() {
 			if rowCount >= limits.MaxScanRows {
-				return fmt.Errorf("result set too large: maximum %d rows allowed", limits.MaxScanRows)
+				return fmt.Errorf("%w: maximum %d rows allowed", errors.ErrTooManyRows, limits.MaxScanRows)
 			}
 
 			modelValue := reflect.New(sliceType).Elem()
@@ -1398,8 +1404,22 @@ func (q *Query) scanRowsDirect(rows interface{}, dest interface{}) error {
 }
 
 // findFieldByColumn finds a struct field by column name
+// Uses caching to avoid repeated reflection operations
 func findFieldByColumn(modelValue reflect.Value, colName string) reflect.Value {
 	typ := modelValue.Type()
+	typeKey := typ.String()
+
+	fieldCacheMutex.RLock()
+	typeMap, typeExists := fieldCache[typeKey]
+	if typeExists {
+		if fieldIdx, colExists := typeMap[colName]; colExists {
+			fieldCacheMutex.RUnlock()
+			return modelValue.Field(fieldIdx)
+		}
+	}
+	fieldCacheMutex.RUnlock()
+
+	var foundIdx = -1
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
 		jsonTag := field.Tag.Get("json")
@@ -1414,15 +1434,28 @@ func findFieldByColumn(modelValue reflect.Value, colName string) reflect.Value {
 
 		// Verificar tags
 		if dbTag == colName || jsonTag == colName {
-			return modelValue.Field(i)
+			foundIdx = i
+			break
 		}
 
 		// Verificar nome do campo (snake_case)
 		fieldName := toSnakeCase(field.Name)
 		if fieldName == colName {
-			return modelValue.Field(i)
+			foundIdx = i
+			break
 		}
 	}
+
+	if foundIdx >= 0 {
+		fieldCacheMutex.Lock()
+		if fieldCache[typeKey] == nil {
+			fieldCache[typeKey] = make(map[string]int)
+		}
+		fieldCache[typeKey][colName] = foundIdx
+		fieldCacheMutex.Unlock()
+		return modelValue.Field(foundIdx)
+	}
+
 	return reflect.Value{}
 }
 

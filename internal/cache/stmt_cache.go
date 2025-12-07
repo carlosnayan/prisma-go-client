@@ -6,12 +6,22 @@ import (
 	"time"
 )
 
+const (
+	// DefaultMaxQuerySize é o tamanho máximo padrão para uma query individual no cache (1MB)
+	DefaultMaxQuerySize = 1024 * 1024
+	// DefaultMaxTotalSize é o tamanho máximo total padrão para o cache (10MB)
+	DefaultMaxTotalSize = 10 * 1024 * 1024
+)
+
 // StmtCache é um cache de prepared statements
 type StmtCache struct {
-	mu      sync.RWMutex
-	queries map[string]*CachedStmt
-	maxSize int
-	ttl     time.Duration
+	mu           sync.RWMutex
+	queries      map[string]*CachedStmt
+	maxSize      int
+	maxQuerySize int // Tamanho máximo por query
+	maxTotalSize int // Tamanho máximo total do cache
+	currentSize  int // Tamanho atual do cache em bytes
+	ttl          time.Duration
 }
 
 // CachedStmt representa um prepared statement em cache
@@ -19,14 +29,30 @@ type CachedStmt struct {
 	Query       string
 	LastUsed    time.Time
 	AccessCount int64
+	Size        int // Tamanho da query em bytes
 }
 
 // NewStmtCache cria um novo cache de prepared statements
 func NewStmtCache(maxSize int, ttl time.Duration) *StmtCache {
 	return &StmtCache{
-		queries: make(map[string]*CachedStmt),
-		maxSize: maxSize,
-		ttl:     ttl,
+		queries:      make(map[string]*CachedStmt),
+		maxSize:      maxSize,
+		maxQuerySize: DefaultMaxQuerySize,
+		maxTotalSize: DefaultMaxTotalSize,
+		currentSize:  0,
+		ttl:          ttl,
+	}
+}
+
+// NewStmtCacheWithLimits cria um cache com limites de memória customizados
+func NewStmtCacheWithLimits(maxSize int, maxQuerySize, maxTotalSize int, ttl time.Duration) *StmtCache {
+	return &StmtCache{
+		queries:      make(map[string]*CachedStmt),
+		maxSize:      maxSize,
+		maxQuerySize: maxQuerySize,
+		maxTotalSize: maxTotalSize,
+		currentSize:  0,
+		ttl:          ttl,
 	}
 }
 
@@ -62,20 +88,43 @@ func (c *StmtCache) Put(query string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Se cache está cheio, remover o menos usado
-	if len(c.queries) >= c.maxSize {
-		c.evictLRU()
+	querySize := len(query)
+
+	// Verificar se a query individual excede o limite
+	if querySize > c.maxQuerySize {
+		// Query muito grande, não cachear
+		return
 	}
 
+	// Se já existe, atualizar
+	if existing, exists := c.queries[query]; exists {
+		existing.LastUsed = time.Now()
+		existing.AccessCount++
+		return
+	}
+
+	// Verificar se adicionar esta query excederia o limite total
+	// Se sim, evict até ter espaço
+	for c.currentSize+querySize > c.maxTotalSize || len(c.queries) >= c.maxSize {
+		if !c.evictLRU() {
+			// Não há mais nada para remover
+			break
+		}
+	}
+
+	// Adicionar ao cache
 	c.queries[query] = &CachedStmt{
 		Query:       query,
 		LastUsed:    time.Now(),
 		AccessCount: 1,
+		Size:        querySize,
 	}
+	c.currentSize += querySize
 }
 
 // evictLRU remove o item menos usado recentemente
-func (c *StmtCache) evictLRU() {
+// Retorna true se removeu algo, false caso contrário
+func (c *StmtCache) evictLRU() bool {
 	var oldestKey string
 	var oldestTime time.Time
 	first := true
@@ -89,8 +138,12 @@ func (c *StmtCache) evictLRU() {
 	}
 
 	if oldestKey != "" {
+		stmt := c.queries[oldestKey]
+		c.currentSize -= stmt.Size
 		delete(c.queries, oldestKey)
+		return true
 	}
+	return false
 }
 
 // Cleanup remove queries expiradas do cache
@@ -101,6 +154,7 @@ func (c *StmtCache) Cleanup() {
 	now := time.Now()
 	for key, stmt := range c.queries {
 		if now.Sub(stmt.LastUsed) > c.ttl {
+			c.currentSize -= stmt.Size
 			delete(c.queries, key)
 		}
 	}
@@ -123,7 +177,7 @@ func (c *StmtCache) StartCleanup(ctx context.Context, interval time.Duration) {
 }
 
 // Stats retorna estatísticas do cache
-func (c *StmtCache) Stats() (size int, totalAccesses int64) {
+func (c *StmtCache) Stats() (size int, totalAccesses int64, currentSize int) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -131,5 +185,5 @@ func (c *StmtCache) Stats() (size int, totalAccesses int64) {
 	for _, stmt := range c.queries {
 		totalAccesses += stmt.AccessCount
 	}
-	return size, totalAccesses
+	return size, totalAccesses, c.currentSize
 }

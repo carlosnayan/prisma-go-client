@@ -23,4 +23,9 @@ const (
 
 	// MaxSelectFields is the maximum number of SELECT fields
 	MaxSelectFields = 100
+
+	// MaxRawQuerySize is the maximum size in bytes for raw SQL queries
+	// This prevents DoS attacks via extremely large queries
+	// Set to 10MB to allow legitimate large queries while preventing abuse
+	MaxRawQuerySize = 10 * 1024 * 1024 // 10MB
 )

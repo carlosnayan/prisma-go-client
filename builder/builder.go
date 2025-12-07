@@ -75,7 +75,6 @@ func (b *TableQueryBuilder) SetModelType(modelType reflect.Type) *TableQueryBuil
 
 // FindFirst finds the first record matching the where conditions
 func (b *TableQueryBuilder) FindFirst(ctx context.Context, where Where) (interface{}, error) {
-	// Adicionar timeout ao contexto
 	ctx, cancel := contextutil.WithQueryTimeout(ctx)
 	defer cancel()
 
@@ -91,7 +90,6 @@ func (b *TableQueryBuilder) FindFirst(ctx context.Context, where Where) (interfa
 
 // FindMany finds multiple records matching the query options
 func (b *TableQueryBuilder) FindMany(ctx context.Context, opts QueryOptions) (interface{}, error) {
-	// Adicionar timeout ao contexto
 	ctx, cancel := contextutil.WithQueryTimeout(ctx)
 	defer cancel()
 
@@ -111,7 +109,6 @@ func (b *TableQueryBuilder) FindMany(ctx context.Context, opts QueryOptions) (in
 
 // Count counts records matching the where conditions
 func (b *TableQueryBuilder) Count(ctx context.Context, where Where) (int, error) {
-	// Adicionar timeout ao contexto
 	ctx, cancel := contextutil.WithQueryTimeout(ctx)
 	defer cancel()
 
@@ -141,7 +138,6 @@ func (b *TableQueryBuilder) Count(ctx context.Context, where Where) (int, error)
 
 // Create inserts a new record and returns the created model
 func (b *TableQueryBuilder) Create(ctx context.Context, data interface{}) (interface{}, error) {
-	// Adicionar timeout ao contexto
 	ctx, cancel := contextutil.WithQueryTimeout(ctx)
 	defer cancel()
 
@@ -221,13 +217,11 @@ func (b *TableQueryBuilder) Create(ctx context.Context, data interface{}) (inter
 
 // Update updates a record by primary key and returns the updated model
 func (b *TableQueryBuilder) Update(ctx context.Context, id interface{}, data interface{}) (interface{}, error) {
-	// Adicionar timeout ao contexto
 	ctx, cancel := contextutil.WithQueryTimeout(ctx)
 	defer cancel()
 
 	if b.primaryKey == "" {
-		err := fmt.Errorf("primary key not defined for table %s", b.table)
-		return nil, errors.SanitizeError(err)
+		return nil, fmt.Errorf("%w: table %s", errors.ErrPrimaryKeyRequired, b.table)
 	}
 
 	val := reflect.ValueOf(data)
@@ -272,8 +266,7 @@ func (b *TableQueryBuilder) Update(ctx context.Context, id interface{}, data int
 	}
 
 	if len(updateColumns) == 0 {
-		err := fmt.Errorf("no fields to update")
-		return nil, errors.SanitizeError(err)
+		return nil, errors.ErrNoFieldsToUpdate
 	}
 
 	hasUpdatedAt := contains(b.columns, "updated_at")
@@ -288,7 +281,13 @@ func (b *TableQueryBuilder) Update(ctx context.Context, id interface{}, data int
 
 	if b.hasDeleted {
 		quotedDeletedAt := b.dialect.QuoteIdentifier("deleted_at")
-		whereClause += fmt.Sprintf(" AND %s IS NULL", quotedDeletedAt)
+		var sb strings.Builder
+		sb.Grow(len(whereClause) + 20) // Pre-alocar espaço estimado
+		sb.WriteString(whereClause)
+		sb.WriteString(" AND ")
+		sb.WriteString(quotedDeletedAt)
+		sb.WriteString(" IS NULL")
+		whereClause = sb.String()
 	}
 
 	quotedReturnCols := make([]string, len(b.columns))
@@ -317,13 +316,11 @@ func (b *TableQueryBuilder) Update(ctx context.Context, id interface{}, data int
 
 // Delete removes a record (soft delete if has deleted_at, otherwise hard delete)
 func (b *TableQueryBuilder) Delete(ctx context.Context, id interface{}) error {
-	// Adicionar timeout ao contexto
 	ctx, cancel := contextutil.WithQueryTimeout(ctx)
 	defer cancel()
 
 	if b.primaryKey == "" {
-		err := fmt.Errorf("primary key not defined for table %s", b.table)
-		return errors.SanitizeError(err)
+		return fmt.Errorf("%w: table %s", errors.ErrPrimaryKeyRequired, b.table)
 	}
 
 	var query string
@@ -380,9 +377,7 @@ func (b *TableQueryBuilder) buildQuery(where Where, opts *QueryOptions, single b
 	if opts != nil && len(opts.OrderBy) > 0 {
 		var orderParts []string
 		for _, order := range opts.OrderBy {
-			// Escapar identificador do campo
 			quotedField := b.dialect.QuoteIdentifier(order.Field)
-			// Validar ordem (ASC/DESC) para prevenir injection
 			orderDir := strings.ToUpper(strings.TrimSpace(order.Order))
 			if orderDir != "ASC" && orderDir != "DESC" {
 				orderDir = "ASC" // Default seguro
@@ -448,6 +443,22 @@ func (b *TableQueryBuilder) buildWhereFromMap(where Where, argIndex *int) (strin
 	return strings.Join(parts, " AND "), args
 }
 
+// buildColumnToFieldMap cria um mapa de nome de coluna para índice de campo
+func buildColumnToFieldMap(modelType reflect.Type) map[string]int {
+	columnToField := make(map[string]int)
+	for i := 0; i < modelType.NumField(); i++ {
+		field := modelType.Field(i)
+		jsonTag := field.Tag.Get("json")
+		if jsonTag != "" && jsonTag != "-" {
+			if idx := strings.Index(jsonTag, ","); idx != -1 {
+				jsonTag = jsonTag[:idx]
+			}
+			columnToField[jsonTag] = i
+		}
+	}
+	return columnToField
+}
+
 // scanRow scans a single row into the model type
 func (b *TableQueryBuilder) scanRow(row driver.Row) (interface{}, error) {
 	if b.modelType == nil {
@@ -457,17 +468,7 @@ func (b *TableQueryBuilder) scanRow(row driver.Row) (interface{}, error) {
 
 	modelValue := reflect.New(b.modelType).Elem()
 
-	columnToField := make(map[string]int)
-	for i := 0; i < b.modelType.NumField(); i++ {
-		field := b.modelType.Field(i)
-		jsonTag := field.Tag.Get("json")
-		if jsonTag != "" && jsonTag != "-" {
-			if idx := strings.Index(jsonTag, ","); idx != -1 {
-				jsonTag = jsonTag[:idx]
-			}
-			columnToField[jsonTag] = i
-		}
-	}
+	columnToField := buildColumnToFieldMap(b.modelType)
 
 	fields := make([]interface{}, len(b.columns))
 	for i, colName := range b.columns {
@@ -495,34 +496,28 @@ func (b *TableQueryBuilder) scanRows(rows driver.Rows) (interface{}, error) {
 		return nil, errors.SanitizeError(err)
 	}
 
-	columnToField := make(map[string]int)
-	for i := 0; i < b.modelType.NumField(); i++ {
-		field := b.modelType.Field(i)
-		jsonTag := field.Tag.Get("json")
-		if jsonTag != "" && jsonTag != "-" {
-			if idx := strings.Index(jsonTag, ","); idx != -1 {
-				jsonTag = jsonTag[:idx]
-			}
-			columnToField[jsonTag] = i
-		}
-	}
+	columnToField := buildColumnToFieldMap(b.modelType)
 
 	sliceType := reflect.SliceOf(b.modelType)
-	// Pre-alocar com capacidade inicial para melhor performance
-	// Limitar crescimento para prevenir uso excessivo de memória
-	const initialCapacity = 100
+	initialCapacity := 16
+	if len(b.columns) > 10 {
+		initialCapacity = 32
+	}
+	if len(b.columns) > 20 {
+		initialCapacity = 64
+	}
 	sliceValue := reflect.MakeSlice(sliceType, 0, initialCapacity)
 
 	rowCount := 0
+	fields := make([]interface{}, len(b.columns))
+
 	for rows.Next() {
 		if rowCount >= limits.MaxScanRows {
-			// Retornar erro se exceder limite (prevenir OOM)
-			return nil, fmt.Errorf("result set too large: maximum %d rows allowed", limits.MaxScanRows)
+			return nil, fmt.Errorf("%w: maximum %d rows allowed", errors.ErrTooManyRows, limits.MaxScanRows)
 		}
 
 		modelValue := reflect.New(b.modelType).Elem()
 
-		fields := make([]interface{}, len(b.columns))
 		for i, colName := range b.columns {
 			if fieldIdx, ok := columnToField[colName]; ok {
 				field := modelValue.Field(fieldIdx)
@@ -539,6 +534,19 @@ func (b *TableQueryBuilder) scanRows(rows driver.Rows) (interface{}, error) {
 
 		sliceValue = reflect.Append(sliceValue, modelValue)
 		rowCount++
+
+		if rowCount > 0 && rowCount%1000 == 0 {
+			currentCap := sliceValue.Cap()
+			if currentCap < rowCount*2 && currentCap < limits.MaxScanRows {
+				newCap := rowCount * 2
+				if newCap > limits.MaxScanRows {
+					newCap = limits.MaxScanRows
+				}
+				newSlice := reflect.MakeSlice(sliceType, sliceValue.Len(), newCap)
+				reflect.Copy(newSlice, sliceValue)
+				sliceValue = newSlice
+			}
+		}
 	}
 
 	if err := rows.Err(); err != nil {

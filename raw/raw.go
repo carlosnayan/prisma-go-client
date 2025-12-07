@@ -2,8 +2,10 @@ package raw
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/carlosnayan/prisma-go-client/internal/driver"
+	"github.com/carlosnayan/prisma-go-client/internal/limits"
 )
 
 // Executor provides methods for executing raw SQL queries
@@ -30,6 +32,9 @@ func New(db driver.DB) *Executor {
 //	    WHERE u.deleted_at IS NULL AND t.id_tenant = $1
 //	`, tenantId)
 func (e *Executor) Query(ctx context.Context, sql string, args ...interface{}) (driver.Rows, error) {
+	if len(sql) > limits.MaxRawQuerySize {
+		return nil, fmt.Errorf("query size exceeds maximum allowed size of %d bytes", limits.MaxRawQuerySize)
+	}
 	return e.db.Query(ctx, sql, args...)
 }
 
@@ -47,6 +52,9 @@ func (e *Executor) Query(ctx context.Context, sql string, args ...interface{}) (
 //	var total, enabled int
 //	err := row.Scan(&total, &enabled)
 func (e *Executor) QueryRow(ctx context.Context, sql string, args ...interface{}) driver.Row {
+	if len(sql) > limits.MaxRawQuerySize {
+		return &errorRow{err: fmt.Errorf("query size exceeds maximum allowed size of %d bytes", limits.MaxRawQuerySize)}
+	}
 	return e.db.QueryRow(ctx, sql, args...)
 }
 
@@ -60,5 +68,17 @@ func (e *Executor) QueryRow(ctx context.Context, sql string, args ...interface{}
 //	    WHERE id_user = $1
 //	`, userId)
 func (e *Executor) Exec(ctx context.Context, sql string, args ...interface{}) (driver.Result, error) {
+	if len(sql) > limits.MaxRawQuerySize {
+		return nil, fmt.Errorf("query size exceeds maximum allowed size of %d bytes", limits.MaxRawQuerySize)
+	}
 	return e.db.Exec(ctx, sql, args...)
+}
+
+// errorRow is a Row implementation that always returns an error on Scan
+type errorRow struct {
+	err error
+}
+
+func (e *errorRow) Scan(dest ...interface{}) error {
+	return e.err
 }

@@ -5,6 +5,8 @@
 
 A type-safe ORM library for Go inspired by Prisma, offering an intuitive API for working with databases.
 
+**Important:** This library is **not official** and is **not supported** by the official Prisma team. It is an independent, community-driven project inspired by Prisma's API design.
+
 **Note:** This library requires Go 1.18 or later for generics support (used in `ExecTyped[T]()` method).
 
 ## ✨ Features
