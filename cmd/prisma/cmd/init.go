@@ -137,24 +137,24 @@ generator client {
 // promptForProvider prompts the user to choose a database provider interactively
 func promptForProvider() string {
 	reader := bufio.NewReader(os.Stdin)
-	
+
 	fmt.Println("Select a database provider:")
 	fmt.Println("  1) PostgreSQL")
 	fmt.Println("  2) MySQL")
 	fmt.Println("  3) SQLite")
 	fmt.Print("Enter choice (1-3) [default: 1]: ")
-	
+
 	input, err := reader.ReadString('\n')
 	if err != nil {
 		fmt.Println("Error reading input, defaulting to PostgreSQL")
 		return "postgresql"
 	}
-	
+
 	input = strings.TrimSpace(input)
 	if input == "" {
 		return "postgresql"
 	}
-	
+
 	switch input {
 	case "1", "postgresql", "postgres":
 		return "postgresql"

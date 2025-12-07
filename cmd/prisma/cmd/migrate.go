@@ -402,14 +402,14 @@ func runMigrateReset(args []string) error {
 	if err != nil {
 		fmt.Println()
 		fmt.Printf("Error: P1001: Can't reach database server at `%s`\n\n", dbInfo.Host)
-		
+
 		// Show parsed URL info for debugging
 		fmt.Printf("Connection details:\n")
 		fmt.Printf("  Provider: %s\n", dbInfo.Provider)
 		fmt.Printf("  Host: %s\n", dbInfo.Host)
 		fmt.Printf("  Database: %s\n", dbInfo.Database)
 		fmt.Printf("  Schema: %s\n", dbInfo.Schema)
-		
+
 		// Show masked URL (hide password)
 		maskedURL := dbURL
 		if strings.Contains(maskedURL, "@") {
@@ -426,7 +426,7 @@ func runMigrateReset(args []string) error {
 			}
 		}
 		fmt.Printf("  URL: %s\n\n", maskedURL)
-		
+
 		fmt.Printf("Please make sure your database server is running at `%s`.\n", dbInfo.Host)
 		fmt.Printf("\nTroubleshooting:\n")
 		fmt.Printf("  1. Verify PostgreSQL is running: pg_isready -h localhost -p 5432\n")

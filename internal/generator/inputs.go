@@ -420,6 +420,7 @@ func generateFiltersFile(filePath string, schema *parser.Schema) error {
 
 // generateFilterTypes is deprecated - use generateFiltersFile instead
 // This function is kept for backward compatibility but should not be used
+// nolint: unused // Mantido para referência ou compatibilidade
 func generateFilterTypes(file *os.File, model *parser.Model) {
 	// This function is no longer used - filters are generated in filters.go
 }

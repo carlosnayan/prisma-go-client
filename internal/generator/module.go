@@ -93,3 +93,35 @@ func calculateImportPath(userModule, outputDir string) (modelsPath, queriesPath,
 
 	return modelsPath, queriesPath, inputsPath, nil
 }
+
+// calculateLocalImportPath calculates the import path for local packages (builder, raw)
+// Returns the full import path like "userModule/db/builder" and "userModule/db/raw"
+func calculateLocalImportPath(userModule, outputDir string) (builderPath, rawPath string, err error) {
+	moduleRoot, err := findModuleRoot(outputDir)
+	if err != nil {
+		return "", "", err
+	}
+
+	// Calculate relative path from module root to outputDir
+	relPath, err := filepath.Rel(moduleRoot, outputDir)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to calculate relative path: %w", err)
+	}
+
+	// Normalize path to use forward slashes (even on Windows)
+	importBase := filepath.ToSlash(relPath)
+	if importBase == "." {
+		importBase = ""
+	}
+
+	// Build import paths
+	if importBase != "" {
+		builderPath = fmt.Sprintf("%s/%s/builder", userModule, importBase)
+		rawPath = fmt.Sprintf("%s/%s/raw", userModule, importBase)
+	} else {
+		builderPath = fmt.Sprintf("%s/builder", userModule)
+		rawPath = fmt.Sprintf("%s/raw", userModule)
+	}
+
+	return builderPath, rawPath, nil
+}

@@ -93,7 +93,7 @@ func Load(configPath string) (*Config, error) {
 				envPath := filepath.Join(dir, ".env")
 				if _, err := os.Stat(envPath); err == nil {
 					if err := godotenv.Load(envPath); err == nil {
-						envLoaded = true
+						envLoaded = true // nolint: ineffassign // Usado para controle de fluxo
 						break
 					}
 				}

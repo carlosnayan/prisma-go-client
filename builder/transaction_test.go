@@ -312,12 +312,9 @@ func TestExecuteTransaction(t *testing.T) {
 				t.Fatalf("FindFirst failed: %v", err)
 			}
 
-			foundRecord, ok := found.(struct {
-				ID   int    `json:"id"`
-				Name string `json:"name"`
-			})
+			foundRecord, ok := found.(TestRecord)
 			if !ok {
-				t.Fatal("FindFirst returned wrong type")
+				t.Fatalf("FindFirst returned wrong type: got %T, expected TestRecord", found)
 			}
 			if foundRecord.Name != "Execute Test" {
 				t.Errorf("Expected name 'Execute Test', got %s", foundRecord.Name)

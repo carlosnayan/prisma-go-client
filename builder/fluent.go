@@ -552,7 +552,7 @@ func (q *Query) First(ctx context.Context, dest interface{}) error {
 
 	processStart := time.Now()
 	query, args := q.buildSelectQuery(true)
-	
+
 	// Medir query time: desde o início da chamada ao banco até o retorno do Scan
 	// Para QueryRow, a execução real acontece durante o Scan()
 	queryStart := time.Now()
@@ -587,13 +587,13 @@ func (q *Query) Find(ctx context.Context, dest interface{}) error {
 
 	processStart := time.Now()
 	query, args := q.buildSelectQuery(false)
-	
+
 	// Medir query time: desde o início da chamada ao banco até o retorno
 	queryStart := time.Now()
 	rows, err := q.db.Query(ctx, query, args...)
 	queryEnd := time.Now()
 	queryDuration := queryEnd.Sub(queryStart)
-	
+
 	if err != nil {
 		if logger := q.getLogger(); logger != nil {
 			logger.Error("SELECT query failed: %v", err)
@@ -634,7 +634,7 @@ func (q *Query) FindMany(ctx context.Context, dest interface{}) error {
 func (q *Query) Count(ctx context.Context) (int64, error) {
 	processStart := time.Now()
 	query, args := q.buildCountQuery()
-	
+
 	// Medir query time: desde o início da chamada ao banco até o retorno do Scan
 	// Para QueryRow, a execução real acontece durante o Scan()
 	queryStart := time.Now()
@@ -643,10 +643,10 @@ func (q *Query) Count(ctx context.Context) (int64, error) {
 	err := row.Scan(&count)
 	queryEnd := time.Now()
 	queryDuration := queryEnd.Sub(queryStart)
-	
+
 	// Log com tempos separados (query time e process time)
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
-	
+
 	if err != nil {
 		if logger := q.getLogger(); logger != nil {
 			logger.Error("COUNT query failed: %v", err)
@@ -662,16 +662,16 @@ func (q *Query) Create(ctx context.Context, value interface{}) error {
 
 	processStart := time.Now()
 	query, args := q.buildInsertQuery(value)
-	
+
 	// Medir query time: desde o início da chamada ao banco até o retorno
 	queryStart := time.Now()
 	_, err := q.db.Exec(ctx, query, args...)
 	queryEnd := time.Now()
 	queryDuration := queryEnd.Sub(queryStart)
-	
+
 	// Log com tempos separados (query time e process time)
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
-	
+
 	if err != nil {
 		if logger := q.getLogger(); logger != nil {
 			logger.Error("INSERT query failed: %v", err)
@@ -692,16 +692,16 @@ func (q *Query) Save(ctx context.Context, value interface{}) error {
 
 	processStart := time.Now()
 	query, args := q.buildUpsertQuery(value)
-	
+
 	// Medir query time: desde o início da chamada ao banco até o retorno
 	queryStart := time.Now()
 	_, err := q.db.Exec(ctx, query, args...)
 	queryEnd := time.Now()
 	queryDuration := queryEnd.Sub(queryStart)
-	
+
 	// Log com tempos separados (query time e process time)
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
-	
+
 	if err != nil {
 		if logger := q.getLogger(); logger != nil {
 			logger.Error("UPSERT query failed: %v", err)
@@ -717,16 +717,16 @@ func (q *Query) Update(ctx context.Context, column string, value interface{}) er
 
 	processStart := time.Now()
 	query, args := q.buildUpdateQuery(column, value)
-	
+
 	// Medir query time: desde o início da chamada ao banco até o retorno
 	queryStart := time.Now()
 	_, err := q.db.Exec(ctx, query, args...)
 	queryEnd := time.Now()
 	queryDuration := queryEnd.Sub(queryStart)
-	
+
 	// Log com tempos separados (query time e process time)
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
-	
+
 	if err != nil {
 		if logger := q.getLogger(); logger != nil {
 			logger.Error("UPDATE query failed: %v", err)
@@ -742,16 +742,16 @@ func (q *Query) Updates(ctx context.Context, values map[string]interface{}) erro
 
 	processStart := time.Now()
 	query, args := q.buildUpdatesQuery(values)
-	
+
 	// Medir query time: desde o início da chamada ao banco até o retorno
 	queryStart := time.Now()
 	_, err := q.db.Exec(ctx, query, args...)
 	queryEnd := time.Now()
 	queryDuration := queryEnd.Sub(queryStart)
-	
+
 	// Log com tempos separados (query time e process time)
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
-	
+
 	if err != nil {
 		if logger := q.getLogger(); logger != nil {
 			logger.Error("UPDATE query failed: %v", err)
@@ -767,16 +767,16 @@ func (q *Query) Delete(ctx context.Context, value interface{}) error {
 
 	processStart := time.Now()
 	query, args := q.buildDeleteQuery()
-	
+
 	// Medir query time: desde o início da chamada ao banco até o retorno
 	queryStart := time.Now()
 	_, err := q.db.Exec(ctx, query, args...)
 	queryEnd := time.Now()
 	queryDuration := queryEnd.Sub(queryStart)
-	
+
 	// Log com tempos separados (query time e process time)
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
-	
+
 	if err != nil {
 		if logger := q.getLogger(); logger != nil {
 			logger.Error("DELETE query failed: %v", err)
@@ -1089,7 +1089,7 @@ func (q *Query) buildUpsertQuery(value interface{}) (string, []interface{}) {
 		columns = append(columns, primaryKeyCol)
 		values = append(values, q.dialect.GetPlaceholder(argIndex))
 		args = append(args, primaryKeyValue)
-		argIndex++
+		_ = argIndex // Incremento não necessário pois argIndex não é mais usado
 	}
 
 	if hasCreatedAt {

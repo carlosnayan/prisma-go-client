@@ -180,20 +180,18 @@ func (b *TableQueryBuilder) Create(ctx context.Context, data interface{}) (inter
 
 	hasCreatedAt := contains(b.columns, "created_at")
 	hasUpdatedAt := contains(b.columns, "updated_at")
-	var returningColumns []string
+
+	returningColumns := make([]string, len(b.columns))
+	copy(returningColumns, b.columns)
 
 	if hasCreatedAt {
 		insertColumns = append(insertColumns, "created_at")
 		values = append(values, "NOW()")
-		returningColumns = append(returningColumns, "created_at")
 	}
 	if hasUpdatedAt {
 		insertColumns = append(insertColumns, "updated_at")
 		values = append(values, "NOW()")
-		returningColumns = append(returningColumns, "updated_at")
 	}
-
-	returningColumns = append(returningColumns, b.columns...)
 
 	quotedTable := b.dialect.QuoteIdentifier(b.table)
 	quotedInsertCols := make([]string, len(insertColumns))
@@ -243,6 +241,7 @@ func (b *TableQueryBuilder) Update(ctx context.Context, id interface{}, data int
 	var updateColumns []string
 	var args []interface{}
 	argIndex := 1
+	updatedAtAdded := false
 
 	typ := val.Type()
 	for i := 0; i < val.NumField(); i++ {
@@ -259,6 +258,7 @@ func (b *TableQueryBuilder) Update(ctx context.Context, id interface{}, data int
 		if fieldName == "updated_at" {
 			quotedUpdatedAt := b.dialect.QuoteIdentifier("updated_at")
 			updateColumns = append(updateColumns, fmt.Sprintf("%s = NOW()", quotedUpdatedAt))
+			updatedAtAdded = true
 			continue
 		}
 
@@ -277,7 +277,7 @@ func (b *TableQueryBuilder) Update(ctx context.Context, id interface{}, data int
 	}
 
 	hasUpdatedAt := contains(b.columns, "updated_at")
-	if hasUpdatedAt && !contains(updateColumns, "updated_at = NOW()") {
+	if hasUpdatedAt && !updatedAtAdded {
 		quotedUpdatedAt := b.dialect.QuoteIdentifier("updated_at")
 		updateColumns = append(updateColumns, fmt.Sprintf("%s = NOW()", quotedUpdatedAt))
 	}

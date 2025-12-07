@@ -21,6 +21,13 @@ func GenerateDriver(schema *parser.Schema, outputDir string) error {
 	provider := migrations.GetProviderFromSchema(schema)
 	provider = strings.ToLower(provider)
 
+	// Detect user module for local imports
+	userModule, err := detectUserModule(outputDir)
+	if err != nil {
+		// Fallback
+		userModule = ""
+	}
+
 	file, err := os.Create(driverFile)
 	if err != nil {
 		return err
@@ -32,7 +39,7 @@ func GenerateDriver(schema *parser.Schema, outputDir string) error {
 	fmt.Fprintf(file, "package db\n\n")
 
 	// Generate imports based on provider
-	generateDriverImports(file, provider)
+	generateDriverImports(file, provider, userModule, outputDir)
 
 	// Generate driver code based on provider
 	switch provider {
@@ -51,13 +58,20 @@ func GenerateDriver(schema *parser.Schema, outputDir string) error {
 }
 
 // generateDriverImports generates the import block based on the provider
-func generateDriverImports(file *os.File, provider string) {
+func generateDriverImports(file *os.File, provider string, userModule, outputDir string) {
+	// Calculate local import path for builder
+	builderPath, _, err := calculateLocalImportPath(userModule, outputDir)
+	if err != nil || builderPath == "" {
+		// Fallback to old path if detection fails
+		builderPath = "github.com/carlosnayan/prisma-go-client/db/builder"
+	}
+
 	fmt.Fprintf(file, "import (\n")
 	fmt.Fprintf(file, "\t\"context\"\n")
 	fmt.Fprintf(file, "\t\"database/sql\"\n")
 	fmt.Fprintf(file, "\t\"fmt\"\n")
 	fmt.Fprintf(file, "\t\"os\"\n\n")
-	fmt.Fprintf(file, "\t\"github.com/carlosnayan/prisma-go-client/builder\"\n")
+	fmt.Fprintf(file, "\t%q\n", builderPath)
 
 	switch provider {
 	case "postgresql":
@@ -493,4 +507,3 @@ func generateSQLDBAdapter(file *os.File) {
 	fmt.Fprintf(file, "\treturn &SQLRow{row: row}\n")
 	fmt.Fprintf(file, "}\n")
 }
-

@@ -60,35 +60,35 @@ func generateHelpersFile(filePath string, userModule, outputDir string, schema *
 
 	// Generate helpers only for needed filter types
 	if neededFilters["StringFilter"] {
-	generateStringHelpers(file)
+		generateStringHelpers(file)
 	}
 
 	if neededFilters["IntFilter"] {
-	generateIntHelpers(file)
+		generateIntHelpers(file)
 	}
 
 	if neededFilters["Int64Filter"] {
-	generateInt64Helpers(file)
+		generateInt64Helpers(file)
 	}
 
 	if neededFilters["FloatFilter"] {
-	generateFloatHelpers(file)
+		generateFloatHelpers(file)
 	}
 
 	if neededFilters["BooleanFilter"] {
-	generateBooleanHelpers(file)
+		generateBooleanHelpers(file)
 	}
 
 	if neededFilters["DateTimeFilter"] {
-	generateDateTimeHelpers(file)
+		generateDateTimeHelpers(file)
 	}
 
 	if neededFilters["JsonFilter"] {
-	generateJsonHelpers(file)
+		generateJsonHelpers(file)
 	}
 
 	if neededFilters["BytesFilter"] {
-	generateBytesHelpers(file)
+		generateBytesHelpers(file)
 	}
 
 	return nil
@@ -97,26 +97,81 @@ func generateHelpersFile(filePath string, userModule, outputDir string, schema *
 // determineNeededFilters determines which filter types are needed based on the schema
 func determineNeededFilters(schema *parser.Schema) map[string]bool {
 	neededFilters := make(map[string]bool)
-	
-	// Always include StringFilter, IntFilter, BooleanFilter, DateTimeFilter as they are commonly used
-	neededFilters["StringFilter"] = true
-	neededFilters["IntFilter"] = true
-	neededFilters["BooleanFilter"] = true
-	neededFilters["DateTimeFilter"] = true
 
-	// Check all models for field types
+	// Check all models for field types to determine which filters are actually needed
 	for _, model := range schema.Models {
 		for _, field := range model.Fields {
-			if field.Type == nil || isRelation(field) {
+			if field.Type == nil {
 				continue
 			}
-			
-			filterType := getFilterType(field.Type)
+
+			// Check if it's a relation using the same logic as inputs.go
+			if isRelationForHelpers(field) {
+				continue
+			}
+
+			filterType := getFilterTypeForHelpers(field.Type)
 			neededFilters[filterType] = true
 		}
 	}
-	
+
 	return neededFilters
+}
+
+// getFilterTypeForHelpers returns the appropriate Filter type for a field type (duplicate of getFilterType from inputs.go)
+func getFilterTypeForHelpers(fieldType *parser.FieldType) string {
+	if fieldType == nil {
+		return "StringFilter" // Default
+	}
+
+	typeMapping := parser.GetTypeGoMapping()
+	if mapped, ok := typeMapping[fieldType.Name]; ok {
+		switch mapped {
+		case "string":
+			return "StringFilter"
+		case "int":
+			return "IntFilter"
+		case "int64":
+			return "Int64Filter"
+		case "float64":
+			return "FloatFilter"
+		case "bool":
+			return "BooleanFilter"
+		case "time.Time":
+			return "DateTimeFilter"
+		case "json.RawMessage":
+			return "JsonFilter"
+		case "[]byte":
+			return "BytesFilter"
+		}
+	}
+
+	// Para enums e relacionamentos, usar StringFilter por padrão
+	return "StringFilter"
+}
+
+// isRelationForHelpers checks if a field is a relationship (non-primitive type)
+// Duplicate of isRelation from inputs.go
+func isRelationForHelpers(field *parser.ModelField) bool {
+	if field.Type == nil {
+		return false
+	}
+
+	// Se não é um tipo builtin, provavelmente é um relacionamento
+	// Tipos builtin conhecidos
+	builtinTypes := map[string]bool{
+		"String":   true,
+		"Int":      true,
+		"BigInt":   true,
+		"Float":    true,
+		"Decimal":  true,
+		"Boolean":  true,
+		"DateTime": true,
+		"Json":     true,
+		"Bytes":    true,
+	}
+
+	return !builtinTypes[field.Type.Name]
 }
 
 func generateStringHelpers(file *os.File) {

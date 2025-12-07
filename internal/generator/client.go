@@ -272,6 +272,7 @@ func formatColumns(columns []string) string {
 func determineClientImports(schema *parser.Schema, userModule, outputDir string) ([]string, []string) {
 	imports := make(map[string]bool)
 	var driverImports []string
+	var builderPath, rawPath string
 
 	// context is needed for Transaction method
 	imports["context"] = true
@@ -286,11 +287,19 @@ func determineClientImports(schema *parser.Schema, userModule, outputDir string)
 		queriesPath = "github.com/carlosnayan/prisma-go-client/db/queries"
 	}
 
+	// Calculate local import paths for builder and raw (standalone packages)
+	builderPath, rawPath, err = calculateLocalImportPath(userModule, outputDir)
+	if err != nil {
+		// Fallback to old paths if detection fails
+		builderPath = "github.com/carlosnayan/prisma-go-client/db/builder"
+		rawPath = "github.com/carlosnayan/prisma-go-client/db/raw"
+	}
+
 	// These are always needed
-	imports["github.com/carlosnayan/prisma-go-client/builder"] = true
+	imports[builderPath] = true
 	imports[modelsPath] = true
 	imports[queriesPath] = true
-	imports["github.com/carlosnayan/prisma-go-client/raw"] = true
+	imports[rawPath] = true
 	// Add imports for logger configuration
 	imports["os"] = true
 	imports["path/filepath"] = true
@@ -316,8 +325,8 @@ func determineClientImports(schema *parser.Schema, userModule, outputDir string)
 	if imports["reflect"] {
 		result = append(result, "reflect")
 	}
-	if imports["github.com/carlosnayan/prisma-go-client/builder"] {
-		result = append(result, "github.com/carlosnayan/prisma-go-client/builder")
+	if imports[builderPath] {
+		result = append(result, builderPath)
 	}
 	if imports[modelsPath] {
 		result = append(result, modelsPath)
@@ -341,8 +350,8 @@ func determineClientImports(schema *parser.Schema, userModule, outputDir string)
 	if imports[queriesPath] {
 		result = append(result, queriesPath)
 	}
-	if imports["github.com/carlosnayan/prisma-go-client/raw"] {
-		result = append(result, "github.com/carlosnayan/prisma-go-client/raw")
+	if imports[rawPath] {
+		result = append(result, rawPath)
 	}
 
 	return result, driverImports
@@ -350,6 +359,7 @@ func determineClientImports(schema *parser.Schema, userModule, outputDir string)
 
 // generateHelperFunctions is no longer used - helper functions are generated in helpers.go
 // This function is kept for backward compatibility but does nothing
+// nolint: unused // Mantido para referência ou uso futuro
 func generateHelperFunctions(file *os.File) {
 	// Helper functions are generated in helpers.go via GenerateHelpers()
 }

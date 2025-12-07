@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/carlosnayan/prisma-go-client/cli"
@@ -73,11 +74,23 @@ func runGenerate(args []string) error {
 		}
 	}
 
-	// Ensure path is absolute or relative to current directory
+	// Ensure path is absolute or relative to current working directory
 	absoluteOutputDir := outputDir
 	if !filepath.IsAbs(outputDir) {
-		wd, _ := filepath.Abs(".")
-		absoluteOutputDir = filepath.Join(wd, outputDir)
+		// Remove leading ./ if present
+		cleanOutputDir := strings.TrimPrefix(outputDir, "./")
+
+		// If output starts with .., resolve relative to schema directory
+		// Otherwise, resolve relative to current working directory
+		if strings.HasPrefix(cleanOutputDir, "..") {
+			schemaDir := filepath.Dir(schemaPath)
+			absoluteOutputDir = filepath.Join(schemaDir, cleanOutputDir)
+			// Clean the path to resolve .. properly
+			absoluteOutputDir, _ = filepath.Abs(absoluteOutputDir)
+		} else {
+			wd, _ := filepath.Abs(".")
+			absoluteOutputDir = filepath.Join(wd, cleanOutputDir)
+		}
 	}
 
 	// Generate code silently
@@ -85,20 +98,28 @@ func runGenerate(args []string) error {
 		return fmt.Errorf("error generating models: %w", err)
 	}
 
-	if err := generator.GenerateQueries(schema, absoluteOutputDir); err != nil {
-		return fmt.Errorf("error generating queries: %w", err)
+	if err := generator.GenerateRaw(absoluteOutputDir); err != nil {
+		return fmt.Errorf("error generating raw: %w", err)
 	}
 
-	if err := generator.GenerateClient(schema, absoluteOutputDir); err != nil {
-		return fmt.Errorf("error generating client: %w", err)
+	if err := generator.GenerateBuilder(schema, absoluteOutputDir); err != nil {
+		return fmt.Errorf("error generating builder: %w", err)
 	}
 
 	if err := generator.GenerateInputs(schema, absoluteOutputDir); err != nil {
 		return fmt.Errorf("error generating inputs: %w", err)
 	}
 
+	if err := generator.GenerateQueries(schema, absoluteOutputDir); err != nil {
+		return fmt.Errorf("error generating queries: %w", err)
+	}
+
 	if err := generator.GenerateHelpers(schema, absoluteOutputDir); err != nil {
 		return fmt.Errorf("error generating helpers: %w", err)
+	}
+
+	if err := generator.GenerateClient(schema, absoluteOutputDir); err != nil {
+		return fmt.Errorf("error generating client: %w", err)
 	}
 
 	if err := generator.GenerateDriver(schema, absoluteOutputDir); err != nil {
