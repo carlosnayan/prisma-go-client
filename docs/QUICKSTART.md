@@ -4,7 +4,8 @@ Get started with Prisma for Go in minutes. This complete beginner-friendly guide
 
 ## Prerequisites
 
-- **Go 1.21 or later** - [Download Go](https://go.dev/dl/)
+- **Go 1.18 or later** - [Download Go](https://go.dev/dl/)
+  - Go 1.18+ is required for generics support (used in `ExecTyped[T]()` method)
 - **A database** - PostgreSQL, MySQL, or SQLite
 - **Basic knowledge of Go** - Understanding of Go syntax and packages
 

@@ -1,9 +1,11 @@
 # Prisma for Go
 
-[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-1.18+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A type-safe ORM library for Go inspired by Prisma, offering an intuitive API for working with databases.
+
+**Note:** This library requires Go 1.18 or later for generics support (used in `ExecTyped[T]()` method).
 
 ## ✨ Features
 
@@ -231,6 +233,38 @@ func main() {
         log.Fatal(err)
     }
     log.Printf("Found user: %+v\n", foundUser)
+
+    // Find with custom DTO using ExecTyped (requires Go 1.18+)
+    type UserDTO struct {
+        Email string `json:"email" db:"email"`
+        Name  string `json:"name" db:"name"`
+    }
+
+    userDTO, err := database.Client.User.FindFirst().
+        Select(inputs.UserSelect{
+            Email: true,
+            Name:  true,
+        }).
+        Where(inputs.UserWhereInput{
+            Email: db.String("test@example.com"),
+        }).
+        ExecTyped[*UserDTO](ctx)
+    if err != nil {
+        log.Fatal(err)
+    }
+    log.Printf("Found user DTO: %+v\n", userDTO)
+
+    // Find many with custom DTO
+    usersDTO, err := database.Client.User.FindMany().
+        Select(inputs.UserSelect{
+            Email: true,
+            Name:  true,
+        }).
+        ExecTyped[[]UserDTO](ctx)
+    if err != nil {
+        log.Fatal(err)
+    }
+    log.Printf("Found %d users\n", len(usersDTO))
 
     // Raw SQL example
     rows, err := database.Client.Raw().Query(ctx, "SELECT * FROM users WHERE email LIKE $1", "%example%")

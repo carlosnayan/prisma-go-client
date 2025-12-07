@@ -2,6 +2,7 @@ package builder
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -1404,6 +1405,13 @@ func findFieldByColumn(modelValue reflect.Value, colName string) reflect.Value {
 		jsonTag := field.Tag.Get("json")
 		dbTag := field.Tag.Get("db")
 
+		// Remove options from json tag (e.g., "id,omitempty" -> "id")
+		if jsonTag != "" {
+			if idx := strings.Index(jsonTag, ","); idx != -1 {
+				jsonTag = jsonTag[:idx]
+			}
+		}
+
 		// Verificar tags
 		if dbTag == colName || jsonTag == colName {
 			return modelValue.Field(i)
@@ -1416,4 +1424,183 @@ func findFieldByColumn(modelValue reflect.Value, colName string) reflect.Value {
 		}
 	}
 	return reflect.Value{}
+}
+
+// ScanFirst scans a single row into a custom type using tags JSON/DB
+func (q *Query) ScanFirst(ctx context.Context, dest interface{}, scanType reflect.Type) error {
+	ctx, cancel := contextutil.WithQueryTimeout(ctx)
+	defer cancel()
+
+	processStart := time.Now()
+	query, args := q.buildSelectQuery(true)
+
+	queryStart := time.Now()
+	row := q.db.QueryRow(ctx, query, args...)
+
+	destVal := reflect.ValueOf(dest)
+	if destVal.Kind() != reflect.Ptr {
+		return errors.SanitizeError(fmt.Errorf("dest must be a pointer"))
+	}
+	destVal = destVal.Elem()
+
+	// Use selectFields if available (when Select() was called), otherwise use all columns
+	columnsToScan := q.columns
+	if len(q.selectFields) > 0 {
+		columnsToScan = q.selectFields
+	}
+
+	// Create instance of scanType
+	customValue := reflect.New(scanType).Elem()
+
+	// Track which fields are json.RawMessage for post-processing
+	jsonRawMessageFields := make(map[int]bool)
+	fields := make([]interface{}, len(columnsToScan))
+	for i, colName := range columnsToScan {
+		field := findFieldByColumn(customValue, colName)
+		if field.IsValid() {
+			// Handle json.RawMessage specially - scan to string first, then convert
+			if field.Type() == reflect.TypeOf(json.RawMessage{}) {
+				var rawMsgStr string
+				fields[i] = &rawMsgStr
+				jsonRawMessageFields[i] = true
+			} else {
+				fields[i] = field.Addr().Interface()
+			}
+		} else {
+			var dummy interface{}
+			fields[i] = &dummy
+		}
+	}
+
+	queryEnd := time.Now()
+	queryDuration := queryEnd.Sub(queryStart)
+
+	if err := row.Scan(fields...); err != nil {
+		q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("Scan failed: %v (scanning %d fields: %v)", err, len(columnsToScan), columnsToScan)
+		}
+		return err
+	}
+
+	// Copy scanned values back to customValue, handling json.RawMessage conversion
+	for i, colName := range columnsToScan {
+		field := findFieldByColumn(customValue, colName)
+		if field.IsValid() {
+			if jsonRawMessageFields[i] {
+				// Convert string to json.RawMessage
+				if strPtr, ok := fields[i].(*string); ok && strPtr != nil {
+					field.Set(reflect.ValueOf(json.RawMessage(*strPtr)))
+				}
+			}
+			// For other types, the scan already populated the field directly
+		}
+	}
+
+	destVal.Set(customValue)
+	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
+	return nil
+}
+
+// ScanFind scans multiple rows into a slice of custom types using tags JSON/DB
+func (q *Query) ScanFind(ctx context.Context, dest interface{}, scanType reflect.Type) error {
+	ctx, cancel := contextutil.WithQueryTimeout(ctx)
+	defer cancel()
+
+	processStart := time.Now()
+	query, args := q.buildSelectQuery(false)
+
+	queryStart := time.Now()
+	rows, err := q.db.Query(ctx, query, args...)
+	queryEnd := time.Now()
+	queryDuration := queryEnd.Sub(queryStart)
+
+	if err != nil {
+		q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("SELECT query failed: %v", err)
+		}
+		return err
+	}
+	defer rows.Close()
+
+	destVal := reflect.ValueOf(dest)
+	if destVal.Kind() != reflect.Ptr {
+		return errors.SanitizeError(fmt.Errorf("dest must be a pointer to slice"))
+	}
+
+	sliceVal := destVal.Elem()
+	if sliceVal.Kind() != reflect.Slice {
+		return errors.SanitizeError(fmt.Errorf("dest must be a pointer to slice"))
+	}
+
+	// Use selectFields if available (when Select() was called), otherwise use all columns
+	columnsToScan := q.columns
+	if len(q.selectFields) > 0 {
+		columnsToScan = q.selectFields
+	}
+
+	rowCount := 0
+	for rows.Next() {
+		if rowCount >= limits.MaxScanRows {
+			return fmt.Errorf("result set too large: maximum %d rows allowed", limits.MaxScanRows)
+		}
+
+		customValue := reflect.New(scanType).Elem()
+
+		// Track which fields are json.RawMessage for post-processing
+		jsonRawMessageFields := make(map[int]bool)
+		fields := make([]interface{}, len(columnsToScan))
+		for i, colName := range columnsToScan {
+			field := findFieldByColumn(customValue, colName)
+			if field.IsValid() {
+				// Handle json.RawMessage specially - scan to string first, then convert
+				if field.Type() == reflect.TypeOf(json.RawMessage{}) {
+					var rawMsgStr string
+					fields[i] = &rawMsgStr
+					jsonRawMessageFields[i] = true
+				} else {
+					fields[i] = field.Addr().Interface()
+				}
+			} else {
+				var dummy interface{}
+				fields[i] = &dummy
+			}
+		}
+
+		if err := rows.Scan(fields...); err != nil {
+			if logger := q.getLogger(); logger != nil {
+				logger.Error("Scan failed: %v (scanning %d fields: %v)", err, len(columnsToScan), columnsToScan)
+			}
+			return err
+		}
+
+		// Copy scanned values back to customValue, handling json.RawMessage conversion
+		for i, colName := range columnsToScan {
+			field := findFieldByColumn(customValue, colName)
+			if field.IsValid() {
+				if jsonRawMessageFields[i] {
+					// Convert string to json.RawMessage
+					if strPtr, ok := fields[i].(*string); ok && strPtr != nil {
+						field.Set(reflect.ValueOf(json.RawMessage(*strPtr)))
+					}
+				}
+				// For other types, the scan already populated the field directly
+			}
+		}
+
+		rowCount++
+		sliceVal.Set(reflect.Append(sliceVal, customValue))
+	}
+
+	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
+
+	if err := rows.Err(); err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("SELECT query failed during scan: %v", err)
+		}
+		return err
+	}
+
+	return nil
 }

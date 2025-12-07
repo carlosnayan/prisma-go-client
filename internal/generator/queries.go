@@ -489,7 +489,9 @@ func generatePrismaBuilders(file *os.File, model *parser.Model) {
 	fmt.Fprintf(file, "\treturn b\n")
 	fmt.Fprintf(file, "}\n\n")
 
-	fmt.Fprintf(file, "// Exec executes the find first operation\n")
+	fmt.Fprintf(file, "// Exec executes the find first operation and returns the default model\n")
+	fmt.Fprintf(file, "// Returns (*models.%s, error)\n", pascalModelName)
+	fmt.Fprintf(file, "// For custom types, use ExecTyped[T]() instead\n")
 	fmt.Fprintf(file, "func (b *%sFindFirstBuilder) Exec(ctx context.Context) (*models.%s, error) {\n", pascalModelName, pascalModelName)
 	fmt.Fprintf(file, "\tif b.whereInput != nil {\n")
 	fmt.Fprintf(file, "\t\twhereMap := Convert%sWhereInputToWhere(*b.whereInput)\n", pascalModelName)
@@ -528,6 +530,64 @@ func generatePrismaBuilders(file *os.File, model *parser.Model) {
 	fmt.Fprintf(file, "\treturn &result, nil\n")
 	fmt.Fprintf(file, "}\n\n")
 
+	fmt.Fprintf(file, "// ExecTyped executes the find first operation and scans the result into type T\n")
+	fmt.Fprintf(file, "// T must be a pointer to a struct with json or db tags for field mapping\n")
+	fmt.Fprintf(file, "// Example: tenant, err := builder.ExecTyped[*TenantsDTO](ctx)\n")
+	fmt.Fprintf(file, "// Requires Go 1.18+ for generics support\n")
+	fmt.Fprintf(file, "func (b *%sFindFirstBuilder) ExecTyped[T any](ctx context.Context) (T, error) {\n", pascalModelName)
+	fmt.Fprintf(file, "\tvar zero T\n")
+	fmt.Fprintf(file, "\tif b.whereInput != nil {\n")
+	fmt.Fprintf(file, "\t\twhereMap := Convert%sWhereInputToWhere(*b.whereInput)\n", pascalModelName)
+	fmt.Fprintf(file, "\t\tb.query.Where(whereMap)\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\tif b.selectFields != nil {\n")
+	fmt.Fprintf(file, "\t\tvar selectedFields []string\n")
+	for _, field := range model.Fields {
+		if isRelation(field) {
+			continue
+		}
+		fieldName := toPascalCase(field.Name)
+		// Get the actual database column name (check for @map attribute)
+		columnName := field.Name
+		for _, attr := range field.Attributes {
+			if attr.Name == "map" && len(attr.Arguments) > 0 {
+				if val, ok := attr.Arguments[0].Value.(string); ok {
+					columnName = val
+					break
+				}
+			}
+		}
+		fmt.Fprintf(file, "\t\tif b.selectFields.%s {\n", fieldName)
+		fmt.Fprintf(file, "\t\t\tselectedFields = append(selectedFields, %q)\n", columnName)
+		fmt.Fprintf(file, "\t\t}\n")
+	}
+	fmt.Fprintf(file, "\t\tif len(selectedFields) > 0 {\n")
+	fmt.Fprintf(file, "\t\t\tb.query.Select(selectedFields...)\n")
+	fmt.Fprintf(file, "\t\t}\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\t// Extract the element type from T (T should be *StructType)\n")
+	fmt.Fprintf(file, "\tvar tType T\n")
+	fmt.Fprintf(file, "\ttypeOfT := reflect.TypeOf(tType)\n")
+	fmt.Fprintf(file, "\tif typeOfT.Kind() != reflect.Ptr {\n")
+	fmt.Fprintf(file, "\t\treturn zero, fmt.Errorf(\"ExecTyped: type T must be a pointer (e.g., *TenantsDTO), got %%v\", typeOfT.Kind())\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\telemType := typeOfT.Elem()\n")
+	fmt.Fprintf(file, "\tif elemType.Kind() != reflect.Struct {\n")
+	fmt.Fprintf(file, "\t\treturn zero, fmt.Errorf(\"ExecTyped: type T must be a pointer to struct, got %%v\", elemType.Kind())\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\t// Create instance and scan into it\n")
+	fmt.Fprintf(file, "\tresult := reflect.New(elemType).Interface()\n")
+	fmt.Fprintf(file, "\terr := b.query.Query.ScanFirst(ctx, result, elemType)\n")
+	fmt.Fprintf(file, "\tif err != nil {\n")
+	fmt.Fprintf(file, "\t\treturn zero, err\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\t// Cast to T and return\n")
+	fmt.Fprintf(file, "\tif typed, ok := result.(T); ok {\n")
+	fmt.Fprintf(file, "\t\treturn typed, nil\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\treturn zero, fmt.Errorf(\"type assertion failed: expected type %%T, got %%T\", zero, result)\n")
+	fmt.Fprintf(file, "}\n\n")
+
 	// FindMany builder
 	fmt.Fprintf(file, "// FindMany returns a builder for finding multiple %s records (Prisma-style)\n", pascalModelName)
 	fmt.Fprintf(file, "// Example: tenants, err := q.FindMany().Where(inputs.%sWhereInput{...}).Exec(ctx)\n", pascalModelName)
@@ -554,7 +614,9 @@ func generatePrismaBuilders(file *os.File, model *parser.Model) {
 	fmt.Fprintf(file, "\treturn b\n")
 	fmt.Fprintf(file, "}\n\n")
 
-	fmt.Fprintf(file, "// Exec executes the find many operation\n")
+	fmt.Fprintf(file, "// Exec executes the find many operation and returns the default model\n")
+	fmt.Fprintf(file, "// Returns ([]models.%s, error)\n", pascalModelName)
+	fmt.Fprintf(file, "// For custom types, use ExecTyped[T]() instead\n")
 	fmt.Fprintf(file, "func (b *%sFindManyBuilder) Exec(ctx context.Context) ([]models.%s, error) {\n", pascalModelName, pascalModelName)
 	fmt.Fprintf(file, "\tif b.whereInput != nil {\n")
 	fmt.Fprintf(file, "\t\twhereMap := Convert%sWhereInputToWhere(*b.whereInput)\n", pascalModelName)
@@ -588,6 +650,64 @@ func generatePrismaBuilders(file *os.File, model *parser.Model) {
 	fmt.Fprintf(file, "\tvar results []models.%s\n", pascalModelName)
 	fmt.Fprintf(file, "\terr := b.query.Find(ctx, &results)\n")
 	fmt.Fprintf(file, "\treturn results, err\n")
+	fmt.Fprintf(file, "}\n\n")
+
+	fmt.Fprintf(file, "// ExecTyped executes the find many operation and scans the results into type T\n")
+	fmt.Fprintf(file, "// T must be a slice of structs with json or db tags for field mapping\n")
+	fmt.Fprintf(file, "// Example: tenants, err := builder.ExecTyped[[]TenantsDTO](ctx)\n")
+	fmt.Fprintf(file, "// Requires Go 1.18+ for generics support\n")
+	fmt.Fprintf(file, "func (b *%sFindManyBuilder) ExecTyped[T any](ctx context.Context) (T, error) {\n", pascalModelName)
+	fmt.Fprintf(file, "\tvar zero T\n")
+	fmt.Fprintf(file, "\tif b.whereInput != nil {\n")
+	fmt.Fprintf(file, "\t\twhereMap := Convert%sWhereInputToWhere(*b.whereInput)\n", pascalModelName)
+	fmt.Fprintf(file, "\t\tb.query.Where(whereMap)\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\tif b.selectFields != nil {\n")
+	fmt.Fprintf(file, "\t\tvar selectedFields []string\n")
+	for _, field := range model.Fields {
+		if isRelation(field) {
+			continue
+		}
+		fieldName := toPascalCase(field.Name)
+		// Get the actual database column name (check for @map attribute)
+		columnName := field.Name
+		for _, attr := range field.Attributes {
+			if attr.Name == "map" && len(attr.Arguments) > 0 {
+				if val, ok := attr.Arguments[0].Value.(string); ok {
+					columnName = val
+					break
+				}
+			}
+		}
+		fmt.Fprintf(file, "\t\tif b.selectFields.%s {\n", fieldName)
+		fmt.Fprintf(file, "\t\t\tselectedFields = append(selectedFields, %q)\n", columnName)
+		fmt.Fprintf(file, "\t\t}\n")
+	}
+	fmt.Fprintf(file, "\t\tif len(selectedFields) > 0 {\n")
+	fmt.Fprintf(file, "\t\t\tb.query.Select(selectedFields...)\n")
+	fmt.Fprintf(file, "\t\t}\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\t// Extract the element type from T (T should be []StructType)\n")
+	fmt.Fprintf(file, "\tvar tType T\n")
+	fmt.Fprintf(file, "\ttypeOfT := reflect.TypeOf(tType)\n")
+	fmt.Fprintf(file, "\tif typeOfT.Kind() != reflect.Slice {\n")
+	fmt.Fprintf(file, "\t\treturn zero, fmt.Errorf(\"ExecTyped: type T must be a slice (e.g., []TenantsDTO), got %%v\", typeOfT.Kind())\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\telemType := typeOfT.Elem()\n")
+	fmt.Fprintf(file, "\tif elemType.Kind() != reflect.Struct {\n")
+	fmt.Fprintf(file, "\t\treturn zero, fmt.Errorf(\"ExecTyped: type T must be a slice of structs, got %%v\", elemType.Kind())\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\t// Create slice and scan into it\n")
+	fmt.Fprintf(file, "\tresults := reflect.MakeSlice(reflect.SliceOf(elemType), 0, 0).Interface()\n")
+	fmt.Fprintf(file, "\terr := b.query.Query.ScanFind(ctx, &results, elemType)\n")
+	fmt.Fprintf(file, "\tif err != nil {\n")
+	fmt.Fprintf(file, "\t\treturn zero, err\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\t// Cast to T and return\n")
+	fmt.Fprintf(file, "\tif typed, ok := results.(T); ok {\n")
+	fmt.Fprintf(file, "\t\treturn typed, nil\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\treturn zero, fmt.Errorf(\"type assertion failed: expected type %%T, got %%T\", zero, results)\n")
 	fmt.Fprintf(file, "}\n\n")
 
 	// Count builder
@@ -783,12 +903,14 @@ func determineQueryImports(userModule, outputDir string) []string {
 
 	// context is always needed for all query methods
 	// fmt is needed for fmt.Errorf in builders
+	// reflect is needed for Scan() method
 	// builder is always needed for Query embedding
 	// models is always needed for type references
 	// inputs is needed for WhereInput
 	return []string{
 		"context",
 		"fmt",
+		"reflect",
 		builderPath,
 		modelsPath,
 		inputsPath,

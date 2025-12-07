@@ -268,6 +268,65 @@ users, err := client.User.FindMany().
 	Exec(ctx)
 ```
 
+### Custom Types with ExecTyped (Go 1.18+)
+
+The `ExecTyped[T]()` method allows you to scan query results into custom DTOs (Data Transfer Objects) instead of the default generated models. This is useful when you need to return different structures to your API clients.
+
+**Requirements:**
+- Go 1.18 or later (for generics support)
+- Custom structs must have `json` or `db` tags for field mapping
+
+**Example:**
+
+```go
+// Define a custom DTO
+type UserDTO struct {
+	ID    int    `json:"id" db:"id"`
+	Email string `json:"email" db:"email"`
+	Name  string `json:"name" db:"name"`
+}
+
+// Find first with custom DTO
+userDTO, err := client.User.FindFirst().
+	Select(inputs.UserSelect{
+		Id:    true,
+		Email: true,
+		Name:  true,
+	}).
+	Where(inputs.UserWhereInput{
+		Email: db.String("user@example.com"),
+	}).
+	ExecTyped[*UserDTO](ctx)
+if err != nil {
+	log.Fatal(err)
+}
+// userDTO is automatically of type *UserDTO, no casting needed!
+
+// Find many with custom DTO
+usersDTO, err := client.User.FindMany().
+	Select(inputs.UserSelect{
+		Id:    true,
+		Email: true,
+		Name:  true,
+	}).
+	Where(inputs.UserWhereInput{
+		Email: db.Contains("example.com"),
+	}).
+	ExecTyped[[]UserDTO](ctx)
+if err != nil {
+	log.Fatal(err)
+}
+// usersDTO is automatically of type []UserDTO, no casting needed!
+```
+
+**Field Mapping:**
+- Fields are mapped using `json` or `db` tags
+- If a tag matches the database column name, the field will be populated
+- Fields without matching tags are ignored
+- Snake_case field names are automatically converted
+
+**Note:** Use `ExecTyped[*YourType]()` for single results and `ExecTyped[[]YourType]()` for multiple results.
+
 ### Including Relations
 
 ```go
