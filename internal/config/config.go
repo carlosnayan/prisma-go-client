@@ -16,7 +16,8 @@ type Config struct {
 	Migrations *MigrationsConfig `toml:"migrations"`          // Configuração de migrations
 	Datasource *DatasourceConfig `toml:"datasource"`          // Configuração do banco de dados
 	Generator  *GeneratorConfig  `toml:"generator,omitempty"` // Configuração do gerador (opcional, pode estar no schema)
-	Log        []string          `toml:"log,omitempty"`       // Níveis de log: query, info, warn, error
+	Log        []string          `toml:"log,omitempty"`       // Níveis de log: query, info, warn, error (raiz)
+	Debug      *DebugConfig      `toml:"debug,omitempty"`     // Configuração de debug
 }
 
 // MigrationsConfig configura as migrations
@@ -27,8 +28,14 @@ type MigrationsConfig struct {
 
 // DatasourceConfig configura a fonte de dados
 type DatasourceConfig struct {
-	URL               string `toml:"url"` // URL do banco (pode usar env("DATABASE_URL") ou ${DATABASE_URL})
-	ShadowDatabaseURL string `toml:"shadowDatabaseUrl,omitempty"`
+	URL               string   `toml:"url"` // URL do banco (pode usar env("DATABASE_URL") ou ${DATABASE_URL})
+	ShadowDatabaseURL string   `toml:"shadowDatabaseUrl,omitempty"`
+	Log               []string `toml:"log,omitempty"` // Níveis de log na seção datasource
+}
+
+// DebugConfig configura opções de debug
+type DebugConfig struct {
+	Log []string `toml:"log,omitempty"` // Níveis de log: query, info, warn, error
 }
 
 // GeneratorConfig configura a geração de código
@@ -197,7 +204,7 @@ func (c *Config) expandEnvVars() error {
 // Retorna a string original se a variável não foi encontrada (para validação detectar)
 func expandString(s string) string {
 	original := s
-	
+
 	// Primeiro, expandir formato env("VAR") ou env('VAR')
 	for {
 		var start int

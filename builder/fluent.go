@@ -100,6 +100,18 @@ func (q *Query) SetModelType(modelType reflect.Type) *Query {
 	return q
 }
 
+// getLogger returns the logger, always getting the current default logger
+// This ensures that if the logger is configured after Query creation, it will use the updated logger
+func (q *Query) getLogger() *logger.Logger {
+	// Always get the current default logger to ensure it's up to date
+	currentLogger := logger.GetDefaultLogger()
+	// Update q.logger if it's different (for efficiency, but always use current)
+	if currentLogger != q.logger {
+		q.logger = currentLogger
+	}
+	return q.logger
+}
+
 // Where adds a WHERE condition
 // Supports two syntaxes:
 //  1. Direct SQL: q.Where("name = ?", "jinzhu")
@@ -543,11 +555,20 @@ func (q *Query) First(ctx context.Context, dest interface{}) error {
 	q.logQuery(ctx, query, args, start)
 	row := q.db.QueryRow(ctx, query, args...)
 
+	var err error
 	if q.modelType != nil {
-		return q.scanRowIntoModel(row, dest)
+		err = q.scanRowIntoModel(row, dest)
+	} else {
+		err = row.Scan(dest)
 	}
 
-	return row.Scan(dest)
+	if err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("SELECT query failed: %v", err)
+		}
+	}
+
+	return err
 }
 
 // Find executes the query and returns all results
@@ -561,15 +582,26 @@ func (q *Query) Find(ctx context.Context, dest interface{}) error {
 	q.logQuery(ctx, query, args, start)
 	rows, err := q.db.Query(ctx, query, args...)
 	if err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("SELECT query failed: %v", err)
+		}
 		return err
 	}
 	defer rows.Close()
 
 	if q.modelType != nil {
-		return q.scanRowsIntoModel(rows, dest)
+		err = q.scanRowsIntoModel(rows, dest)
+	} else {
+		err = q.scanRowsDirect(rows, dest)
 	}
 
-	return q.scanRowsDirect(rows, dest)
+	if err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("SELECT query failed during scan: %v", err)
+		}
+	}
+
+	return err
 }
 
 // FindFirst is an alias for First (compatibility)
@@ -589,6 +621,11 @@ func (q *Query) Count(ctx context.Context) (int64, error) {
 	q.logQuery(ctx, query, args, start)
 	var count int64
 	err := q.db.QueryRow(ctx, query, args...).Scan(&count)
+	if err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("COUNT query failed: %v", err)
+		}
+	}
 	return count, err
 }
 
@@ -601,6 +638,11 @@ func (q *Query) Create(ctx context.Context, value interface{}) error {
 	query, args := q.buildInsertQuery(value)
 	q.logQuery(ctx, query, args, start)
 	_, err := q.db.Exec(ctx, query, args...)
+	if err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("INSERT query failed: %v", err)
+		}
+	}
 	return errors.SanitizeError(err)
 }
 
@@ -611,13 +653,18 @@ func (q *Query) Save(ctx context.Context, value interface{}) error {
 
 	if q.primaryKey == "" {
 		// Se não há primary key, apenas criar
-	return q.Create(ctx, value)
+		return q.Create(ctx, value)
 	}
 
 	start := time.Now()
 	query, args := q.buildUpsertQuery(value)
 	q.logQuery(ctx, query, args, start)
 	_, err := q.db.Exec(ctx, query, args...)
+	if err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("UPSERT query failed: %v", err)
+		}
+	}
 	return errors.SanitizeError(err)
 }
 
@@ -630,6 +677,11 @@ func (q *Query) Update(ctx context.Context, column string, value interface{}) er
 	query, args := q.buildUpdateQuery(column, value)
 	q.logQuery(ctx, query, args, start)
 	_, err := q.db.Exec(ctx, query, args...)
+	if err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("UPDATE query failed: %v", err)
+		}
+	}
 	return errors.SanitizeError(err)
 }
 
@@ -642,6 +694,11 @@ func (q *Query) Updates(ctx context.Context, values map[string]interface{}) erro
 	query, args := q.buildUpdatesQuery(values)
 	q.logQuery(ctx, query, args, start)
 	_, err := q.db.Exec(ctx, query, args...)
+	if err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("UPDATE query failed: %v", err)
+		}
+	}
 	return errors.SanitizeError(err)
 }
 
@@ -654,6 +711,11 @@ func (q *Query) Delete(ctx context.Context, value interface{}) error {
 	query, args := q.buildDeleteQuery()
 	q.logQuery(ctx, query, args, start)
 	_, err := q.db.Exec(ctx, query, args...)
+	if err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("DELETE query failed: %v", err)
+		}
+	}
 	return errors.SanitizeError(err)
 }
 
@@ -1163,8 +1225,14 @@ func (q *Query) scanRowIntoModel(row interface{}, dest interface{}) error {
 
 		modelValue := reflect.New(q.modelType).Elem()
 
-		fields := make([]interface{}, len(q.columns))
-		for i, colName := range q.columns {
+		// Use selectFields if available (when Select() was called), otherwise use all columns
+		columnsToScan := q.columns
+		if len(q.selectFields) > 0 {
+			columnsToScan = q.selectFields
+		}
+
+		fields := make([]interface{}, len(columnsToScan))
+		for i, colName := range columnsToScan {
 			field := findFieldByColumn(modelValue, colName)
 			if field.IsValid() {
 				fields[i] = field.Addr().Interface()
@@ -1175,6 +1243,9 @@ func (q *Query) scanRowIntoModel(row interface{}, dest interface{}) error {
 		}
 
 		if err := driverRow.Scan(fields...); err != nil {
+			if logger := q.getLogger(); logger != nil {
+				logger.Error("Scan failed: %v (scanning %d fields: %v)", err, len(columnsToScan), columnsToScan)
+			}
 			return err
 		}
 
@@ -1217,8 +1288,14 @@ func (q *Query) scanRowsIntoModel(rows interface{}, dest interface{}) error {
 
 			modelValue := reflect.New(sliceType).Elem()
 
-			fields := make([]interface{}, len(q.columns))
-			for i, colName := range q.columns {
+			// Use selectFields if available (when Select() was called), otherwise use all columns
+			columnsToScan := q.columns
+			if len(q.selectFields) > 0 {
+				columnsToScan = q.selectFields
+			}
+
+			fields := make([]interface{}, len(columnsToScan))
+			for i, colName := range columnsToScan {
 				field := findFieldByColumn(modelValue, colName)
 				if field.IsValid() {
 					fields[i] = field.Addr().Interface()
@@ -1229,6 +1306,9 @@ func (q *Query) scanRowsIntoModel(rows interface{}, dest interface{}) error {
 			}
 
 			if err := driverRows.Scan(fields...); err != nil {
+				if logger := q.getLogger(); logger != nil {
+					logger.Error("Scan failed: %v (scanning %d fields: %v)", err, len(columnsToScan), columnsToScan)
+				}
 				return err
 			}
 

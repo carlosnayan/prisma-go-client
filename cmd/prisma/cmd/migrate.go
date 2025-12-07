@@ -388,7 +388,7 @@ func runMigrateReset(args []string) error {
 		dbInfo.Provider, dbInfo.Database, dbInfo.Schema, dbInfo.Host)
 
 	// Confirm destructive action
-	fmt.Print("\n✔ Are you sure you want to reset your database? All data will be lost. … ")
+	fmt.Print("\n✔ Are you sure you want to reset your database? All data will be lost. › (y/N)")
 	reader := bufio.NewReader(os.Stdin)
 	confirm, _ := reader.ReadString('\n')
 	confirm = strings.TrimSpace(strings.ToLower(confirm))

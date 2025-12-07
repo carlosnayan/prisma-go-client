@@ -21,7 +21,7 @@ var app *cli.App
 func Execute() error {
 	app = cli.NewApp(
 		"prisma",
-		"0.1.5",
+		"0.1.6",
 		"Prisma CLI for Go - Type-safe and intuitive ORM",
 	)
 
@@ -108,9 +108,9 @@ func loadConfig() (*config.Config, error) {
 		return nil, err
 	}
 
-	// Configure logger if specified
-	if len(cfg.Log) > 0 {
-		logger.SetLogLevels(cfg.Log)
+	// Configure logger if specified in [debug] section
+	if cfg.Debug != nil && len(cfg.Debug.Log) > 0 {
+		logger.SetLogLevels(cfg.Debug.Log)
 	}
 
 	return cfg, nil

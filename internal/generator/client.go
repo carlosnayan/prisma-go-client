@@ -78,11 +78,35 @@ func GenerateClient(schema *parser.Schema, outputDir string) error {
 		fmt.Fprintf(file, ")\n\n")
 	}
 
+	// Prepare model names (sorted) for use in struct and NewClient
+	var modelNamesForStruct []string
+	for _, model := range schema.Models {
+		modelNamesForStruct = append(modelNamesForStruct, model.Name)
+	}
+	sort.Strings(modelNamesForStruct)
+
 	// Client struct
 	fmt.Fprintf(file, "// Client is the main Prisma client\n")
 	fmt.Fprintf(file, "type Client struct {\n")
 	fmt.Fprintf(file, "\tdb builder.DBTX\n")
 	fmt.Fprintf(file, "\traw *raw.Executor\n")
+
+	// Add fields for each model
+	for _, modelName := range modelNamesForStruct {
+		var model *parser.Model
+		for _, m := range schema.Models {
+			if m.Name == modelName {
+				model = m
+				break
+			}
+		}
+		if model == nil {
+			continue
+		}
+		pascalModelName := toPascalCase(modelName)
+		fmt.Fprintf(file, "\t%s *queries.%sQuery\n", pascalModelName, pascalModelName)
+	}
+
 	fmt.Fprintf(file, "}\n\n")
 
 	// Generate logger configuration helper
@@ -95,10 +119,43 @@ func GenerateClient(schema *parser.Schema, outputDir string) error {
 	fmt.Fprintf(file, "func NewClient(db builder.DBTX) *Client {\n")
 	fmt.Fprintf(file, "\t// Configure logger from prisma.conf if available (only once)\n")
 	fmt.Fprintf(file, "\tconfigureLoggerFromConfig()\n")
-	fmt.Fprintf(file, "\treturn &Client{\n")
+	fmt.Fprintf(file, "\tclient := &Client{\n")
 	fmt.Fprintf(file, "\t\tdb:  db,\n")
 	fmt.Fprintf(file, "\t\traw: raw.New(db),\n")
 	fmt.Fprintf(file, "\t}\n")
+
+	// Initialize model queries
+	for _, modelName := range modelNamesForStruct {
+		var model *parser.Model
+		for _, m := range schema.Models {
+			if m.Name == modelName {
+				model = m
+				break
+			}
+		}
+		if model == nil {
+			continue
+		}
+		columns := getModelColumns(model)
+		primaryKey := getPrimaryKey(model)
+		hasDeleted := hasDeletedAt(model)
+		pascalModelName := toPascalCase(modelName)
+
+		fmt.Fprintf(file, "\t// Initialize %s query\n", pascalModelName)
+		fmt.Fprintf(file, "\tcolumns_%s := []string{%s}\n", pascalModelName, formatColumns(columns))
+		fmt.Fprintf(file, "\tquery_%s := builder.NewQuery(client.db, %q, columns_%s)\n", pascalModelName, toSnakeCase(modelName), pascalModelName)
+		if primaryKey != "" {
+			fmt.Fprintf(file, "\tquery_%s.SetPrimaryKey(%q)\n", pascalModelName, primaryKey)
+		}
+		if hasDeleted {
+			fmt.Fprintf(file, "\tquery_%s.SetHasDeleted(true)\n", pascalModelName)
+		}
+		fmt.Fprintf(file, "\tmodelType_%s := reflect.TypeOf(models.%s{})\n", pascalModelName, pascalModelName)
+		fmt.Fprintf(file, "\tquery_%s.SetModelType(modelType_%s)\n", pascalModelName, pascalModelName)
+		fmt.Fprintf(file, "\tclient.%s = &queries.%sQuery{Query: query_%s}\n", pascalModelName, pascalModelName, pascalModelName)
+	}
+
+	fmt.Fprintf(file, "\treturn client\n")
 	fmt.Fprintf(file, "}\n\n")
 
 	// Raw
@@ -107,16 +164,8 @@ func GenerateClient(schema *parser.Schema, outputDir string) error {
 	fmt.Fprintf(file, "\treturn c.raw\n")
 	fmt.Fprintf(file, "}\n\n")
 
-	// Methods for each model
-	var modelNames []string
-	for _, model := range schema.Models {
-		modelNames = append(modelNames, model.Name)
-	}
-	sort.Strings(modelNames)
-
-	for _, modelName := range modelNames {
-		generateModelMethod(file, modelName, schema)
-	}
+	// Note: Model access is now via fields (e.g., client.Users) instead of methods (e.g., client.Users())
+	// This allows for a cleaner API: client.Users.Update() instead of client.Users().Update()
 
 	// Generate TransactionClient and Transaction method
 	generateTransactionClient(file, schema)
@@ -127,49 +176,17 @@ func GenerateClient(schema *parser.Schema, outputDir string) error {
 	return nil
 }
 
-// generateModelMethod generates the method to access a model
-func generateModelMethod(file *os.File, modelName string, schema *parser.Schema) {
-	var model *parser.Model
-	for _, m := range schema.Models {
-		if m.Name == modelName {
-			model = m
-			break
-		}
-	}
-	if model == nil {
-		return
-	}
-
-	columns := getModelColumns(model)
-	primaryKey := getPrimaryKey(model)
-	hasDeleted := hasDeletedAt(model)
-	pascalModelName := toPascalCase(modelName)
-	methodName := pascalModelName
-
-	generateFluentAPIMethods(file, model, pascalModelName, methodName)
-
-	fmt.Fprintf(file, "// %s returns the query builder for model %s with fluent API\n", methodName, pascalModelName)
-	fmt.Fprintf(file, "// Example: client.%s().Where(\"active = ?\", true).First(ctx, &user)\n", methodName)
-	fmt.Fprintf(file, "func (c *Client) %s() *queries.%sQuery {\n", methodName, pascalModelName)
-	fmt.Fprintf(file, "\tcolumns := []string{%s}\n", formatColumns(columns))
-	fmt.Fprintf(file, "\tquery := builder.NewQuery(c.db, %q, columns)\n", toSnakeCase(modelName))
-	if primaryKey != "" {
-		fmt.Fprintf(file, "\tquery.SetPrimaryKey(%q)\n", primaryKey)
-	}
-	if hasDeleted {
-		fmt.Fprintf(file, "\tquery.SetHasDeleted(true)\n")
-	}
-
-	fmt.Fprintf(file, "\tmodelType := reflect.TypeOf(models.%s{})\n", pascalModelName)
-	fmt.Fprintf(file, "\tquery.SetModelType(modelType)\n")
-	fmt.Fprintf(file, "\treturn &queries.%sQuery{Query: query}\n", pascalModelName)
-	fmt.Fprintf(file, "}\n\n")
-}
+// Note: Model access is now via fields (e.g., client.Users) instead of methods (e.g., client.Users())
+// This allows for a cleaner API: client.Users.Update() instead of client.Users().Update()
 
 // getModelColumns returns the columns of a model
 func getModelColumns(model *parser.Model) []string {
 	columns := []string{}
 	for _, field := range model.Fields {
+		// Skip relations - only include actual database columns
+		if isRelation(field) {
+			continue
+		}
 		columnName := field.Name
 		for _, attr := range field.Attributes {
 			if attr.Name == "map" && len(attr.Arguments) > 0 {
@@ -256,31 +273,27 @@ func determineClientImports(schema *parser.Schema, userModule, outputDir string)
 	imports := make(map[string]bool)
 	var driverImports []string
 
-	// context and fmt are needed for fluent API methods
+	// context is needed for Transaction method
 	imports["context"] = true
-	imports["fmt"] = true
 	// reflect is always needed for SetModelType
 	imports["reflect"] = true
 
 	// Calculate import paths for generated packages
-	modelsPath, queriesPath, inputsPath, err := calculateImportPath(userModule, outputDir)
+	modelsPath, queriesPath, _, err := calculateImportPath(userModule, outputDir)
 	if err != nil {
 		// Fallback to old paths if detection fails
 		modelsPath = "github.com/carlosnayan/prisma-go-client/db/models"
 		queriesPath = "github.com/carlosnayan/prisma-go-client/db/queries"
-		inputsPath = "github.com/carlosnayan/prisma-go-client/db/inputs"
 	}
 
 	// These are always needed
 	imports["github.com/carlosnayan/prisma-go-client/builder"] = true
 	imports[modelsPath] = true
 	imports[queriesPath] = true
-	imports[inputsPath] = true
 	imports["github.com/carlosnayan/prisma-go-client/raw"] = true
 	// Add imports for logger configuration
 	imports["os"] = true
 	imports["path/filepath"] = true
-	imports["strings"] = true
 	imports["sync"] = true
 	imports["github.com/BurntSushi/toml"] = true
 	imports["github.com/joho/godotenv"] = true
@@ -300,9 +313,6 @@ func determineClientImports(schema *parser.Schema, userModule, outputDir string)
 	if imports["context"] {
 		result = append(result, "context")
 	}
-	if imports["fmt"] {
-		result = append(result, "fmt")
-	}
 	if imports["reflect"] {
 		result = append(result, "reflect")
 	}
@@ -319,9 +329,6 @@ func determineClientImports(schema *parser.Schema, userModule, outputDir string)
 	if imports["path/filepath"] {
 		result = append(result, "path/filepath")
 	}
-	if imports["strings"] {
-		result = append(result, "strings")
-	}
 	if imports["sync"] {
 		result = append(result, "sync")
 	}
@@ -333,9 +340,6 @@ func determineClientImports(schema *parser.Schema, userModule, outputDir string)
 	}
 	if imports[queriesPath] {
 		result = append(result, queriesPath)
-	}
-	if imports[inputsPath] {
-		result = append(result, inputsPath)
 	}
 	if imports["github.com/carlosnayan/prisma-go-client/raw"] {
 		result = append(result, "github.com/carlosnayan/prisma-go-client/raw")
@@ -386,16 +390,18 @@ func generateLoggerConfigHelper(file *os.File) {
 
 	fmt.Fprintf(file, "\t\t\t\t// Parse TOML config\n")
 	fmt.Fprintf(file, "\t\t\t\ttype Config struct {\n")
-	fmt.Fprintf(file, "\t\t\t\t\tLog []string `toml:\"log,omitempty\"`\n")
+	fmt.Fprintf(file, "\t\t\t\t\tDebug struct {\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\tLog []string `toml:\"log,omitempty\"`\n")
+	fmt.Fprintf(file, "\t\t\t\t\t} `toml:\"debug,omitempty\"`\n")
 	fmt.Fprintf(file, "\t\t\t\t}\n")
 	fmt.Fprintf(file, "\t\t\t\tvar cfg Config\n")
 	fmt.Fprintf(file, "\t\t\t\tif _, err := toml.Decode(string(data), &cfg); err != nil {\n")
 	fmt.Fprintf(file, "\t\t\t\t\treturn\n")
 	fmt.Fprintf(file, "\t\t\t\t}\n\n")
 
-	fmt.Fprintf(file, "\t\t\t\t// Configure logger if log levels are specified\n")
-	fmt.Fprintf(file, "\t\t\t\tif len(cfg.Log) > 0 {\n")
-	fmt.Fprintf(file, "\t\t\t\t\tbuilder.SetLogLevels(cfg.Log)\n")
+	fmt.Fprintf(file, "\t\t\t\t// Configure logger if log levels are specified in [debug] section\n")
+	fmt.Fprintf(file, "\t\t\t\tif len(cfg.Debug.Log) > 0 {\n")
+	fmt.Fprintf(file, "\t\t\t\t\tbuilder.SetLogLevels(cfg.Debug.Log)\n")
 	fmt.Fprintf(file, "\t\t\t\t}\n")
 	fmt.Fprintf(file, "\t\t\t\treturn\n")
 	fmt.Fprintf(file, "\t\t\t}\n\n")
@@ -411,246 +417,38 @@ func generateLoggerConfigHelper(file *os.File) {
 	fmt.Fprintf(file, "}\n\n")
 }
 
-// generateFluentAPIMethods generates fluent methods for Create, FindMany, FindFirst, Update, Delete
-func generateFluentAPIMethods(file *os.File, model *parser.Model, pascalModelName, methodName string) {
-	fmt.Fprintf(file, "// %sCreateBuilder is a fluent builder for creating %s records\n", pascalModelName, pascalModelName)
-	fmt.Fprintf(file, "type %sCreateBuilder struct {\n", pascalModelName)
-	fmt.Fprintf(file, "\tclient   *Client\n")
-	fmt.Fprintf(file, "\ttxClient *TransactionClient\n")
-	fmt.Fprintf(file, "\tdata     *inputs.%sCreateInput\n", pascalModelName)
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// Data sets the data for creating a %s record\n", pascalModelName)
-	fmt.Fprintf(file, "func (b *%sCreateBuilder) Data(data inputs.%sCreateInput) *%sCreateBuilder {\n", pascalModelName, pascalModelName, pascalModelName)
-	fmt.Fprintf(file, "\tb.data = &data\n")
-	fmt.Fprintf(file, "\treturn b\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// Exec executes the create operation\n")
-	fmt.Fprintf(file, "func (b *%sCreateBuilder) Exec(ctx context.Context) (*models.%s, error) {\n", pascalModelName, pascalModelName)
-	fmt.Fprintf(file, "\tif b.data == nil {\n")
-	fmt.Fprintf(file, "\t\treturn nil, fmt.Errorf(\"data is required\")\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\tvar query *queries.%sQuery\n", pascalModelName)
-	fmt.Fprintf(file, "\tif b.txClient != nil {\n")
-	fmt.Fprintf(file, "\t\tquery = b.txClient.%s()\n", methodName)
-	fmt.Fprintf(file, "\t} else {\n")
-	fmt.Fprintf(file, "\t\tquery = b.client.%s()\n", methodName)
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\treturn query.Create().Data(*b.data).Exec(ctx)\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	// FindMany builder
-	fmt.Fprintf(file, "// %sFindManyBuilder is a fluent builder for finding multiple %s records\n", pascalModelName, pascalModelName)
-	fmt.Fprintf(file, "type %sFindManyBuilder struct {\n", pascalModelName)
-	fmt.Fprintf(file, "\tclient      *Client\n")
-	fmt.Fprintf(file, "\ttxClient    *TransactionClient\n")
-	fmt.Fprintf(file, "\tselectFields *inputs.%sSelect\n", pascalModelName)
-	fmt.Fprintf(file, "\twhereInput   *inputs.%sWhereInput\n", pascalModelName)
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// Select sets which fields to return\n")
-	fmt.Fprintf(file, "func (b *%sFindManyBuilder) Select(selectFields inputs.%sSelect) *%sFindManyBuilder {\n", pascalModelName, pascalModelName, pascalModelName)
-	fmt.Fprintf(file, "\tb.selectFields = &selectFields\n")
-	fmt.Fprintf(file, "\treturn b\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// Where sets the where conditions\n")
-	fmt.Fprintf(file, "func (b *%sFindManyBuilder) Where(where inputs.%sWhereInput) *%sFindManyBuilder {\n", pascalModelName, pascalModelName, pascalModelName)
-	fmt.Fprintf(file, "\tb.whereInput = &where\n")
-	fmt.Fprintf(file, "\treturn b\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// Exec executes the find many operation\n")
-	fmt.Fprintf(file, "func (b *%sFindManyBuilder) Exec(ctx context.Context) ([]models.%s, error) {\n", pascalModelName, pascalModelName)
-	fmt.Fprintf(file, "\tvar query *queries.%sQuery\n", pascalModelName)
-	fmt.Fprintf(file, "\tif b.txClient != nil {\n")
-	fmt.Fprintf(file, "\t\tquery = b.txClient.%s()\n", methodName)
-	fmt.Fprintf(file, "\t} else {\n")
-	fmt.Fprintf(file, "\t\tquery = b.client.%s()\n", methodName)
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\tfindManyBuilder := query.FindMany()\n")
-	fmt.Fprintf(file, "\tif b.selectFields != nil {\n")
-	fmt.Fprintf(file, "\t\tfindManyBuilder = findManyBuilder.Select(*b.selectFields)\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\tif b.whereInput != nil {\n")
-	fmt.Fprintf(file, "\t\tfindManyBuilder = findManyBuilder.Where(*b.whereInput)\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\treturn findManyBuilder.Exec(ctx)\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	// FindFirst builder
-	fmt.Fprintf(file, "// %sFindFirstBuilder is a fluent builder for finding a single %s record\n", pascalModelName, pascalModelName)
-	fmt.Fprintf(file, "type %sFindFirstBuilder struct {\n", pascalModelName)
-	fmt.Fprintf(file, "\tclient      *Client\n")
-	fmt.Fprintf(file, "\ttxClient    *TransactionClient\n")
-	fmt.Fprintf(file, "\tselectFields *inputs.%sSelect\n", pascalModelName)
-	fmt.Fprintf(file, "\twhereInput   *inputs.%sWhereInput\n", pascalModelName)
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// Select sets which fields to return\n")
-	fmt.Fprintf(file, "func (b *%sFindFirstBuilder) Select(selectFields inputs.%sSelect) *%sFindFirstBuilder {\n", pascalModelName, pascalModelName, pascalModelName)
-	fmt.Fprintf(file, "\tb.selectFields = &selectFields\n")
-	fmt.Fprintf(file, "\treturn b\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// Where sets the where conditions\n")
-	fmt.Fprintf(file, "func (b *%sFindFirstBuilder) Where(where inputs.%sWhereInput) *%sFindFirstBuilder {\n", pascalModelName, pascalModelName, pascalModelName)
-	fmt.Fprintf(file, "\tb.whereInput = &where\n")
-	fmt.Fprintf(file, "\treturn b\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// Exec executes the find first operation\n")
-	fmt.Fprintf(file, "func (b *%sFindFirstBuilder) Exec(ctx context.Context) (*models.%s, error) {\n", pascalModelName, pascalModelName)
-	fmt.Fprintf(file, "\tvar query *queries.%sQuery\n", pascalModelName)
-	fmt.Fprintf(file, "\tif b.txClient != nil {\n")
-	fmt.Fprintf(file, "\t\tquery = b.txClient.%s()\n", methodName)
-	fmt.Fprintf(file, "\t} else {\n")
-	fmt.Fprintf(file, "\t\tquery = b.client.%s()\n", methodName)
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\tif b.selectFields != nil {\n")
-	fmt.Fprintf(file, "\t\tvar selectedFields []string\n")
-	for _, field := range model.Fields {
-		if isRelation(field) {
-			continue
-		}
-		fieldName := toPascalCase(field.Name)
-		dbFieldName := field.Name
-		fmt.Fprintf(file, "\t\tif b.selectFields.%s {\n", fieldName)
-		fmt.Fprintf(file, "\t\t\tselectedFields = append(selectedFields, %q)\n", dbFieldName)
-		fmt.Fprintf(file, "\t\t}\n")
-	}
-	fmt.Fprintf(file, "\t\tif len(selectedFields) > 0 {\n")
-	fmt.Fprintf(file, "\t\t\tquery.Select(selectedFields...)\n")
-	fmt.Fprintf(file, "\t\t}\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\tfindFirstBuilder := query.FindFirst()\n")
-	fmt.Fprintf(file, "\tif b.selectFields != nil {\n")
-	fmt.Fprintf(file, "\t\tfindFirstBuilder = findFirstBuilder.Select(*b.selectFields)\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\tif b.whereInput != nil {\n")
-	fmt.Fprintf(file, "\t\tfindFirstBuilder = findFirstBuilder.Where(*b.whereInput)\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\treturn findFirstBuilder.Exec(ctx)\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// %sUpdateBuilder is a fluent builder for updating %s records\n", pascalModelName, pascalModelName)
-	fmt.Fprintf(file, "type %sUpdateBuilder struct {\n", pascalModelName)
-	fmt.Fprintf(file, "\tclient     *Client\n")
-	fmt.Fprintf(file, "\ttxClient   *TransactionClient\n")
-	fmt.Fprintf(file, "\twhereInput *inputs.%sWhereInput\n", pascalModelName)
-	fmt.Fprintf(file, "\tdata       *inputs.%sUpdateInput\n", pascalModelName)
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// Where sets the where conditions\n")
-	fmt.Fprintf(file, "func (b *%sUpdateBuilder) Where(where inputs.%sWhereInput) *%sUpdateBuilder {\n", pascalModelName, pascalModelName, pascalModelName)
-	fmt.Fprintf(file, "\tb.whereInput = &where\n")
-	fmt.Fprintf(file, "\treturn b\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// Data sets the data for updating\n")
-	fmt.Fprintf(file, "func (b *%sUpdateBuilder) Data(data inputs.%sUpdateInput) *%sUpdateBuilder {\n", pascalModelName, pascalModelName, pascalModelName)
-	fmt.Fprintf(file, "\tb.data = &data\n")
-	fmt.Fprintf(file, "\treturn b\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// Exec executes the update operation\n")
-	fmt.Fprintf(file, "func (b *%sUpdateBuilder) Exec(ctx context.Context) error {\n", pascalModelName)
-	fmt.Fprintf(file, "\tif b.whereInput == nil {\n")
-	fmt.Fprintf(file, "\t\treturn fmt.Errorf(\"where condition is required\")\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\tif b.data == nil {\n")
-	fmt.Fprintf(file, "\t\treturn fmt.Errorf(\"data is required\")\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\tvar query *queries.%sQuery\n", pascalModelName)
-	fmt.Fprintf(file, "\tif b.txClient != nil {\n")
-	fmt.Fprintf(file, "\t\tquery = b.txClient.%s()\n", methodName)
-	fmt.Fprintf(file, "\t} else {\n")
-	fmt.Fprintf(file, "\t\tquery = b.client.%s()\n", methodName)
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\twhereMap := queries.Convert%sWhereInputToWhere(*b.whereInput)\n", pascalModelName)
-	fmt.Fprintf(file, "\tquery.Where(whereMap)\n")
-	fmt.Fprintf(file, "\tupdateData := make(map[string]interface{})\n")
-	for _, field := range model.Fields {
-		if isAutoGenerated(field) || isPrimaryKey(field) || isRelation(field) {
-			continue
-		}
-		fieldName := toPascalCase(field.Name)
-		dbFieldName := field.Name
-		fmt.Fprintf(file, "\tif b.data.%s != nil {\n", fieldName)
-		fmt.Fprintf(file, "\t\tupdateData[%q] = *b.data.%s\n", dbFieldName, fieldName)
-		fmt.Fprintf(file, "\t}\n")
-	}
-	fmt.Fprintf(file, "\treturn query.Updates(ctx, updateData)\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// %sDeleteBuilder is a fluent builder for deleting %s records\n", pascalModelName, pascalModelName)
-	fmt.Fprintf(file, "type %sDeleteBuilder struct {\n", pascalModelName)
-	fmt.Fprintf(file, "\tclient     *Client\n")
-	fmt.Fprintf(file, "\ttxClient   *TransactionClient\n")
-	fmt.Fprintf(file, "\twhereInput *inputs.%sWhereInput\n", pascalModelName)
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// Where sets the where conditions\n")
-	fmt.Fprintf(file, "func (b *%sDeleteBuilder) Where(where inputs.%sWhereInput) *%sDeleteBuilder {\n", pascalModelName, pascalModelName, pascalModelName)
-	fmt.Fprintf(file, "\tb.whereInput = &where\n")
-	fmt.Fprintf(file, "\treturn b\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// Exec executes the delete operation\n")
-	fmt.Fprintf(file, "func (b *%sDeleteBuilder) Exec(ctx context.Context) error {\n", pascalModelName)
-	fmt.Fprintf(file, "\tif b.whereInput == nil {\n")
-	fmt.Fprintf(file, "\t\treturn fmt.Errorf(\"where condition is required\")\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\tvar query *queries.%sQuery\n", pascalModelName)
-	fmt.Fprintf(file, "\tif b.txClient != nil {\n")
-	fmt.Fprintf(file, "\t\tquery = b.txClient.%s()\n", methodName)
-	fmt.Fprintf(file, "\t} else {\n")
-	fmt.Fprintf(file, "\t\tquery = b.client.%s()\n", methodName)
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\treturn query.Delete().Where(*b.whereInput).Exec(ctx)\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	// Generate methods on Client
-	fmt.Fprintf(file, "// Create returns a builder for creating a %s record\n", pascalModelName)
-	fmt.Fprintf(file, "// Example: user, err := client.%s.Create().Data(inputs.UserCreateInput{...}).Exec(ctx)\n", methodName)
-	fmt.Fprintf(file, "func (c *Client) %sCreate() *%sCreateBuilder {\n", methodName, pascalModelName)
-	fmt.Fprintf(file, "\treturn &%sCreateBuilder{client: c}\n", pascalModelName)
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// FindMany returns a builder for finding multiple %s records\n", pascalModelName)
-	fmt.Fprintf(file, "// Example: users, err := client.%s.FindMany().Where(inputs.UserWhereInput{...}).Exec(ctx)\n", methodName)
-	fmt.Fprintf(file, "func (c *Client) %sFindMany() *%sFindManyBuilder {\n", methodName, pascalModelName)
-	fmt.Fprintf(file, "\treturn &%sFindManyBuilder{client: c}\n", pascalModelName)
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// FindFirst returns a builder for finding a single %s record\n", pascalModelName)
-	fmt.Fprintf(file, "// Example: user, err := client.%s.FindFirst().Where(inputs.UserWhereInput{...}).Exec(ctx)\n", methodName)
-	fmt.Fprintf(file, "func (c *Client) %sFindFirst() *%sFindFirstBuilder {\n", methodName, pascalModelName)
-	fmt.Fprintf(file, "\treturn &%sFindFirstBuilder{client: c}\n", pascalModelName)
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// Update returns a builder for updating %s records\n", pascalModelName)
-	fmt.Fprintf(file, "// Example: err := client.%s.Update().Where(inputs.UserWhereInput{...}).Data(inputs.UserUpdateInput{...}).Exec(ctx)\n", methodName)
-	fmt.Fprintf(file, "func (c *Client) %sUpdate() *%sUpdateBuilder {\n", methodName, pascalModelName)
-	fmt.Fprintf(file, "\treturn &%sUpdateBuilder{client: c}\n", pascalModelName)
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// Delete returns a builder for deleting %s records\n", pascalModelName)
-	fmt.Fprintf(file, "// Example: err := client.%s.Delete().Where(inputs.UserWhereInput{...}).Exec(ctx)\n", methodName)
-	fmt.Fprintf(file, "func (c *Client) %sDelete() *%sDeleteBuilder {\n", methodName, pascalModelName)
-	fmt.Fprintf(file, "\treturn &%sDeleteBuilder{client: c}\n", pascalModelName)
-	fmt.Fprintf(file, "}\n\n")
-}
-
 // generateTransactionClient generates the TransactionClient struct and its methods
 func generateTransactionClient(file *os.File, schema *parser.Schema) {
+	// Prepare model names (sorted) for use in struct
+	var modelNamesForTx []string
+	for _, model := range schema.Models {
+		modelNamesForTx = append(modelNamesForTx, model.Name)
+	}
+	sort.Strings(modelNamesForTx)
+
 	// TransactionClient struct
 	fmt.Fprintf(file, "// TransactionClient is a client that executes operations within a transaction\n")
 	fmt.Fprintf(file, "// All operations executed through TransactionClient are part of the same transaction\n")
 	fmt.Fprintf(file, "type TransactionClient struct {\n")
 	fmt.Fprintf(file, "\ttx  *builder.Transaction\n")
 	fmt.Fprintf(file, "\traw *raw.Executor\n")
+
+	// Add fields for each model
+	for _, modelName := range modelNamesForTx {
+		var model *parser.Model
+		for _, m := range schema.Models {
+			if m.Name == modelName {
+				model = m
+				break
+			}
+		}
+		if model == nil {
+			continue
+		}
+		pascalModelName := toPascalCase(modelName)
+		fmt.Fprintf(file, "\t%s *queries.%sQuery\n", pascalModelName, pascalModelName)
+	}
+
 	fmt.Fprintf(file, "}\n\n")
 
 	// Raw method for TransactionClient
@@ -658,96 +456,10 @@ func generateTransactionClient(file *os.File, schema *parser.Schema) {
 	fmt.Fprintf(file, "func (tc *TransactionClient) Raw() *raw.Executor {\n")
 	fmt.Fprintf(file, "\treturn tc.raw\n")
 	fmt.Fprintf(file, "}\n\n")
-
-	// Methods for each model in TransactionClient
-	var modelNames []string
-	for _, model := range schema.Models {
-		modelNames = append(modelNames, model.Name)
-	}
-	sort.Strings(modelNames)
-
-	for _, modelName := range modelNames {
-		generateTransactionModelMethod(file, modelName, schema)
-	}
 }
 
-// generateTransactionModelMethod generates the method to access a model in TransactionClient
-func generateTransactionModelMethod(file *os.File, modelName string, schema *parser.Schema) {
-	var model *parser.Model
-	for _, m := range schema.Models {
-		if m.Name == modelName {
-			model = m
-			break
-		}
-	}
-	if model == nil {
-		return
-	}
-
-	columns := getModelColumns(model)
-	primaryKey := getPrimaryKey(model)
-	hasDeleted := hasDeletedAt(model)
-	pascalModelName := toPascalCase(modelName)
-	methodName := pascalModelName
-
-	fmt.Fprintf(file, "// %s returns the query builder for model %s within the transaction\n", methodName, pascalModelName)
-	fmt.Fprintf(file, "// Example: tx.%s().Where(\"active = ?\", true).First(ctx, &user)\n", methodName)
-	fmt.Fprintf(file, "func (tc *TransactionClient) %s() *queries.%sQuery {\n", methodName, pascalModelName)
-	fmt.Fprintf(file, "\tcolumns := []string{%s}\n", formatColumns(columns))
-	fmt.Fprintf(file, "\tquery := tc.tx.Query(%q, columns)\n", toSnakeCase(modelName))
-	if primaryKey != "" {
-		fmt.Fprintf(file, "\tquery.SetPrimaryKey(%q)\n", primaryKey)
-	}
-	if hasDeleted {
-		fmt.Fprintf(file, "\tquery.SetHasDeleted(true)\n")
-	}
-
-	fmt.Fprintf(file, "\tmodelType := reflect.TypeOf(models.%s{})\n", pascalModelName)
-	fmt.Fprintf(file, "\tquery.SetModelType(modelType)\n")
-	fmt.Fprintf(file, "\treturn &queries.%sQuery{Query: query}\n", pascalModelName)
-	fmt.Fprintf(file, "}\n\n")
-
-	// Generate fluent API methods for TransactionClient
-	generateTransactionFluentAPIMethods(file, model, pascalModelName, methodName)
-}
-
-// generateTransactionFluentAPIMethods generates fluent API methods for TransactionClient
-func generateTransactionFluentAPIMethods(file *os.File, model *parser.Model, pascalModelName, methodName string) {
-	// Create builder for TransactionClient
-	fmt.Fprintf(file, "// %sCreate returns a builder for creating a %s record within the transaction\n", methodName, pascalModelName)
-	fmt.Fprintf(file, "// Example: user, err := tx.%s.Create().Data(inputs.UserCreateInput{...}).Exec(ctx)\n", methodName)
-	fmt.Fprintf(file, "func (tc *TransactionClient) %sCreate() *%sCreateBuilder {\n", methodName, pascalModelName)
-	fmt.Fprintf(file, "\treturn &%sCreateBuilder{client: nil, txClient: tc}\n", pascalModelName)
-	fmt.Fprintf(file, "}\n\n")
-
-	// FindMany builder
-	fmt.Fprintf(file, "// %sFindMany returns a builder for finding multiple %s records within the transaction\n", methodName, pascalModelName)
-	fmt.Fprintf(file, "// Example: users, err := tx.%s.FindMany().Where(inputs.UserWhereInput{...}).Exec(ctx)\n", methodName)
-	fmt.Fprintf(file, "func (tc *TransactionClient) %sFindMany() *%sFindManyBuilder {\n", methodName, pascalModelName)
-	fmt.Fprintf(file, "\treturn &%sFindManyBuilder{client: nil, txClient: tc}\n", pascalModelName)
-	fmt.Fprintf(file, "}\n\n")
-
-	// FindFirst builder
-	fmt.Fprintf(file, "// %sFindFirst returns a builder for finding a single %s record within the transaction\n", methodName, pascalModelName)
-	fmt.Fprintf(file, "// Example: user, err := tx.%s.FindFirst().Where(inputs.UserWhereInput{...}).Exec(ctx)\n", methodName)
-	fmt.Fprintf(file, "func (tc *TransactionClient) %sFindFirst() *%sFindFirstBuilder {\n", methodName, pascalModelName)
-	fmt.Fprintf(file, "\treturn &%sFindFirstBuilder{client: nil, txClient: tc}\n", pascalModelName)
-	fmt.Fprintf(file, "}\n\n")
-
-	// Update builder
-	fmt.Fprintf(file, "// %sUpdate returns a builder for updating %s records within the transaction\n", methodName, pascalModelName)
-	fmt.Fprintf(file, "// Example: err := tx.%s.Update().Where(inputs.UserWhereInput{...}).Data(inputs.UserUpdateInput{...}).Exec(ctx)\n", methodName)
-	fmt.Fprintf(file, "func (tc *TransactionClient) %sUpdate() *%sUpdateBuilder {\n", methodName, pascalModelName)
-	fmt.Fprintf(file, "\treturn &%sUpdateBuilder{client: nil, txClient: tc}\n", pascalModelName)
-	fmt.Fprintf(file, "}\n\n")
-
-	// Delete builder
-	fmt.Fprintf(file, "// %sDelete returns a builder for deleting %s records within the transaction\n", methodName, pascalModelName)
-	fmt.Fprintf(file, "// Example: err := tx.%s.Delete().Where(inputs.UserWhereInput{...}).Exec(ctx)\n", methodName)
-	fmt.Fprintf(file, "func (tc *TransactionClient) %sDelete() *%sDeleteBuilder {\n", methodName, pascalModelName)
-	fmt.Fprintf(file, "\treturn &%sDeleteBuilder{client: nil, txClient: tc}\n", pascalModelName)
-	fmt.Fprintf(file, "}\n\n")
-}
+// Note: Model access in TransactionClient is now via fields (e.g., tx.Users) instead of methods (e.g., tx.Users())
+// This allows for a cleaner API: tx.Users.Update() instead of tx.Users().Update()
 
 // generateTransactionMethod generates the Transaction method on Client
 func generateTransactionMethod(file *os.File, schema *parser.Schema) {
@@ -768,6 +480,44 @@ func generateTransactionMethod(file *os.File, schema *parser.Schema) {
 	fmt.Fprintf(file, "\t\t\ttx:  tx,\n")
 	fmt.Fprintf(file, "\t\t\traw: raw.New(txAdapter),\n")
 	fmt.Fprintf(file, "\t\t}\n")
+
+	// Initialize model queries for TransactionClient
+	var modelNamesForTxInit []string
+	for _, model := range schema.Models {
+		modelNamesForTxInit = append(modelNamesForTxInit, model.Name)
+	}
+	sort.Strings(modelNamesForTxInit)
+
+	for _, modelName := range modelNamesForTxInit {
+		var model *parser.Model
+		for _, m := range schema.Models {
+			if m.Name == modelName {
+				model = m
+				break
+			}
+		}
+		if model == nil {
+			continue
+		}
+		columns := getModelColumns(model)
+		primaryKey := getPrimaryKey(model)
+		hasDeleted := hasDeletedAt(model)
+		pascalModelName := toPascalCase(modelName)
+
+		fmt.Fprintf(file, "\t\t// Initialize %s query\n", pascalModelName)
+		fmt.Fprintf(file, "\t\tcolumns_%s := []string{%s}\n", pascalModelName, formatColumns(columns))
+		fmt.Fprintf(file, "\t\tquery_%s := txClient.tx.Query(%q, columns_%s)\n", pascalModelName, toSnakeCase(modelName), pascalModelName)
+		if primaryKey != "" {
+			fmt.Fprintf(file, "\t\tquery_%s.SetPrimaryKey(%q)\n", pascalModelName, primaryKey)
+		}
+		if hasDeleted {
+			fmt.Fprintf(file, "\t\tquery_%s.SetHasDeleted(true)\n", pascalModelName)
+		}
+		fmt.Fprintf(file, "\t\tmodelType_%s := reflect.TypeOf(models.%s{})\n", pascalModelName, pascalModelName)
+		fmt.Fprintf(file, "\t\tquery_%s.SetModelType(modelType_%s)\n", pascalModelName, pascalModelName)
+		fmt.Fprintf(file, "\t\ttxClient.%s = &queries.%sQuery{Query: query_%s}\n", pascalModelName, pascalModelName, pascalModelName)
+	}
+
 	fmt.Fprintf(file, "\t\treturn fn(txClient)\n")
 	fmt.Fprintf(file, "\t})\n")
 	fmt.Fprintf(file, "}\n\n")

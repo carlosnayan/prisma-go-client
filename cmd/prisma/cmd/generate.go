@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -10,7 +12,7 @@ import (
 	"github.com/carlosnayan/prisma-go-client/internal/parser"
 )
 
-const version = "0.1.5"
+const version = "0.1.6"
 
 var generateCmd = &cli.Command{
 	Name:  "generate",
@@ -109,6 +111,51 @@ func runGenerate(args []string) error {
 
 	// Show success message
 	fmt.Printf("\n✔ Generated Prisma Client (%s) to %s in %dms\n", version, outputDir, elapsedMs)
+
+	// Atualizar cache do Go para que staticcheck e outras ferramentas reconheçam os novos pacotes
+	fmt.Println("Updating Go module cache...")
+	cmd := exec.Command("go", "mod", "tidy")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	// Executar no diretório do projeto
+	wd, err := filepath.Abs(".")
+	if err == nil {
+		cmd.Dir = wd
+	}
+
+	if err := cmd.Run(); err != nil {
+		// Não falhar se go mod tidy falhar, apenas avisar
+		fmt.Printf("⚠ Warning: failed to run 'go mod tidy': %v\n", err)
+		fmt.Println("  You may need to run 'go mod tidy' manually for staticcheck to recognize new packages.")
+	} else {
+		fmt.Println("✔ Go module cache updated")
+	}
+
+	// Após go mod tidy, forçar reconhecimento dos pacotes gerados
+	fmt.Println("Refreshing Go package cache...")
+	refreshCommands := []struct {
+		name string
+		args []string
+		dir  string
+	}{
+		{"go list", []string{"go", "list", "./..."}, absoluteOutputDir},
+		{"go build", []string{"go", "build", "./..."}, absoluteOutputDir},
+	}
+
+	for _, cmdInfo := range refreshCommands {
+		cmd := exec.Command(cmdInfo.args[0], cmdInfo.args[1:]...)
+		cmd.Stdout = os.Stderr // Redirecionar para stderr para não poluir stdout
+		cmd.Stderr = os.Stderr
+		cmd.Dir = cmdInfo.dir
+
+		if err := cmd.Run(); err != nil {
+			// Não falhar, apenas avisar
+			fmt.Printf("⚠ Warning: failed to run '%s': %v\n", cmdInfo.name, err)
+		}
+	}
+	fmt.Println("✔ Go package cache refreshed")
+
 	fmt.Println()
 
 	return nil

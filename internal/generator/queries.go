@@ -517,9 +517,18 @@ func generatePrismaBuilders(file *os.File, model *parser.Model) {
 			continue
 		}
 		fieldName := toPascalCase(field.Name)
-		dbFieldName := field.Name
+		// Get the actual database column name (check for @map attribute)
+		columnName := field.Name
+		for _, attr := range field.Attributes {
+			if attr.Name == "map" && len(attr.Arguments) > 0 {
+				if val, ok := attr.Arguments[0].Value.(string); ok {
+					columnName = val
+					break
+				}
+			}
+		}
 		fmt.Fprintf(file, "\t\tif b.selectFields.%s {\n", fieldName)
-		fmt.Fprintf(file, "\t\t\tselectedFields = append(selectedFields, %q)\n", dbFieldName)
+		fmt.Fprintf(file, "\t\t\tselectedFields = append(selectedFields, %q)\n", columnName)
 		fmt.Fprintf(file, "\t\t}\n")
 	}
 	fmt.Fprintf(file, "\t\tif len(selectedFields) > 0 {\n")
@@ -573,9 +582,18 @@ func generatePrismaBuilders(file *os.File, model *parser.Model) {
 			continue
 		}
 		fieldName := toPascalCase(field.Name)
-		dbFieldName := field.Name
+		// Get the actual database column name (check for @map attribute)
+		columnName := field.Name
+		for _, attr := range field.Attributes {
+			if attr.Name == "map" && len(attr.Arguments) > 0 {
+				if val, ok := attr.Arguments[0].Value.(string); ok {
+					columnName = val
+					break
+				}
+			}
+		}
 		fmt.Fprintf(file, "\t\tif b.selectFields.%s {\n", fieldName)
-		fmt.Fprintf(file, "\t\t\tselectedFields = append(selectedFields, %q)\n", dbFieldName)
+		fmt.Fprintf(file, "\t\t\tselectedFields = append(selectedFields, %q)\n", columnName)
 		fmt.Fprintf(file, "\t\t}\n")
 	}
 	fmt.Fprintf(file, "\t\tif len(selectedFields) > 0 {\n")
@@ -724,11 +742,19 @@ func generatePrismaBuilders(file *os.File, model *parser.Model) {
 			continue
 		}
 		fieldName := toPascalCase(field.Name)
-		// Check if field is optional (pointer) in CreateInput
+		// Check if field is optional (pointer) in both model and input
 		isOptional := field.Type != nil && field.Type.IsOptional
 		if isOptional {
 			fmt.Fprintf(file, "\tif b.data.%s != nil {\n", fieldName)
-			fmt.Fprintf(file, "\t\tresult.%s = *b.data.%s\n", fieldName, fieldName)
+			// Special handling for types that don't use pointers in models (json.RawMessage, []byte)
+			// but are pointers in inputs
+			if isNonPointerOptionalType(field.Type) {
+				// Model doesn't use pointer, input does - need to dereference
+				fmt.Fprintf(file, "\t\tresult.%s = *b.data.%s\n", fieldName, fieldName)
+			} else {
+				// Both model and input use pointers - copy pointer directly
+				fmt.Fprintf(file, "\t\tresult.%s = b.data.%s\n", fieldName, fieldName)
+			}
 			fmt.Fprintf(file, "\t}\n")
 		} else {
 			// Field is required (not a pointer), assign directly
@@ -741,6 +767,16 @@ func generatePrismaBuilders(file *os.File, model *parser.Model) {
 	fmt.Fprintf(file, "\t}\n")
 	fmt.Fprintf(file, "\treturn result, nil\n")
 	fmt.Fprintf(file, "}\n\n")
+}
+
+// isNonPointerOptionalType checks if a field type doesn't use pointers in models
+// even when optional (json.RawMessage and []byte)
+func isNonPointerOptionalType(fieldType *parser.FieldType) bool {
+	if fieldType == nil {
+		return false
+	}
+	// Json and Bytes types don't use pointers in models even when optional
+	return fieldType.Name == "Json" || fieldType.Name == "Bytes"
 }
 
 // determineQueryImports determines which imports are needed for query files
