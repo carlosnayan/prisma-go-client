@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/carlosnayan/prisma-go-client/cli"
 	"github.com/carlosnayan/prisma-go-client/internal/migrations"
@@ -140,6 +141,53 @@ Useful for resolving conflicts or fixing inconsistent state.`,
 	Run: runMigrateResolve,
 }
 
+// normalizeMigrationName normalizes a migration name by:
+// - Converting to lowercase
+// - Trimming whitespace
+// - Replacing spaces with underscores
+// - Removing invalid special characters (keeps only letters, numbers, and underscores)
+// - Removing consecutive duplicate underscores
+// - Removing leading and trailing underscores
+// - Ensuring the result is not empty
+func normalizeMigrationName(name string) string {
+	// Trim whitespace
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+
+	// Convert to lowercase
+	name = strings.ToLower(name)
+
+	// Replace spaces and hyphens with underscores
+	name = strings.ReplaceAll(name, " ", "_")
+	name = strings.ReplaceAll(name, "-", "_")
+
+	// Remove invalid characters (keep only letters, numbers, and underscores)
+	var builder strings.Builder
+	for _, r := range name {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' {
+			builder.WriteRune(r)
+		}
+	}
+	name = builder.String()
+
+	// Remove consecutive duplicate underscores
+	for strings.Contains(name, "__") {
+		name = strings.ReplaceAll(name, "__", "_")
+	}
+
+	// Remove leading and trailing underscores
+	name = strings.Trim(name, "_")
+
+	// If empty after normalization, return a default value
+	if name == "" {
+		return "migration"
+	}
+
+	return name
+}
+
 func runMigrateDev(args []string) error {
 	if err := checkProjectRoot(); err != nil {
 		return err
@@ -160,6 +208,12 @@ func runMigrateDev(args []string) error {
 		if migrationName == "" {
 			return fmt.Errorf("migration name is required")
 		}
+	}
+
+	// Normalize migration name (convert spaces to underscores, lowercase, etc.)
+	migrationName = normalizeMigrationName(migrationName)
+	if migrationName == "" {
+		return fmt.Errorf("migration name is required")
 	}
 
 	// Parse schema
@@ -202,7 +256,7 @@ func runMigrateDev(args []string) error {
 	dbSchema, err := migrations.IntrospectDatabase(db, provider)
 	if err != nil {
 		// If introspection fails, create everything from scratch
-		fmt.Println("Warning: Could not introspect database, creating full migration")
+		fmt.Println(Warning("Warning: Could not introspect database, creating full migration"))
 		diff, err := migrations.SchemaToSQL(schema, provider)
 		if err != nil {
 			return fmt.Errorf("error generating SQL: %w", err)
@@ -226,7 +280,7 @@ func runMigrateDev(args []string) error {
 			len(diff.IndexesToDrop) > 0
 
 		if !hasChanges {
-			fmt.Println("No changes detected in schema")
+			fmt.Println(Info("No changes detected in schema"))
 			return nil
 		}
 
@@ -237,7 +291,7 @@ func runMigrateDev(args []string) error {
 		}
 
 		if sql == "" || strings.TrimSpace(sql) == "" {
-			fmt.Println("No changes detected in schema")
+			fmt.Println(Info("No changes detected in schema"))
 			return nil
 		}
 	}
@@ -292,10 +346,10 @@ func runMigrateDeploy(args []string) error {
 	// Show config and schema info (similar to Prisma)
 	configPath := getConfigPath()
 	fmt.Println()
-	fmt.Printf("Loaded Prisma config from %s.\n", configPath)
+	fmt.Printf("%s\n", Info(fmt.Sprintf("Loaded Prisma config from %s.", configPath)))
 
 	schemaPath := getSchemaPath()
-	fmt.Printf("Prisma schema loaded from %s\n", schemaPath)
+	fmt.Printf("%s\n", Info(fmt.Sprintf("Prisma schema loaded from %s", schemaPath)))
 
 	// Get database URL and parse info
 	dbURL := cfg.GetDatabaseURL()
@@ -304,8 +358,8 @@ func runMigrateDeploy(args []string) error {
 	}
 
 	dbInfo := parseDatabaseURL(dbURL)
-	fmt.Printf("Datasource \"db\": %s database \"%s\", schema \"%s\" at \"%s\"\n",
-		dbInfo.Provider, dbInfo.Database, dbInfo.Schema, dbInfo.Host)
+	fmt.Printf("%s\n", Info(fmt.Sprintf("Datasource \"db\": %s database \"%s\", schema \"%s\" at \"%s\"",
+		dbInfo.Provider, dbInfo.Database, dbInfo.Schema, dbInfo.Host)))
 
 	// Connect to database with better error message
 	db, err := migrations.ConnectDatabase(dbURL)
@@ -339,7 +393,7 @@ func runMigrateDeploy(args []string) error {
 
 	// Apply each migration
 	for _, migration := range pending {
-		fmt.Printf("Applying migration `%s`\n", migration.Name)
+		fmt.Printf("Applying migration `%s`\n", MigrationName(migration.Name))
 		if err := manager.ApplyMigration(migration); err != nil {
 			return fmt.Errorf("error applying migration %s: %w", migration.Name, err)
 		}
@@ -351,11 +405,11 @@ func runMigrateDeploy(args []string) error {
 	fmt.Println()
 	fmt.Println("migrations/")
 	for _, migration := range pending {
-		fmt.Printf("  └─ %s/\n", migration.Name)
+		fmt.Printf("  └─ %s/\n", MigrationName(migration.Name+"/"))
 		fmt.Printf("    └─ migration.sql\n")
 	}
 	fmt.Println()
-	fmt.Println("All migrations have been successfully applied.")
+	fmt.Println(Success("All migrations have been successfully applied."))
 	return nil
 }
 
@@ -372,10 +426,10 @@ func runMigrateReset(args []string) error {
 	// Show config and schema info (similar to Prisma)
 	configPath := getConfigPath()
 	fmt.Println()
-	fmt.Printf("Loaded Prisma config from %s.\n", configPath)
+	fmt.Printf("%s\n", Info(fmt.Sprintf("Loaded Prisma config from %s.", configPath)))
 
 	schemaPath := getSchemaPath()
-	fmt.Printf("Prisma schema loaded from %s\n", schemaPath)
+	fmt.Printf("%s\n", Info(fmt.Sprintf("Prisma schema loaded from %s", schemaPath)))
 
 	// Get database URL and parse info
 	dbURL := cfg.GetDatabaseURL()
@@ -384,11 +438,12 @@ func runMigrateReset(args []string) error {
 	}
 
 	dbInfo := parseDatabaseURL(dbURL)
-	fmt.Printf("Datasource \"db\": %s database \"%s\", schema \"%s\" at \"%s\"\n",
-		dbInfo.Provider, dbInfo.Database, dbInfo.Schema, dbInfo.Host)
+	fmt.Printf("%s\n", Info(fmt.Sprintf("Datasource \"db\": %s database \"%s\", schema \"%s\" at \"%s\"",
+		dbInfo.Provider, dbInfo.Database, dbInfo.Schema, dbInfo.Host)))
 
 	// Confirm destructive action
-	fmt.Print("\n✔ Are you sure you want to reset your database? All data will be lost. › (y/N)")
+	fmt.Printf("\n%s Are you sure you want to reset your database? %s %s",
+		Prompt("?"), Warning("All data will be lost."), PromptText("› (y/N)"))
 	reader := bufio.NewReader(os.Stdin)
 	confirm, _ := reader.ReadString('\n')
 	confirm = strings.TrimSpace(strings.ToLower(confirm))
@@ -466,7 +521,7 @@ func runMigrateReset(args []string) error {
 
 	// Apply all migrations
 	for _, migration := range local {
-		fmt.Printf("Applying migration `%s`\n", migration.Name)
+		fmt.Printf("Applying migration `%s`\n", MigrationName(migration.Name))
 		if err := manager.ApplyMigration(migration); err != nil {
 			return fmt.Errorf("error applying migration %s: %w", migration.Name, err)
 		}
@@ -483,7 +538,7 @@ func runMigrateReset(args []string) error {
 
 	// Show success message and migrations tree
 	fmt.Println()
-	fmt.Println("Database reset successful")
+	fmt.Println(Success("Database reset successful"))
 	fmt.Println()
 
 	if len(local) > 0 {
@@ -491,7 +546,7 @@ func runMigrateReset(args []string) error {
 		fmt.Println()
 		fmt.Println("migrations/")
 		for _, migration := range local {
-			fmt.Printf("  └─ %s/\n", migration.Name)
+			fmt.Printf("  └─ %s/\n", MigrationName(migration.Name+"/"))
 			fmt.Printf("    └─ migration.sql\n")
 		}
 		fmt.Println()
@@ -544,10 +599,10 @@ func runMigrateStatus(args []string) error {
 		appliedMap[name] = true
 	}
 
-	fmt.Println("Migration Status")
+	fmt.Println(Info("Migration Status"))
 	fmt.Println()
-	fmt.Printf("Local migrations: %d\n", len(local))
-	fmt.Printf("Applied migrations: %d\n\n", len(applied))
+	fmt.Printf("%s\n", Info(fmt.Sprintf("Local migrations: %d", len(local))))
+	fmt.Printf("%s\n\n", Info(fmt.Sprintf("Applied migrations: %d", len(applied))))
 
 	// Check divergences between schema and database
 	schemaPath := getSchemaPath()
@@ -565,15 +620,15 @@ func runMigrateStatus(args []string) error {
 					len(diff.IndexesToDrop) > 0
 
 				if hasDivergences {
-					fmt.Println("Warning: Divergences detected between schema.prisma and database:")
+					fmt.Println(Warning("Warning: Divergences detected between schema.prisma and database:"))
 					if len(diff.TablesToCreate) > 0 {
-						fmt.Printf("  - %d table(s) to create\n", len(diff.TablesToCreate))
+						fmt.Printf("%s\n", Info(fmt.Sprintf("  - %d table(s) to create", len(diff.TablesToCreate))))
 					}
 					if len(diff.TablesToAlter) > 0 {
-						fmt.Printf("  - %d table(s) to alter\n", len(diff.TablesToAlter))
+						fmt.Printf("%s\n", Info(fmt.Sprintf("  - %d table(s) to alter", len(diff.TablesToAlter))))
 					}
 					if len(diff.TablesToDrop) > 0 {
-						fmt.Printf("  - %d table(s) to remove\n", len(diff.TablesToDrop))
+						fmt.Printf("%s\n", Info(fmt.Sprintf("  - %d table(s) to remove", len(diff.TablesToDrop))))
 					}
 					fmt.Println()
 				}
@@ -582,24 +637,24 @@ func runMigrateStatus(args []string) error {
 	}
 
 	if len(local) == 0 {
-		fmt.Println("Warning: No local migrations found")
+		fmt.Println(Warning("Warning: No local migrations found"))
 		return nil
 	}
 
-	fmt.Println("Migrations:")
+	fmt.Println(Info("Migrations:"))
 	for _, migration := range local {
 		status := "Pending"
 		if appliedMap[migration.Name] {
 			status = "Applied"
 		}
-		fmt.Printf("  %s %s\n", status, migration.Name)
+		fmt.Printf("%s\n", Info(fmt.Sprintf("  %s %s", status, migration.Name)))
 	}
 
 	pending := len(local) - len(applied)
 	if pending > 0 {
-		fmt.Printf("\nWarning: %d pending migration(s)\n", pending)
+		fmt.Printf("\n%s\n", Warning(fmt.Sprintf("Warning: %d pending migration(s)", pending)))
 	} else {
-		fmt.Println("\nAll migrations are applied")
+		fmt.Printf("\n%s\n", Info("All migrations are applied"))
 	}
 
 	return nil
