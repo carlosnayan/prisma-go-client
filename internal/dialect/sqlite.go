@@ -23,6 +23,51 @@ func (d *SQLiteDialect) QuoteString(value string) string {
 }
 
 func (d *SQLiteDialect) MapType(prismaType string, isNullable bool) string {
+	prismaTypeUpper := strings.ToUpper(prismaType)
+	
+	// Se já é um tipo SQL (vem de @db.*), adaptar para SQLite
+	if isSQLType(prismaTypeUpper) {
+		// SQLite tem tipos limitados, mapear para tipos suportados
+		if strings.HasPrefix(prismaTypeUpper, "VARCHAR") || strings.HasPrefix(prismaTypeUpper, "CHAR") ||
+			strings.HasPrefix(prismaTypeUpper, "TEXT") {
+			return "TEXT"
+		}
+		if strings.HasPrefix(prismaTypeUpper, "SMALLINT") || strings.HasPrefix(prismaTypeUpper, "INTEGER") ||
+			strings.HasPrefix(prismaTypeUpper, "INT") || strings.HasPrefix(prismaTypeUpper, "BIGINT") {
+			return "INTEGER"
+		}
+		if strings.HasPrefix(prismaTypeUpper, "REAL") || strings.HasPrefix(prismaTypeUpper, "DOUBLE") ||
+			strings.HasPrefix(prismaTypeUpper, "FLOAT") {
+			return "REAL"
+		}
+		if strings.HasPrefix(prismaTypeUpper, "DECIMAL") || strings.HasPrefix(prismaTypeUpper, "NUMERIC") {
+			return "NUMERIC"
+		}
+		if strings.HasPrefix(prismaTypeUpper, "DATE") || strings.HasPrefix(prismaTypeUpper, "TIME") ||
+			strings.HasPrefix(prismaTypeUpper, "TIMESTAMP") {
+			return "TEXT" // SQLite armazena datas como TEXT
+		}
+		if strings.HasPrefix(prismaTypeUpper, "BOOLEAN") || strings.HasPrefix(prismaTypeUpper, "BOOL") {
+			return "INTEGER" // SQLite usa 0/1
+		}
+		if strings.HasPrefix(prismaTypeUpper, "JSON") || strings.HasPrefix(prismaTypeUpper, "JSONB") {
+			return "TEXT" // SQLite armazena JSON como TEXT
+		}
+		if strings.HasPrefix(prismaTypeUpper, "BYTEA") || strings.HasPrefix(prismaTypeUpper, "BLOB") {
+			return "BLOB"
+		}
+		if strings.HasPrefix(prismaTypeUpper, "UUID") {
+			return "TEXT" // SQLite não tem tipo UUID nativo
+		}
+		// Tipos não suportados em SQLite
+		if strings.HasPrefix(prismaTypeUpper, "INET") || strings.HasPrefix(prismaTypeUpper, "CIDR") ||
+			strings.HasPrefix(prismaTypeUpper, "MONEY") || strings.HasPrefix(prismaTypeUpper, "BIT") ||
+			strings.HasPrefix(prismaTypeUpper, "VARBIT") {
+			return "TEXT" // Fallback
+		}
+		return prismaType
+	}
+	
 	// SQLite tem tipos dinâmicos, mas mapeamos para tipos recomendados
 	switch strings.ToLower(prismaType) {
 	case "string":

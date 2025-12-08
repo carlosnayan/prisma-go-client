@@ -23,6 +23,13 @@ func (d *PostgreSQLDialect) QuoteString(value string) string {
 }
 
 func (d *PostgreSQLDialect) MapType(prismaType string, isNullable bool) string {
+	prismaTypeUpper := strings.ToUpper(prismaType)
+	
+	// Se já é um tipo SQL (vem de @db.*), retornar como está
+	if isSQLType(prismaTypeUpper) {
+		return prismaType
+	}
+	
 	switch strings.ToLower(prismaType) {
 	case "string":
 		return "TEXT"
@@ -45,10 +52,6 @@ func (d *PostgreSQLDialect) MapType(prismaType string, isNullable bool) string {
 	case "uuid":
 		return "UUID"
 	default:
-		// Se começar com VARCHAR, retornar como está (já vem do @db.VarChar)
-		if strings.HasPrefix(strings.ToUpper(prismaType), "VARCHAR") {
-			return prismaType
-		}
 		return "TEXT"
 	}
 }
@@ -111,3 +114,4 @@ func (d *PostgreSQLDialect) GetLimitOffsetSyntax(limit, offset int) string {
 	}
 	return ""
 }
+

@@ -10,17 +10,30 @@ import (
 
 // SchemaDiff represents differences between schema and database
 type SchemaDiff struct {
-	TablesToCreate  []TableDefinition
-	TablesToAlter   []TableAlteration
-	TablesToDrop    []string
-	IndexesToCreate []IndexDefinition
-	IndexesToDrop   []string
+	TablesToCreate     []TableDefinition
+	TablesToAlter      []TableAlteration
+	TablesToDrop       []string
+	IndexesToCreate    []IndexDefinition
+	IndexesToDrop      []string
+	ForeignKeysToCreate []ForeignKeyDefinition
+}
+
+// ForeignKeyDefinition represents a foreign key constraint
+type ForeignKeyDefinition struct {
+	Name             string   // Constraint name (e.g., "table_column_fkey")
+	TableName        string   // Table containing the FK
+	Columns          []string // Local columns (fields)
+	ReferencedTable  string   // Referenced table
+	ReferencedColumns []string // Referenced columns (references)
+	OnDelete         string   // "CASCADE", "SET NULL", "RESTRICT", "NO ACTION"
+	OnUpdate         string   // "CASCADE", "SET NULL", "RESTRICT", "NO ACTION"
 }
 
 // TableDefinition represents a table to be created
 type TableDefinition struct {
-	Name    string
-	Columns []ColumnDefinition
+	Name        string
+	Columns     []ColumnDefinition
+	CompositePK []string // For composite primary keys from @@id([field1, field2])
 }
 
 // ColumnDefinition represents a column
@@ -121,12 +134,34 @@ func GenerateMigrationSQL(diff *SchemaDiff, provider string) (string, error) {
 
 		sql.WriteString(strings.Join(columns, ",\n"))
 
-		if len(primaryKeys) > 0 {
+		// Handle composite primary key from @@id
+		if len(table.CompositePK) > 0 {
+			quotedPKs := make([]string, len(table.CompositePK))
+			for i, pk := range table.CompositePK {
+				quotedPKs[i] = d.QuoteIdentifier(pk)
+			}
+			if provider == "mysql" {
+				sql.WriteString(fmt.Sprintf(",\n  PRIMARY KEY (%s)", strings.Join(quotedPKs, ", ")))
+			} else {
+				sql.WriteString(fmt.Sprintf(",\n  CONSTRAINT %s PRIMARY KEY (%s)", 
+					d.QuoteIdentifier(table.Name+"_pkey"), 
+					strings.Join(quotedPKs, ", ")))
+			}
+		} else if len(primaryKeys) > 0 {
+			// Single column primary key
 			quotedPKs := make([]string, len(primaryKeys))
 			for i, pk := range primaryKeys {
 				quotedPKs[i] = d.QuoteIdentifier(pk)
 			}
-			sql.WriteString(fmt.Sprintf(",\n  PRIMARY KEY (%s)", strings.Join(quotedPKs, ", ")))
+			// Generate PRIMARY KEY as named CONSTRAINT (PostgreSQL/SQLite style)
+			// MySQL doesn't support named constraints for PRIMARY KEY in CREATE TABLE
+			if provider == "mysql" {
+				sql.WriteString(fmt.Sprintf(",\n  PRIMARY KEY (%s)", strings.Join(quotedPKs, ", ")))
+			} else {
+				sql.WriteString(fmt.Sprintf(",\n  CONSTRAINT %s PRIMARY KEY (%s)", 
+					d.QuoteIdentifier(table.Name+"_pkey"), 
+					strings.Join(quotedPKs, ", ")))
+			}
 		}
 
 		sql.WriteString("\n);\n\n")
@@ -184,23 +219,94 @@ func GenerateMigrationSQL(diff *SchemaDiff, provider string) (string, error) {
 		sql.WriteString(fmt.Sprintf("DROP INDEX %s;\n", quoteIdentifier(idxName, provider)))
 	}
 
+	// Add foreign keys (after tables and indexes are created)
+	for _, fk := range diff.ForeignKeysToCreate {
+		quotedCols := make([]string, len(fk.Columns))
+		for i, col := range fk.Columns {
+			quotedCols[i] = d.QuoteIdentifier(col)
+		}
+		quotedRefCols := make([]string, len(fk.ReferencedColumns))
+		for i, col := range fk.ReferencedColumns {
+			quotedRefCols[i] = d.QuoteIdentifier(col)
+		}
+
+		onDelete := fk.OnDelete
+		if onDelete == "" {
+			onDelete = "CASCADE" // Default
+		}
+		onUpdate := fk.OnUpdate
+		if onUpdate == "" {
+			onUpdate = "CASCADE" // Default
+		}
+
+		// Generate foreign key constraint
+		sql.WriteString(fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s) ON DELETE %s ON UPDATE %s",
+			d.QuoteIdentifier(fk.TableName),
+			d.QuoteIdentifier(fk.Name),
+			strings.Join(quotedCols, ", "),
+			d.QuoteIdentifier(fk.ReferencedTable),
+			strings.Join(quotedRefCols, ", "),
+			onDelete,
+			onUpdate))
+
+		sql.WriteString(";\n")
+	}
+
 	return sql.String(), nil
 }
 
 // SchemaToSQL converts a Prisma schema to SQL (creates everything from scratch)
 // Use CompareSchema to detect incremental changes
 func SchemaToSQL(schema *parser.Schema, provider string) (*SchemaDiff, error) {
-	diff := &SchemaDiff{}
+	diff := &SchemaDiff{
+		ForeignKeysToCreate: []ForeignKeyDefinition{},
+		IndexesToCreate:     []IndexDefinition{},
+	}
+
+	// Create a map of model names for quick lookup
+	modelMap := make(map[string]*parser.Model)
+	for _, model := range schema.Models {
+		modelMap[model.Name] = model
+	}
 
 	for _, model := range schema.Models {
+		// Use @@map if present, otherwise use model name
+		tableName := getTableNameFromModel(model)
 		table := TableDefinition{
-			Name:    model.Name,
+			Name:    tableName,
 			Columns: []ColumnDefinition{},
 		}
 
 		for _, field := range model.Fields {
+			// Skip relation fields that have @relation with fields/references
+			// These are the foreign key columns, not the relation fields themselves
+			isRelationField := false
+			for _, attr := range field.Attributes {
+				if attr.Name == "relation" {
+					// Check if this relation has fields/references (it's a foreign key)
+					hasFields := false
+					for _, arg := range attr.Arguments {
+						if arg.Name == "fields" {
+							hasFields = true
+							break
+						}
+					}
+					// If it doesn't have fields, it's the "other side" of the relation (array field)
+					if !hasFields {
+						isRelationField = true
+						break
+					}
+				}
+			}
+
+			if isRelationField {
+				continue // Skip relation fields (they don't create columns)
+			}
+
+			// Use @map if present, otherwise use field name
+			columnName := getColumnNameFromField(field)
 			col := ColumnDefinition{
-				Name:       field.Name,
+				Name:       columnName,
 				Type:       field.Type.Name,
 				IsNullable: field.Type.IsOptional,
 			}
@@ -218,6 +324,112 @@ func SchemaToSQL(schema *parser.Schema, provider string) (*SchemaDiff, error) {
 						// Extract default value
 						col.DefaultValue = extractDefaultValue(attr.Arguments[0])
 					}
+				case "updatedAt":
+					// @updatedAt doesn't need special SQL, but mark it for reference
+					// Usually has @default(now()) which is already handled
+				case "db.Uuid", "db.UUID":
+					col.Type = "UUID"
+				case "db.VarChar":
+					if len(attr.Arguments) > 0 {
+						size := getNumericValue(attr.Arguments[0].Value)
+						if size != "" {
+							col.Type = "VARCHAR(" + size + ")"
+						} else {
+							col.Type = "VARCHAR(255)"
+						}
+					} else {
+						col.Type = "VARCHAR(255)"
+					}
+				case "db.Text":
+					col.Type = "TEXT"
+				case "db.Char":
+					if len(attr.Arguments) > 0 {
+						size := getNumericValue(attr.Arguments[0].Value)
+						if size != "" {
+							col.Type = "CHAR(" + size + ")"
+						} else {
+							col.Type = "CHAR(1)"
+						}
+					} else {
+						col.Type = "CHAR(1)"
+					}
+				case "db.Date":
+					col.Type = "DATE"
+				case "db.Time":
+					col.Type = "TIME"
+				case "db.Timestamp":
+					col.Type = "TIMESTAMP"
+				case "db.Timestamptz":
+					col.Type = "TIMESTAMPTZ"
+				case "db.Decimal":
+					if len(attr.Arguments) >= 2 {
+						precision := getNumericValue(attr.Arguments[0].Value)
+						scale := getNumericValue(attr.Arguments[1].Value)
+						if precision != "" && scale != "" {
+							col.Type = "DECIMAL(" + precision + "," + scale + ")"
+						} else if precision != "" {
+							col.Type = "DECIMAL(" + precision + ",0)"
+						} else {
+							col.Type = "DECIMAL(65,30)"
+						}
+					} else if len(attr.Arguments) == 1 {
+						precision := getNumericValue(attr.Arguments[0].Value)
+						if precision != "" {
+							col.Type = "DECIMAL(" + precision + ",0)"
+						} else {
+							col.Type = "DECIMAL(65,30)"
+						}
+					} else {
+						col.Type = "DECIMAL(65,30)"
+					}
+				case "db.SmallInt":
+					col.Type = "SMALLINT"
+				case "db.Integer":
+					col.Type = "INTEGER"
+				case "db.BigInt":
+					col.Type = "BIGINT"
+				case "db.Real":
+					col.Type = "REAL"
+				case "db.DoublePrecision":
+					col.Type = "DOUBLE PRECISION"
+				case "db.Boolean":
+					col.Type = "BOOLEAN"
+				case "db.Json":
+					col.Type = "JSON"
+				case "db.JsonB":
+					col.Type = "JSONB"
+				case "db.Bytes":
+					col.Type = "BYTEA" // Will be mapped per provider
+				case "db.ByteA":
+					col.Type = "BYTEA"
+				case "db.Inet":
+					col.Type = "INET"
+				case "db.Cidr":
+					col.Type = "CIDR"
+				case "db.Money":
+					col.Type = "MONEY"
+				case "db.Bit":
+					if len(attr.Arguments) > 0 {
+						size := getNumericValue(attr.Arguments[0].Value)
+						if size != "" {
+							col.Type = "BIT(" + size + ")"
+						} else {
+							col.Type = "BIT(1)"
+						}
+					} else {
+						col.Type = "BIT(1)"
+					}
+				case "db.VarBit":
+					if len(attr.Arguments) > 0 {
+						size := getNumericValue(attr.Arguments[0].Value)
+						if size != "" {
+							col.Type = "VARBIT(" + size + ")"
+						} else {
+							col.Type = "VARBIT"
+						}
+					} else {
+						col.Type = "VARBIT"
+					}
 				}
 			}
 
@@ -227,7 +439,393 @@ func SchemaToSQL(schema *parser.Schema, provider string) (*SchemaDiff, error) {
 		diff.TablesToCreate = append(diff.TablesToCreate, table)
 	}
 
+	// Process relations and @@unique attributes
+	processRelationsAndUniqueForSchema(schema, diff, modelMap)
+
 	return diff, nil
+}
+
+// processRelationsAndUniqueForSchema processes @relation, @@unique, and @@index for SchemaToSQL
+func processRelationsAndUniqueForSchema(schema *parser.Schema, diff *SchemaDiff, modelMap map[string]*parser.Model) {
+	// Process each model
+		for _, model := range schema.Models {
+		// Get mapped table name
+		tableName := getTableNameFromModel(model)
+		
+		// Find the table definition to add composite PK if needed
+		var tableDef *TableDefinition
+		for i := range diff.TablesToCreate {
+			if diff.TablesToCreate[i].Name == tableName {
+				tableDef = &diff.TablesToCreate[i]
+				break
+			}
+		}
+		
+		// Process @@id attribute (composite primary key)
+		for _, attr := range model.Attributes {
+			if attr.Name == "id" {
+				// Extract fields from @@id([field1, field2])
+				var pkFields []string
+				for _, arg := range attr.Arguments {
+					if arg.Name == "" {
+						if fields, ok := arg.Value.([]interface{}); ok {
+							for _, field := range fields {
+								if fieldStr, ok := field.(string); ok {
+									pkFields = append(pkFields, strings.Trim(fieldStr, `"`))
+								}
+							}
+						}
+					}
+				}
+				if len(pkFields) > 0 && tableDef != nil {
+					// Map column names
+					mappedPKFields := make([]string, len(pkFields))
+					for i, pkField := range pkFields {
+						for _, field := range model.Fields {
+							if field.Name == pkField {
+								mappedPKFields[i] = getColumnNameFromField(field)
+								break
+							}
+						}
+						if mappedPKFields[i] == "" {
+							mappedPKFields[i] = pkField // Fallback
+						}
+					}
+					tableDef.CompositePK = mappedPKFields
+					// Remove individual PK flags from columns
+					for i := range tableDef.Columns {
+						for _, pkField := range mappedPKFields {
+							if tableDef.Columns[i].Name == pkField {
+								tableDef.Columns[i].IsPrimaryKey = false
+							}
+						}
+					}
+				}
+			}
+		}
+		
+		// Process @@unique attributes
+		for _, attr := range model.Attributes {
+			if attr.Name == "unique" {
+				indexDef := extractUniqueIndex(tableName, attr)
+				if indexDef != nil {
+					// Map column names in index
+					mappedColumns := make([]string, len(indexDef.Columns))
+					for i, col := range indexDef.Columns {
+						// Find field and get mapped name
+						for _, field := range model.Fields {
+							if field.Name == col {
+								mappedColumns[i] = getColumnNameFromField(field)
+								break
+							}
+						}
+						if mappedColumns[i] == "" {
+							mappedColumns[i] = col // Fallback to original name
+						}
+					}
+					indexDef.Columns = mappedColumns
+					diff.IndexesToCreate = append(diff.IndexesToCreate, *indexDef)
+				}
+			}
+			// Process @@index attributes (non-unique indexes)
+			if attr.Name == "index" {
+				indexDef := extractIndex(tableName, attr)
+				if indexDef != nil {
+					// Map column names in index
+					mappedColumns := make([]string, len(indexDef.Columns))
+					for i, col := range indexDef.Columns {
+						// Find field and get mapped name
+						for _, field := range model.Fields {
+							if field.Name == col {
+								mappedColumns[i] = getColumnNameFromField(field)
+								break
+							}
+						}
+						if mappedColumns[i] == "" {
+							mappedColumns[i] = col // Fallback to original name
+						}
+					}
+					indexDef.Columns = mappedColumns
+					diff.IndexesToCreate = append(diff.IndexesToCreate, *indexDef)
+				}
+			}
+		}
+
+		// Process @relation attributes to extract foreign keys
+		for _, field := range model.Fields {
+			for _, attr := range field.Attributes {
+				if attr.Name == "relation" {
+					fkDef := extractForeignKey(tableName, field, attr, modelMap)
+					if fkDef != nil {
+						// Map column names in foreign key
+						mappedColumns := make([]string, len(fkDef.Columns))
+						for i, col := range fkDef.Columns {
+							// Find field and get mapped name
+							for _, f := range model.Fields {
+								if f.Name == col {
+									mappedColumns[i] = getColumnNameFromField(f)
+									break
+								}
+							}
+							if mappedColumns[i] == "" {
+								mappedColumns[i] = col // Fallback to original name
+							}
+						}
+						fkDef.Columns = mappedColumns
+						// Map referenced columns if referenced table has @@map
+						if refModel, exists := modelMap[fkDef.ReferencedTable]; exists {
+							fkDef.ReferencedTable = getTableNameFromModel(refModel)
+							// Map referenced column names
+							mappedRefColumns := make([]string, len(fkDef.ReferencedColumns))
+							for i, refCol := range fkDef.ReferencedColumns {
+								// Find field in referenced model and get mapped name
+								for _, refField := range refModel.Fields {
+									if refField.Name == refCol {
+										mappedRefColumns[i] = getColumnNameFromField(refField)
+										break
+									}
+								}
+								if mappedRefColumns[i] == "" {
+									mappedRefColumns[i] = refCol // Fallback to original name
+								}
+							}
+							fkDef.ReferencedColumns = mappedRefColumns
+						}
+						diff.ForeignKeysToCreate = append(diff.ForeignKeysToCreate, *fkDef)
+					}
+				}
+			}
+		}
+	}
+}
+
+// extractUniqueIndex extracts a unique index from @@unique attribute
+// tableName should already be the mapped table name
+func extractUniqueIndex(tableName string, attr *parser.Attribute) *IndexDefinition {
+	var columns []string
+	var indexName string
+
+	// Extract fields from the unique attribute
+	// @@unique([field1, field2], map: "index_name")
+	for _, arg := range attr.Arguments {
+		if arg.Name == "map" {
+			if name, ok := arg.Value.(string); ok {
+				indexName = strings.Trim(name, `"`)
+			}
+		} else if arg.Name == "" {
+			// First unnamed argument should be the array of fields
+			if fields, ok := arg.Value.([]interface{}); ok {
+				for _, field := range fields {
+					if fieldStr, ok := field.(string); ok {
+						columns = append(columns, strings.Trim(fieldStr, `"`))
+					}
+				}
+			}
+		}
+	}
+
+	// If no fields found, try to get from first argument (might be array without name)
+	if len(columns) == 0 && len(attr.Arguments) > 0 {
+		firstArg := attr.Arguments[0]
+		if firstArg.Name == "" {
+			if fields, ok := firstArg.Value.([]interface{}); ok {
+				for _, field := range fields {
+					if fieldStr, ok := field.(string); ok {
+						columns = append(columns, strings.Trim(fieldStr, `"`))
+					}
+				}
+			}
+		}
+	}
+
+	if len(columns) == 0 {
+		return nil
+	}
+
+	// Generate index name if not provided
+	if indexName == "" {
+		if len(columns) == 1 {
+			indexName = fmt.Sprintf("%s_%s_key", tableName, columns[0])
+		} else {
+			indexName = fmt.Sprintf("%s_%s_key", tableName, columns[0])
+		}
+	}
+
+	return &IndexDefinition{
+		Name:      indexName,
+		TableName: tableName,
+		Columns:   columns,
+		IsUnique:  true,
+	}
+}
+
+// extractIndex extracts a non-unique index from @@index attribute
+// tableName should already be the mapped table name
+func extractIndex(tableName string, attr *parser.Attribute) *IndexDefinition {
+	var columns []string
+	var indexName string
+
+	// Extract fields from the index attribute
+	// @@index([field1, field2], map: "index_name")
+	for _, arg := range attr.Arguments {
+		if arg.Name == "map" {
+			if name, ok := arg.Value.(string); ok {
+				indexName = strings.Trim(name, `"`)
+			}
+		} else if arg.Name == "" {
+			// First unnamed argument should be the array of fields
+			if fields, ok := arg.Value.([]interface{}); ok {
+				for _, field := range fields {
+					if fieldStr, ok := field.(string); ok {
+						columns = append(columns, strings.Trim(fieldStr, `"`))
+					}
+				}
+			}
+		}
+	}
+
+	// If no fields found, try to get from first argument (might be array without name)
+	if len(columns) == 0 && len(attr.Arguments) > 0 {
+		firstArg := attr.Arguments[0]
+		if firstArg.Name == "" {
+			if fields, ok := firstArg.Value.([]interface{}); ok {
+				for _, field := range fields {
+					if fieldStr, ok := field.(string); ok {
+						columns = append(columns, strings.Trim(fieldStr, `"`))
+					}
+				}
+			}
+		}
+	}
+
+	if len(columns) == 0 {
+		return nil
+	}
+
+	// Generate index name if not provided
+	if indexName == "" {
+		if len(columns) == 1 {
+			indexName = fmt.Sprintf("%s_%s_idx", tableName, columns[0])
+		} else {
+			indexName = fmt.Sprintf("%s_%s_idx", tableName, columns[0])
+		}
+	}
+
+	return &IndexDefinition{
+		Name:      indexName,
+		TableName: tableName,
+		Columns:   columns,
+		IsUnique:  false, // Non-unique index
+	}
+}
+
+// extractForeignKey extracts foreign key information from @relation attribute
+// Only processes relations that have explicit fields and references (actual foreign keys)
+func extractForeignKey(tableName string, field *parser.ModelField, attr *parser.Attribute, modelMap map[string]*parser.Model) *ForeignKeyDefinition {
+	var fields []string
+	var references []string
+	var referencedTable string
+	onDelete := "CASCADE" // Default
+	onUpdate := "CASCADE" // Default
+
+	// Skip if field is an array (it's the "other side" of the relation)
+	if field.Type != nil && field.Type.IsArray {
+		return nil
+	}
+
+	// Extract fields, references, onDelete, onUpdate from relation attribute
+	hasFields := false
+	hasReferences := false
+	for _, arg := range attr.Arguments {
+		switch arg.Name {
+		case "fields":
+			hasFields = true
+			if fieldList, ok := arg.Value.([]interface{}); ok {
+				for _, f := range fieldList {
+					if fStr, ok := f.(string); ok {
+						fields = append(fields, strings.Trim(fStr, `"`))
+					}
+				}
+			}
+		case "references":
+			hasReferences = true
+			if refList, ok := arg.Value.([]interface{}); ok {
+				for _, r := range refList {
+					if rStr, ok := r.(string); ok {
+						references = append(references, strings.Trim(rStr, `"`))
+					}
+				}
+			}
+		case "onDelete":
+			if delStr, ok := arg.Value.(string); ok {
+				onDelete = normalizeCascadeAction(strings.Trim(delStr, `"`))
+			}
+		case "onUpdate":
+			if updStr, ok := arg.Value.(string); ok {
+				onUpdate = normalizeCascadeAction(strings.Trim(updStr, `"`))
+			}
+		}
+	}
+
+	// Only process if both fields and references are present
+	// This ensures we only create foreign keys for explicit relations
+	if !hasFields || !hasReferences {
+		return nil
+	}
+
+	if len(fields) == 0 || len(references) == 0 {
+		return nil
+	}
+
+	// Determine referenced table from field type
+	if field.Type != nil {
+		referencedTable = field.Type.Name
+	} else {
+		return nil
+	}
+
+	// Validate that referenced table exists
+	if _, exists := modelMap[referencedTable]; !exists {
+		return nil
+	}
+
+	// Generate foreign key constraint name
+	fkName := generateForeignKeyName(tableName, fields)
+
+	return &ForeignKeyDefinition{
+		Name:             fkName,
+		TableName:        tableName,
+		Columns:          fields,
+		ReferencedTable:  referencedTable,
+		ReferencedColumns: references,
+		OnDelete:         onDelete,
+		OnUpdate:         onUpdate,
+	}
+}
+
+// generateForeignKeyName generates a foreign key constraint name
+func generateForeignKeyName(tableName string, columns []string) string {
+	if len(columns) == 1 {
+		return fmt.Sprintf("%s_%s_fkey", tableName, columns[0])
+	}
+	return fmt.Sprintf("%s_%s_fkey", tableName, columns[0])
+}
+
+// normalizeCascadeAction normalizes cascade action values to SQL format
+func normalizeCascadeAction(action string) string {
+	action = strings.ToUpper(action)
+	switch action {
+	case "CASCADE", "Cascade":
+		return "CASCADE"
+	case "SETNULL", "SET_NULL", "SetNull":
+		return "SET NULL"
+	case "RESTRICT", "Restrict":
+		return "RESTRICT"
+	case "NOACTION", "NO_ACTION", "NoAction":
+		return "NO ACTION"
+	default:
+		return action
+	}
 }
 
 // extractDefaultValue extracts default value from an argument
