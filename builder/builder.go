@@ -388,15 +388,21 @@ func (b *TableQueryBuilder) buildQuery(where Where, opts *QueryOptions, single b
 	}
 
 	if !single {
-		if opts != nil && opts.Limit != nil {
-			parts = append(parts, fmt.Sprintf("LIMIT $%d", argIndex))
-			args = append(args, *opts.Limit)
-			argIndex++
-		}
-		if opts != nil && opts.Offset != nil {
-			parts = append(parts, fmt.Sprintf("OFFSET $%d", argIndex))
-			args = append(args, *opts.Offset)
-			argIndex++
+		if opts != nil && (opts.Take != nil || opts.Skip != nil) {
+			limit := 0
+			offset := 0
+			if opts.Take != nil {
+				limit = *opts.Take
+			}
+			if opts.Skip != nil {
+				offset = *opts.Skip
+			}
+			limitOffset := b.dialect.GetLimitOffsetSyntax(limit, offset)
+			if limitOffset != "" {
+				parts = append(parts, limitOffset)
+			}
+			// Note: GetLimitOffsetSyntax already includes the values in the SQL string,
+			// so we don't need to add them to args
 		}
 	} else {
 		parts = append(parts, "LIMIT 1")

@@ -625,15 +625,15 @@ func generateQueryBuilderMethods(file *os.File) {
 	fmt.Fprintf(file, "\treturn q\n")
 	fmt.Fprintf(file, "}\n\n")
 
-	fmt.Fprintf(file, "// Limit sets the LIMIT\n")
-	fmt.Fprintf(file, "func (q *Query) Limit(limit int) *Query {\n")
-	fmt.Fprintf(file, "\tq.limit = &limit\n")
+	fmt.Fprintf(file, "// Take sets the LIMIT\n")
+	fmt.Fprintf(file, "func (q *Query) Take(take int) *Query {\n")
+	fmt.Fprintf(file, "\tq.take = &take\n")
 	fmt.Fprintf(file, "\treturn q\n")
 	fmt.Fprintf(file, "}\n\n")
 
-	fmt.Fprintf(file, "// Offset sets the OFFSET\n")
-	fmt.Fprintf(file, "func (q *Query) Offset(offset int) *Query {\n")
-	fmt.Fprintf(file, "\tq.offset = &offset\n")
+	fmt.Fprintf(file, "// Skip sets the OFFSET\n")
+	fmt.Fprintf(file, "func (q *Query) Skip(skip int) *Query {\n")
+	fmt.Fprintf(file, "\tq.skip = &skip\n")
 	fmt.Fprintf(file, "\treturn q\n")
 	fmt.Fprintf(file, "}\n\n")
 

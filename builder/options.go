@@ -8,11 +8,11 @@ type QueryOptions struct {
 	// OrderBy defines sorting order
 	OrderBy []OrderBy
 
-	// Limit restricts the number of records returned
-	Limit *int
+	// Take restricts the number of records returned
+	Take *int
 
-	// Offset skips a number of records
-	Offset *int
+	// Skip skips a number of records
+	Skip *int
 }
 
 // OrderBy defines sorting for a single field

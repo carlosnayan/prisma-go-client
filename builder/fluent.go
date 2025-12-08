@@ -38,8 +38,8 @@ type Query struct {
 	// Query state
 	whereConditions []whereCondition
 	orderBy         []OrderBy
-	limit           *int
-	offset          *int
+	take            *int
+	skip            *int
 	selectFields    []string
 	groupBy         []string
 	having          []whereCondition
@@ -488,15 +488,15 @@ func (q *Query) Order(order string) *Query {
 	return q
 }
 
-// Limit sets the LIMIT
-func (q *Query) Limit(limit int) *Query {
-	q.limit = &limit
+// Take sets the LIMIT
+func (q *Query) Take(take int) *Query {
+	q.take = &take
 	return q
 }
 
-// Offset sets the OFFSET
-func (q *Query) Offset(offset int) *Query {
-	q.offset = &offset
+// Skip sets the OFFSET
+func (q *Query) Skip(skip int) *Query {
+	q.skip = &skip
 	return q
 }
 
@@ -869,24 +869,22 @@ func (q *Query) buildSelectQuery(single bool) (string, []interface{}) {
 
 	if single {
 		queryBuilder.WriteString(" LIMIT 1")
-	} else if q.limit != nil || q.offset != nil {
+	} else if q.take != nil || q.skip != nil {
 		limit := 0
 		offset := 0
-		if q.limit != nil {
-			limit = *q.limit
+		if q.take != nil {
+			limit = *q.take
 		}
-		if q.offset != nil {
-			offset = *q.offset
+		if q.skip != nil {
+			offset = *q.skip
 		}
 		limitOffset := q.dialect.GetLimitOffsetSyntax(limit, offset)
-		queryBuilder.WriteString(" ")
-		queryBuilder.WriteString(limitOffset)
-		if q.limit != nil {
-			args = append(args, *q.limit)
+		if limitOffset != "" {
+			queryBuilder.WriteString(" ")
+			queryBuilder.WriteString(limitOffset)
 		}
-		if q.offset != nil {
-			args = append(args, *q.offset)
-		}
+		// Note: GetLimitOffsetSyntax already includes the values in the SQL string,
+		// so we don't need to add them to args
 	}
 
 	return queryBuilder.String(), args

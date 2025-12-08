@@ -246,7 +246,7 @@ users, err := client.Users().FindMany().
 ### Pagination
 
 ```go
-// Limit results
+// Take results
 users, err := client.Users().FindMany().
 	Take(10).Exec()
 
@@ -254,7 +254,7 @@ users, err := client.Users().FindMany().
 users, err := client.Users().FindMany().
 	Skip(20).Exec()
 
-// Limit and skip (pagination)
+// Take and skip (pagination)
 page := 1
 pageSize := 10
 users, err := client.Users().FindMany().

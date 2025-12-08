@@ -21,7 +21,7 @@
 //	        "role": builder.In("admin", "user"),
 //	    },
 //	    OrderBy: []builder.OrderBy{{Field: "created_at", Order: "DESC"}},
-//	    Limit: builder.Ptr(10),
+//	    Take: builder.Ptr(10),
 //	})
 //
 // CLI Commands:

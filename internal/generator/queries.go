@@ -132,7 +132,7 @@ func generateQueryMethods(file *os.File, model *parser.Model, schema *parser.Sch
 	// Find
 	fmt.Fprintf(file, "// Find finds all records\n")
 	fmt.Fprintf(file, "// Examples:\n")
-	fmt.Fprintf(file, "//   q.Where(\"active = ?\", true).Order(\"created_at DESC\").Limit(10).Find(ctx, &users)\n")
+	fmt.Fprintf(file, "//   q.Where(\"active = ?\", true).Order(\"created_at DESC\").Take(10).Find(ctx, &users)\n")
 	fmt.Fprintf(file, "//   q.Where(builder.Where{\"active\": true}).Find(ctx, &users)\n")
 	fmt.Fprintf(file, "func (q *%sQuery) Find(ctx context.Context, dest *[]models.%s) error {\n", pascalModelName, pascalModelName)
 	fmt.Fprintf(file, "\treturn q.Query.Find(ctx, dest)\n")

@@ -104,7 +104,8 @@ func (d *SQLiteDialect) GetLimitOffsetSyntax(limit, offset int) string {
 	} else if limit > 0 {
 		return fmt.Sprintf("LIMIT %d", limit)
 	} else if offset > 0 {
-		return fmt.Sprintf("OFFSET %d", offset)
+		// SQLite requires LIMIT when using OFFSET, use a large number
+		return fmt.Sprintf("LIMIT -1 OFFSET %d", offset)
 	}
 	return ""
 }
