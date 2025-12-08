@@ -121,11 +121,12 @@ func GenerateClient(schema *parser.Schema, outputDir string) error {
 		columns := getModelColumns(model, schema)
 		primaryKey := getPrimaryKey(model)
 		hasDeleted := hasDeletedAt(model)
+		tableName := getTableName(model)
 		pascalModelName := toPascalCase(modelName)
 
 		fmt.Fprintf(file, "\t// Initialize %s query\n", pascalModelName)
 		fmt.Fprintf(file, "\tcolumns_%s := []string{%s}\n", pascalModelName, formatColumns(columns))
-		fmt.Fprintf(file, "\tquery_%s := builder.NewQuery(client.db, %q, columns_%s)\n", pascalModelName, toSnakeCase(modelName), pascalModelName)
+		fmt.Fprintf(file, "\tquery_%s := builder.NewQuery(client.db, %q, columns_%s)\n", pascalModelName, tableName, pascalModelName)
 		if primaryKey != "" {
 			fmt.Fprintf(file, "\tquery_%s.SetPrimaryKey(%q)\n", pascalModelName, primaryKey)
 		}
@@ -232,6 +233,21 @@ func hasDeletedAt(model *parser.Model) bool {
 		}
 	}
 	return false
+}
+
+// getTableName returns the table name for a model
+// Checks for @@map attribute first, otherwise uses the exact model name as declared in schema
+func getTableName(model *parser.Model) string {
+	// Check for @@map attribute
+	for _, attr := range model.Attributes {
+		if attr.Name == "map" && len(attr.Arguments) > 0 {
+			if val, ok := attr.Arguments[0].Value.(string); ok {
+				return val
+			}
+		}
+	}
+	// Default to exact model name as declared in schema (no conversion)
+	return model.Name
 }
 
 // formatColumns formats columns for Go code
@@ -487,11 +503,12 @@ func generateTransactionMethod(file *os.File, schema *parser.Schema) {
 		columns := getModelColumns(model, schema)
 		primaryKey := getPrimaryKey(model)
 		hasDeleted := hasDeletedAt(model)
+		tableName := getTableName(model)
 		pascalModelName := toPascalCase(modelName)
 
 		fmt.Fprintf(file, "\t\t// Initialize %s query\n", pascalModelName)
 		fmt.Fprintf(file, "\t\tcolumns_%s := []string{%s}\n", pascalModelName, formatColumns(columns))
-		fmt.Fprintf(file, "\t\tquery_%s := txClient.tx.Query(%q, columns_%s)\n", pascalModelName, toSnakeCase(modelName), pascalModelName)
+		fmt.Fprintf(file, "\t\tquery_%s := txClient.tx.Query(%q, columns_%s)\n", pascalModelName, tableName, pascalModelName)
 		if primaryKey != "" {
 			fmt.Fprintf(file, "\t\tquery_%s.SetPrimaryKey(%q)\n", pascalModelName, primaryKey)
 		}

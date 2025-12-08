@@ -18,15 +18,23 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Option 1: Automatic setup from DATABASE_URL
+// Option 1: Setup from prisma.conf
+// Reads DATABASE_URL from prisma.conf [datasource] url
 client, pool, err := db.SetupClient(context.Background())
 if err != nil {
 	log.Fatal(err)
 }
 defer pool.Close()
 
-// Option 2: Manual setup with more control
-databaseURL := os.Getenv("DATABASE_URL")
+// Option 2: Explicit URL parameter (overrides prisma.conf)
+client, pool, err := db.SetupClient(context.Background(), "postgresql://user:pass@localhost/db")
+if err != nil {
+	log.Fatal(err)
+}
+defer pool.Close()
+
+// Option 3: Manual setup with more control
+databaseURL := "postgresql://user:pass@localhost/db"
 pool, err := db.NewPgxPoolFromURL(context.Background(), databaseURL)
 if err != nil {
 	log.Fatal(err)
@@ -273,6 +281,7 @@ users, err := client.User.FindMany().
 The `ExecTyped[T]()` method allows you to scan query results into custom DTOs (Data Transfer Objects) instead of the default generated models. This is useful when you need to return different structures to your API clients.
 
 **Requirements:**
+
 - Go 1.18 or later (for generics support)
 - Custom structs must have `json` or `db` tags for field mapping
 
@@ -320,6 +329,7 @@ if err != nil {
 ```
 
 **Field Mapping:**
+
 - Fields are mapped using `json` or `db` tags
 - If a tag matches the database column name, the field will be populated
 - Fields without matching tags are ignored
@@ -489,8 +499,8 @@ err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 
 	// Use raw SQL within transaction
 	_, err = tx.Raw().Exec(ctx, `
-		UPDATE users 
-		SET last_login = NOW() 
+		UPDATE users
+		SET last_login = NOW()
 		WHERE id = $1
 	`, user.ID)
 	return err

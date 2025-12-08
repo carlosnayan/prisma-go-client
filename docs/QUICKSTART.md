@@ -71,31 +71,16 @@ This creates:
 
 ## Step 4: Configure Your Database
 
-### Set Database URL
+### Configure Database URL
 
-Create a `.env` file in your project root:
+The database URL can be provided in two ways:
 
-**For PostgreSQL:**
+1. **In `prisma.conf`** (recommended for most cases)
+2. **As a parameter to `SetupClient()`** (overrides prisma.conf)
 
-```bash
-echo 'DATABASE_URL="postgresql://user:password@localhost:5432/mydb?sslmode=disable"' > .env
-```
+#### Option 1: Configure in prisma.conf
 
-**For MySQL:**
-
-```bash
-echo 'DATABASE_URL="mysql://user:password@localhost:3306/mydb"' > .env
-```
-
-**For SQLite:**
-
-```bash
-echo 'DATABASE_URL="file:./dev.db"' > .env
-```
-
-### Update prisma.conf
-
-The `prisma.conf` file should reference your schema:
+Update your `prisma.conf` file:
 
 ```toml
 schema = "prisma/schema.prisma"
@@ -104,8 +89,14 @@ schema = "prisma/schema.prisma"
 path = "prisma/migrations"
 
 [datasource]
-url = "env('DATABASE_URL')"
+# Direct URL
+url = "postgresql://user:password@localhost:5432/mydb?sslmode=disable"
+
+# Or use environment variable
+# url = "env('DATABASE_URL')"
 ```
+
+If using `env('DATABASE_URL')`, make sure the `DATABASE_URL` environment variable is set when running your application.
 
 ## Step 5: Define Your Schema
 
@@ -125,8 +116,10 @@ model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
   name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
+  createdAt DateTime @map("created_at") @default(now())
+  updatedAt DateTime @map("updated_at") @default(now())
+
+  @@map("users")
 }
 ```
 
@@ -182,14 +175,16 @@ import (
 func main() {
 	ctx := context.Background()
 
-	// Get database URL from environment
-	databaseURL := os.Getenv("DATABASE_URL")
-	if databaseURL == "" {
-		log.Fatal("DATABASE_URL not set")
+	// Setup client - reads DATABASE_URL from prisma.conf
+	// Or pass URL directly: db.SetupClient(ctx, "postgresql://...")
+	client, pool, err := db.SetupClient(ctx)
+	if err != nil {
+		log.Fatalf("Failed to setup client: %v", err)
 	}
+	defer pool.Close()
 
-	// Connect to PostgreSQL using generated helper
-	pool, err := db.NewPgxPoolFromURL(ctx, databaseURL)
+	// Alternative: Manual setup with more control
+	// pool, err := db.NewPgxPoolFromURL(ctx, "postgresql://user:pass@localhost/db")
 	if err != nil {
 		log.Fatalf("Failed to connect: %v", err)
 	}

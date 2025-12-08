@@ -183,7 +183,16 @@ func generateWhereInputConverter(file *os.File, model *parser.Model, schema *par
 			continue
 		}
 		fieldName := toPascalCase(field.Name)
+		// Get the actual database column name (check for @map attribute)
 		dbFieldName := field.Name
+		for _, attr := range field.Attributes {
+			if attr.Name == "map" && len(attr.Arguments) > 0 {
+				if val, ok := attr.Arguments[0].Value.(string); ok {
+					dbFieldName = val
+					break
+				}
+			}
+		}
 		filterType := getFilterType(field.Type)
 
 		fmt.Fprintf(file, "\tif where.%s != nil {\n", fieldName)
@@ -809,7 +818,16 @@ func generatePrismaBuilders(file *os.File, model *parser.Model, schema *parser.S
 			continue
 		}
 		fieldName := toPascalCase(field.Name)
+		// Get the actual database column name (check for @map attribute)
 		dbFieldName := field.Name
+		for _, attr := range field.Attributes {
+			if attr.Name == "map" && len(attr.Arguments) > 0 {
+				if val, ok := attr.Arguments[0].Value.(string); ok {
+					dbFieldName = val
+					break
+				}
+			}
+		}
 		fmt.Fprintf(file, "\tif b.data.%s != nil {\n", fieldName)
 		fmt.Fprintf(file, "\t\tupdateData[%q] = *b.data.%s\n", dbFieldName, fieldName)
 		fmt.Fprintf(file, "\t}\n")
