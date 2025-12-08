@@ -187,6 +187,35 @@ func (m *Manager) GetPendingMigrations() ([]*Migration, error) {
 	return pending, nil
 }
 
+// GetMissingMigrations returns migrations that are applied in the database but missing from local directory
+func (m *Manager) GetMissingMigrations() ([]string, error) {
+	local, err := m.GetLocalMigrations()
+	if err != nil {
+		return nil, err
+	}
+
+	applied, err := m.GetAppliedMigrations()
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a map of local migration names for quick lookup
+	localMap := make(map[string]bool)
+	for _, migration := range local {
+		localMap[migration.Name] = true
+	}
+
+	// Find applied migrations that are not in local directory
+	var missing []string
+	for _, appliedName := range applied {
+		if !localMap[appliedName] {
+			missing = append(missing, appliedName)
+		}
+	}
+
+	return missing, nil
+}
+
 // ApplyMigration applies a migration to the database
 func (m *Manager) ApplyMigration(migration *Migration) error {
 	if err := m.EnsureMigrationsTable(); err != nil {

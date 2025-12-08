@@ -198,26 +198,25 @@ func runMigrateDev(args []string) error {
 		return err
 	}
 
-	// Get migration name
-	migrationName := ""
-	if len(args) > 0 {
-		migrationName = args[0]
-	} else {
-		fmt.Print("Migration name: ")
-		_, _ = fmt.Scanln(&migrationName)
-		if migrationName == "" {
-			return fmt.Errorf("migration name is required")
-		}
+	// Show config and schema info (similar to Prisma)
+	configPath := getConfigPath()
+	fmt.Println()
+	fmt.Printf("%s\n", Info(fmt.Sprintf("Loaded Prisma config from %s.", configPath)))
+
+	schemaPath := getSchemaPath()
+	fmt.Printf("%s\n", Info(fmt.Sprintf("Prisma schema loaded from %s", schemaPath)))
+
+	// Get database URL and parse info
+	dbURL := cfg.GetDatabaseURL()
+	if dbURL == "" {
+		return fmt.Errorf("DATABASE_URL not configured")
 	}
 
-	// Normalize migration name (convert spaces to underscores, lowercase, etc.)
-	migrationName = normalizeMigrationName(migrationName)
-	if migrationName == "" {
-		return fmt.Errorf("migration name is required")
-	}
+	dbInfo := parseDatabaseURL(dbURL)
+	fmt.Printf("%s\n", Info(fmt.Sprintf("Datasource \"db\": %s database \"%s\", schema \"%s\" at \"%s\"",
+		dbInfo.Provider, dbInfo.Database, dbInfo.Schema, dbInfo.Host)))
 
 	// Parse schema
-	schemaPath := getSchemaPath()
 	schema, errors, err := parser.ParseFile(schemaPath)
 	if err != nil || len(errors) > 0 {
 		if len(errors) > 0 {
@@ -230,11 +229,6 @@ func runMigrateDev(args []string) error {
 	}
 
 	// Connect to database
-	dbURL := cfg.GetDatabaseURL()
-	if dbURL == "" {
-		return fmt.Errorf("DATABASE_URL not configured")
-	}
-
 	db, err := migrations.ConnectDatabase(dbURL)
 	if err != nil {
 		return fmt.Errorf("error connecting to database: %w", err)
@@ -250,50 +244,115 @@ func runMigrateDev(args []string) error {
 	// Get provider
 	provider := migrations.GetProviderFromSchema(schema)
 
-	var sql string
+	// Step 1: Check for drift (schema expected from migrations vs actual database)
+	driftDiff, hasDrift, err := migrations.DetectDrift(manager, db, schema, provider)
+	if err != nil {
+		return fmt.Errorf("error detecting drift: %w", err)
+	}
 
+	// Step 2: Check for missing migrations (applied in DB but not in local directory)
+	missingMigrations, err := manager.GetMissingMigrations()
+	if err != nil {
+		return fmt.Errorf("error checking for missing migrations: %w", err)
+	}
+
+	// Step 3: If drift or missing migrations detected, show error and suggest reset
+	if hasDrift || len(missingMigrations) > 0 {
+		fmt.Println()
+		if hasDrift {
+			// Warning message in red
+			fmt.Println(Warning("- Drift detected: Your database schema is not in sync with your migration history."))
+			fmt.Println()
+			// Explanatory text without color (normal text)
+			fmt.Println("The following is a summary of the differences between the expected database schema given your migrations files, and the actual schema of the database.")
+			fmt.Println()
+			fmt.Println("It should be understood as the set of changes to get from the expected schema to the actual schema.")
+			fmt.Println()
+			// Drift output without color (normal text with symbols)
+			driftOutput := migrations.FormatDriftDiff(driftDiff)
+			if driftOutput != "" {
+				fmt.Print(driftOutput)
+			}
+		}
+
+		if len(missingMigrations) > 0 {
+			fmt.Println()
+			// Warning message in red
+			fmt.Printf("%s", Warning(fmt.Sprintf("- The following migration(s) are applied to the database but missing from the local migrations directory: %s\n",
+				strings.Join(missingMigrations, ", "))))
+		}
+
+		fmt.Println()
+		// Normal text (no color)
+		fmt.Printf("We need to reset the \"%s\" schema at \"%s\"\n", dbInfo.Schema, dbInfo.Host)
+		fmt.Println()
+		fmt.Println("You may use prisma migrate reset to drop the development database.")
+		fmt.Println("All data will be lost.")
+		return fmt.Errorf("drift detected or migrations missing")
+	}
+
+	// Step 4: Check for pending changes (schema.prisma vs current database)
 	// Introspect database to detect incremental changes
 	dbSchema, err := migrations.IntrospectDatabase(db, provider)
 	if err != nil {
-		// If introspection fails, create everything from scratch
-		fmt.Println(Warning("Warning: Could not introspect database, creating full migration"))
-		diff, err := migrations.SchemaToSQL(schema, provider)
-		if err != nil {
-			return fmt.Errorf("error generating SQL: %w", err)
-		}
-		sql, err = migrations.GenerateMigrationSQL(diff, provider)
-		if err != nil {
-			return fmt.Errorf("error generating migration SQL: %w", err)
-		}
+		// If introspection fails, we can't proceed safely
+		return fmt.Errorf("error introspecting database: %w", err)
+	}
+
+	// Compare schema with database to detect incremental changes
+	diff, err := migrations.CompareSchema(schema, dbSchema, provider)
+	if err != nil {
+		return fmt.Errorf("error comparing schema: %w", err)
+	}
+
+	// Check if there are changes
+	hasChanges := len(diff.TablesToCreate) > 0 ||
+		len(diff.TablesToAlter) > 0 ||
+		len(diff.TablesToDrop) > 0 ||
+		len(diff.IndexesToCreate) > 0 ||
+		len(diff.IndexesToDrop) > 0
+
+	// Step 5: If no changes, show sync message and return
+	if !hasChanges {
+		fmt.Println()
+		fmt.Println("Already in sync, no schema change or pending migration was found.")
+		fmt.Println()
+		return nil
+	}
+
+	// Step 6: There are changes, so we need to create a migration
+	// Get migration name
+	migrationName := ""
+	if len(args) > 0 {
+		migrationName = args[0]
 	} else {
-		// Compare schema with database to detect incremental changes
-		diff, err := migrations.CompareSchema(schema, dbSchema, provider)
-		if err != nil {
-			return fmt.Errorf("error comparing schema: %w", err)
+		fmt.Println()
+		fmt.Print(Prompt("? ") + PromptText("Enter a name for the new migration: › "))
+		reader := bufio.NewReader(os.Stdin)
+		input, _ := reader.ReadString('\n')
+		migrationName = strings.TrimSpace(input)
+		if migrationName == "" {
+			return fmt.Errorf("migration name is required")
 		}
+	}
 
-		// Check if there are changes
-		hasChanges := len(diff.TablesToCreate) > 0 ||
-			len(diff.TablesToAlter) > 0 ||
-			len(diff.TablesToDrop) > 0 ||
-			len(diff.IndexesToCreate) > 0 ||
-			len(diff.IndexesToDrop) > 0
+	// Normalize migration name (convert spaces to underscores, lowercase, etc.)
+	migrationName = normalizeMigrationName(migrationName)
+	if migrationName == "" {
+		return fmt.Errorf("migration name is required")
+	}
 
-		if !hasChanges {
-			fmt.Println(Info("No changes detected in schema"))
-			return nil
-		}
+	// Generate migration SQL
+	sql, err := migrations.GenerateMigrationSQL(diff, provider)
+	if err != nil {
+		return fmt.Errorf("error generating migration SQL: %w", err)
+	}
 
-		// Generate migration SQL
-		sql, err = migrations.GenerateMigrationSQL(diff, provider)
-		if err != nil {
-			return fmt.Errorf("error generating migration SQL: %w", err)
-		}
-
-		if sql == "" || strings.TrimSpace(sql) == "" {
-			fmt.Println(Info("No changes detected in schema"))
-			return nil
-		}
+	if sql == "" || strings.TrimSpace(sql) == "" {
+		fmt.Println()
+		fmt.Println("Already in sync, no schema change or pending migration was found.")
+		fmt.Println()
+		return nil
 	}
 
 	// Create migration directory
@@ -312,6 +371,7 @@ func runMigrateDev(args []string) error {
 		return fmt.Errorf("error writing migration.sql: %w", err)
 	}
 
+	// Normal text (no color) for migration created message
 	fmt.Printf("Migration created: %s\n", migrationDirName)
 
 	// Apply migration
@@ -321,14 +381,17 @@ func runMigrateDev(args []string) error {
 		SQL:  sql,
 	}
 
+	// Normal text (no color) for progress message
 	fmt.Println("Applying migration...")
 	if err := manager.ApplyMigration(migration); err != nil {
 		return fmt.Errorf("error applying migration: %w", err)
 	}
 
-	fmt.Println("Migration applied successfully!")
+	// Success message in green
+	fmt.Println(Success("Migration applied successfully!"))
 
 	// Run generate automatically
+	// Normal text (no color) for progress message
 	fmt.Println("Generating code...")
 	return runGenerate([]string{})
 }
