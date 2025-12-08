@@ -7,7 +7,7 @@ A type-safe ORM library for Go inspired by Prisma, offering an intuitive API for
 
 **Important:** This library is **not official** and is **not supported** by the official Prisma team. It is an independent, community-driven project inspired by Prisma's API design.
 
-**Note:** This library requires Go 1.18 or later for generics support (used in `ExecTyped[T]()` method).
+**Note:** This library requires Go 1.18 or later.
 
 ## ✨ Features
 
@@ -236,13 +236,14 @@ func main() {
     }
     log.Printf("Found user: %+v\n", foundUser)
 
-    // Find with custom DTO using ExecTyped (requires Go 1.18+)
+    // Find with custom DTO using ExecTyped
     type UserDTO struct {
         Email string `json:"email" db:"email"`
         Name  string `json:"name" db:"name"`
     }
 
-    userDTO, err := database.Client.User.FindFirst().
+    var userDTO *UserDTO
+    err = database.Client.User.FindFirst().
         Select(inputs.UserSelect{
             Email: true,
             Name:  true,
@@ -250,19 +251,20 @@ func main() {
         Where(inputs.UserWhereInput{
             Email: db.String("test@example.com"),
         }).
-        ExecTyped[*UserDTO](ctx)
+        ExecTyped(ctx, &userDTO)
     if err != nil {
         log.Fatal(err)
     }
     log.Printf("Found user DTO: %+v\n", userDTO)
 
     // Find many with custom DTO
-    usersDTO, err := database.Client.User.FindMany().
+    var usersDTO []UserDTO
+    err = database.Client.User.FindMany().
         Select(inputs.UserSelect{
             Email: true,
             Name:  true,
         }).
-        ExecTyped[[]UserDTO](ctx)
+        ExecTyped(ctx, &usersDTO)
     if err != nil {
         log.Fatal(err)
     }

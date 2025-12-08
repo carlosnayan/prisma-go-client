@@ -125,9 +125,6 @@ func generateQueryMethods(file *os.File, model *parser.Model, schema *parser.Sch
 	fmt.Fprintf(file, "\treturn q.Query.First(ctx, dest)\n")
 	fmt.Fprintf(file, "}\n\n")
 
-	// FindFirst - removed to avoid conflict with Prisma-style FindFirst() builder
-	// Use First() for direct execution or FindFirst() for builder pattern
-
 	// Find
 	fmt.Fprintf(file, "// Find finds all records\n")
 	fmt.Fprintf(file, "// Examples:\n")
@@ -137,15 +134,7 @@ func generateQueryMethods(file *os.File, model *parser.Model, schema *parser.Sch
 	fmt.Fprintf(file, "\treturn q.Query.Find(ctx, dest)\n")
 	fmt.Fprintf(file, "}\n\n")
 
-	// FindMany - removed to avoid conflict with Prisma-style FindMany() builder
-	// Use FindMany() builder pattern instead: q.FindMany().Where(...).Exec(ctx)
-
 	generateWhereInputConverter(file, model, schema)
-	// Count - removed to avoid conflict with Prisma-style Count() builder
-	// Use Count() builder pattern instead
-
-	// Create - removed to avoid conflict with Prisma-style Create() builder
-	// Use Create() builder pattern instead
 
 	fmt.Fprintf(file, "// Save saves a record (create or update)\n")
 	fmt.Fprintf(file, "// Example: q.Save(ctx, &user)\n")
@@ -499,7 +488,7 @@ func generatePrismaBuilders(file *os.File, model *parser.Model, schema *parser.S
 
 	fmt.Fprintf(file, "// Exec executes the find first operation and returns the default model\n")
 	fmt.Fprintf(file, "// Returns (*models.%s, error)\n", pascalModelName)
-	fmt.Fprintf(file, "// For custom types, use ExecTyped[T]() instead\n")
+	fmt.Fprintf(file, "// For custom types, use ExecTyped() instead\n")
 	fmt.Fprintf(file, "func (b *%sFindFirstBuilder) Exec(ctx context.Context) (*models.%s, error) {\n", pascalModelName, pascalModelName)
 	fmt.Fprintf(file, "\tif b.whereInput != nil {\n")
 	fmt.Fprintf(file, "\t\twhereMap := Convert%sWhereInputToWhere(*b.whereInput)\n", pascalModelName)
@@ -616,7 +605,7 @@ func generatePrismaBuilders(file *os.File, model *parser.Model, schema *parser.S
 
 	fmt.Fprintf(file, "// Exec executes the find many operation and returns the default model\n")
 	fmt.Fprintf(file, "// Returns ([]models.%s, error)\n", pascalModelName)
-	fmt.Fprintf(file, "// For custom types, use ExecTyped[T]() instead\n")
+	fmt.Fprintf(file, "// For custom types, use ExecTyped() instead\n")
 	fmt.Fprintf(file, "func (b *%sFindManyBuilder) Exec(ctx context.Context) ([]models.%s, error) {\n", pascalModelName, pascalModelName)
 	fmt.Fprintf(file, "\tif b.whereInput != nil {\n")
 	fmt.Fprintf(file, "\t\twhereMap := Convert%sWhereInputToWhere(*b.whereInput)\n", pascalModelName)

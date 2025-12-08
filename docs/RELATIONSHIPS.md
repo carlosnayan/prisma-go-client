@@ -149,20 +149,14 @@ post, err := client.Post.Create().
 
 ```go
 // Connect if exists, create if not
-post, err := client.Posts().Create(db.PostCreateInput{
-	Title: "My Post",
-	Author: db.UserCreateNestedOneInput{
-		ConnectOrCreate: &db.UserConnectOrCreateInput{
-			Where: db.UserWhereUniqueInput{
-				Email: db.String("user@example.com"),
-			},
-			Create: db.UserCreateInput{
-				Email: "user@example.com",
-				Name:  db.String("User"),
-			},
-		},
-	},
-}).Exec()
+// Note: ConnectOrCreate will be supported in a future version
+// For now, create post and connect to existing user
+post, err := client.Post.Create().
+	Data(inputs.PostCreateInput{
+		Title:    db.String("My Post"),
+		AuthorId: db.Int(userID),
+	}).
+	Exec(ctx)
 ```
 
 ### Create Many Related Records
@@ -217,60 +211,60 @@ for _, postID := range []int{1, 2} {
 
 ```go
 // Update post's author
-post, err := client.Posts().Update(
-	db.PostWhereUniqueInput{ID: db.Int(postID)},
-	db.PostUpdateInput{
-		Author: db.UserUpdateNestedOneInput{
-			Connect: &db.UserWhereUniqueInput{
-				ID: db.Int(newAuthorID),
-			},
-		},
-	},
-).Exec()
+// Note: Nested relation updates will be supported in a future version
+// For now, update the foreign key directly
+err := client.Post.Update().
+	Where(inputs.PostWhereInput{
+		Id: db.Int(postID),
+	}).
+	Data(inputs.PostUpdateInput{
+		AuthorId: db.Int(newAuthorID),
+	}).
+	Exec(ctx)
 ```
 
 ### Disconnect Relation
 
 ```go
 // Remove relation (set to null)
-post, err := client.Posts().Update(
-	db.PostWhereUniqueInput{ID: db.Int(postID)},
-	db.PostUpdateInput{
-		Author: db.UserUpdateNestedOneInput{
-			Disconnect: db.Bool(true),
-		},
-	},
-).Exec()
+// Note: Disconnect will be supported in a future version
+// For now, set the foreign key to null if the field is optional
+err := client.Post.Update().
+	Where(inputs.PostWhereInput{
+		Id: db.Int(postID),
+	}).
+	Data(inputs.PostUpdateInput{
+		// Set AuthorId to null if field is optional
+	}).
+	Exec(ctx)
 ```
 
 ### Update Many Relations
 
 ```go
 // Add posts to user
-user, err := client.Users().Update(
-	db.UserWhereUniqueInput{ID: db.Int(userID)},
-	db.UserUpdateInput{
-		Posts: db.PostUpdateNestedManyInput{
-			Connect: []db.PostWhereUniqueInput{
-				{ID: db.Int(3)},
-				{ID: db.Int(4)},
-			},
-		},
-	},
-).Exec()
+// Note: Nested many relation updates will be supported in a future version
+// For now, update posts directly to connect them
+err := client.Post.Update().
+	Where(inputs.PostWhereInput{
+		Id: db.Int(3),
+	}).
+	Data(inputs.PostUpdateInput{
+		AuthorId: db.Int(userID),
+	}).
+	Exec(ctx)
 
 // Remove posts from user
-user, err := client.Users().Update(
-	db.UserWhereUniqueInput{ID: db.Int(userID)},
-	db.UserUpdateInput{
-		Posts: db.PostUpdateNestedManyInput{
-			Disconnect: []db.PostWhereUniqueInput{
-				{ID: db.Int(1)},
-				{ID: db.Int(2)},
-			},
-		},
-	},
-).Exec()
+// Note: Disconnect will be supported in a future version
+// For now, update posts directly to disconnect them
+err = client.Post.Update().
+	Where(inputs.PostWhereInput{
+		Id: db.Int(1),
+	}).
+	Data(inputs.PostUpdateInput{
+		// Set AuthorId to null or another value
+	}).
+	Exec(ctx)
 ```
 
 ## Many-to-Many Relationships
@@ -279,15 +273,14 @@ user, err := client.Users().Update(
 
 ```go
 // Create user with roles
-user, err := client.Users().Create(db.UserCreateInput{
-	Email: "user@example.com",
-	Roles: db.RoleCreateNestedManyInput{
-		Connect: []db.RoleWhereUniqueInput{
-			{ID: db.Int(1)}, // Admin
-			{ID: db.Int(2)}, // User
-		},
-	},
-}).Exec()
+// Note: Nested many relations will be supported in a future version
+// For now, create user first, then create role assignments
+user, err := client.User.Create().
+	Data(inputs.UserCreateInput{
+		Email: "user@example.com",
+	}).
+	Exec(ctx)
+// Then create role assignments manually
 ```
 
 ### Add Relations
@@ -383,13 +376,22 @@ When user is deleted, `authorId` is set to null.
 
 ```go
 // Find users with post count
-users, err := client.Users().FindMany().
-	Include(db.UserIncludeInput{
-		Posts: true,
-	}).Exec()
+// Note: Include functionality will be added in a future version
+// For now, fetch users and posts separately
+users, err := client.User.FindMany().
+	Where(inputs.UserWhereInput{
+		// Add conditions
+	}).
+	Exec(ctx)
 
 for _, user := range users {
-	fmt.Printf("User %s has %d posts\n", user.Email, len(user.Posts))
+	// Fetch posts for each user separately
+	posts, _ := client.Post.FindMany().
+		Where(inputs.PostWhereInput{
+			AuthorId: db.Int(user.ID),
+		}).
+		Exec(ctx)
+	fmt.Printf("User %s has %d posts\n", user.Email, len(posts))
 }
 ```
 
@@ -528,24 +530,33 @@ model Profile {
 
 ```go
 // Create user with posts
-user, err := client.Users().Create(db.UserCreateInput{
-	Email: "author@example.com",
-	Name:  db.String("Author"),
-	Posts: db.PostCreateNestedManyInput{
-		Create: []db.PostCreateInput{
-			{
-				Title:     "First Post",
-				Content:   db.String("Content here"),
-				Published: db.Bool(true),
-			},
-			{
-				Title:     "Second Post",
-				Content:   db.String("More content"),
-				Published: db.Bool(false),
-			},
-		},
-	},
-}).Exec()
+// Note: Nested create will be supported in a future version
+// For now, create user first, then create posts
+user, err := client.User.Create().
+	Data(inputs.UserCreateInput{
+		Email: "author@example.com",
+		Name:  db.String("Author"),
+	}).
+	Exec(ctx)
+
+// Then create posts
+for _, postData := range []struct {
+	title     string
+	content   string
+	published bool
+}{
+	{"First Post", "Content here", true},
+	{"Second Post", "More content", false},
+} {
+	_, err = client.Post.Create().
+		Data(inputs.PostCreateInput{
+			Title:     db.String(postData.title),
+			Content:   db.String(postData.content),
+			Published: db.Bool(postData.published),
+			AuthorId:  db.Int(user.ID),
+		}).
+		Exec(ctx)
+}
 
 // Query with relations
 // Find posts by author

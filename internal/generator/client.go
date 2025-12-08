@@ -147,20 +147,12 @@ func GenerateClient(schema *parser.Schema, outputDir string) error {
 	fmt.Fprintf(file, "\treturn c.raw\n")
 	fmt.Fprintf(file, "}\n\n")
 
-	// Note: Model access is now via fields (e.g., client.Users) instead of methods (e.g., client.Users())
-	// This allows for a cleaner API: client.Users.Update() instead of client.Users().Update()
-
 	// Generate TransactionClient and Transaction method
 	generateTransactionClient(file, schema)
 	generateTransactionMethod(file, schema)
 
-	// Helper functions are generated in helpers.go, not here
-
 	return nil
 }
-
-// Note: Model access is now via fields (e.g., client.Users) instead of methods (e.g., client.Users())
-// This allows for a cleaner API: client.Users.Update() instead of client.Users().Update()
 
 // getModelColumns returns the columns of a model
 func getModelColumns(model *parser.Model, schema *parser.Schema) []string {
@@ -458,9 +450,6 @@ func generateTransactionClient(file *os.File, schema *parser.Schema) {
 	fmt.Fprintf(file, "\treturn tc.raw\n")
 	fmt.Fprintf(file, "}\n\n")
 }
-
-// Note: Model access in TransactionClient is now via fields (e.g., tx.Users) instead of methods (e.g., tx.Users())
-// This allows for a cleaner API: tx.Users.Update() instead of tx.Users().Update()
 
 // generateTransactionMethod generates the Transaction method on Client
 func generateTransactionMethod(file *os.File, schema *parser.Schema) {

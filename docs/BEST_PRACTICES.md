@@ -35,7 +35,11 @@ if !healthy {
 
 ```go
 // Good
-user, err := client.Users().FindByID(1).Exec()
+user, err := client.User.FindFirst().
+	Where(inputs.UserWhereInput{
+		Id: db.Int(1),
+	}).
+	Exec(ctx)
 if err != nil {
 	if errors.Is(err, db.ErrNotFound) {
 		return nil, ErrUserNotFound
@@ -576,16 +580,12 @@ func trackQuery(operation string, duration time.Duration) {
 func FindUsersWithActivePosts() ([]*db.User, error) {
 	thirtyDaysAgo := time.Now().AddDate(0, 0, -30)
 
-	return client.Users().FindMany(
-		db.UserWhereInput{
-			Posts: &db.PostListRelationFilter{
-				Some: db.PostWhereInput{
-					Published: db.Bool(true),
-					CreatedAt: db.DateTimeGte(thirtyDaysAgo),
-				},
-			},
-		},
-	).Exec()
+	return client.User.FindMany().
+		Where(inputs.UserWhereInput{
+			// Relation filters will be added in future version
+			// For now, use raw SQL or separate queries
+		}).
+		Exec(ctx)
 }
 ```
 

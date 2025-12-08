@@ -229,38 +229,57 @@ users, err := client.User.FindMany().
 ### Ordering
 
 ```go
-// Order by single field
-users, err := client.Users().FindMany().
-	OrderBy(db.UserOrderByInput{
-		CreatedAt: db.SortOrderDesc,
-	}).Exec()
+import (
+	"my-app/db/builder"
+	"my-app/db/models"
+)
+
+// Order by single field using the query builder directly
+// Note: Order() is not available on Prisma-style builders (FindFirst/FindMany)
+var users []models.User
+err := client.User.
+	Where(builder.Where{"email": builder.Contains("example.com")}).
+	Order("created_at DESC").
+	Find(ctx, &users)
 
 // Order by multiple fields
-users, err := client.Users().FindMany().
-	OrderBy(db.UserOrderByInput{
-		CreatedAt: db.SortOrderDesc,
-		Name:      db.SortOrderAsc,
-	}).Exec()
+err = client.User.
+	Where(builder.Where{"active": true}).
+	Order("created_at DESC").
+	Order("name ASC").
+	Find(ctx, &users)
 ```
 
 ### Pagination
 
 ```go
-// Take results
-users, err := client.Users().FindMany().
-	Take(10).Exec()
+import (
+	"my-app/db/builder"
+	"my-app/db/models"
+)
+
+// Take and Skip are available on the query builder directly
+// Note: Take() and Skip() are not available on Prisma-style builders (FindFirst/FindMany)
+var users []models.User
+err := client.User.
+	Where(builder.Where{"email": builder.Contains("example.com")}).
+	Take(10).
+	Find(ctx, &users)
 
 // Skip results
-users, err := client.Users().FindMany().
-	Skip(20).Exec()
+err = client.User.
+	Where(builder.Where{"active": true}).
+	Skip(20).
+	Find(ctx, &users)
 
-// Take and skip (pagination)
+// Take and skip together (pagination)
 page := 1
 pageSize := 10
-users, err := client.Users().FindMany().
+err = client.User.
+	Where(builder.Where{"active": true}).
 	Skip((page - 1) * pageSize).
 	Take(pageSize).
-	Exec()
+	Find(ctx, &users)
 ```
 
 ### Selecting Fields
@@ -276,13 +295,12 @@ users, err := client.User.FindMany().
 	Exec(ctx)
 ```
 
-### Custom Types with ExecTyped (Go 1.18+)
+### Custom Types with ExecTyped
 
-The `ExecTyped[T]()` method allows you to scan query results into custom DTOs (Data Transfer Objects) instead of the default generated models. This is useful when you need to return different structures to your API clients.
+The `ExecTyped()` method allows you to scan query results into custom DTOs (Data Transfer Objects) instead of the default generated models. This is useful when you need to return different structures to your API clients.
 
 **Requirements:**
 
-- Go 1.18 or later (for generics support)
 - Custom structs must have `json` or `db` tags for field mapping
 
 **Example:**
@@ -296,7 +314,8 @@ type UserDTO struct {
 }
 
 // Find first with custom DTO
-userDTO, err := client.User.FindFirst().
+var userDTO *UserDTO
+err := client.User.FindFirst().
 	Select(inputs.UserSelect{
 		Id:    true,
 		Email: true,
@@ -305,14 +324,15 @@ userDTO, err := client.User.FindFirst().
 	Where(inputs.UserWhereInput{
 		Email: db.String("user@example.com"),
 	}).
-	ExecTyped[*UserDTO](ctx)
+	ExecTyped(ctx, &userDTO)
 if err != nil {
 	log.Fatal(err)
 }
-// userDTO is automatically of type *UserDTO, no casting needed!
+// userDTO is now populated with the query results
 
 // Find many with custom DTO
-usersDTO, err := client.User.FindMany().
+var usersDTO []UserDTO
+err = client.User.FindMany().
 	Select(inputs.UserSelect{
 		Id:    true,
 		Email: true,
@@ -321,11 +341,11 @@ usersDTO, err := client.User.FindMany().
 	Where(inputs.UserWhereInput{
 		Email: db.Contains("example.com"),
 	}).
-	ExecTyped[[]UserDTO](ctx)
+	ExecTyped(ctx, &usersDTO)
 if err != nil {
 	log.Fatal(err)
 }
-// usersDTO is automatically of type []UserDTO, no casting needed!
+// usersDTO is now populated with the query results
 ```
 
 **Field Mapping:**
@@ -335,24 +355,26 @@ if err != nil {
 - Fields without matching tags are ignored
 - Snake_case field names are automatically converted
 
-**Note:** Use `ExecTyped[*YourType]()` for single results and `ExecTyped[[]YourType]()` for multiple results.
+**Note:** For single results, pass a pointer to a struct (e.g., `&userDTO`). For multiple results, pass a pointer to a slice (e.g., `&usersDTO`).
 
 ### Including Relations
 
 ```go
 // Include related data
-posts, err := client.Posts().FindMany().
-	Include(db.PostIncludeInput{
-		Author: true,
-	}).Exec()
+// Note: Include functionality will be added in a future version
+posts, err := client.Post.FindMany().
+	Where(inputs.PostWhereInput{
+		// Add conditions
+	}).
+	Exec(ctx)
 
 // Nested includes
-posts, err := client.Posts().FindMany().
-	Include(db.PostIncludeInput{
-		Author: db.UserIncludeInput{
-			Posts: true,
-		},
-	}).Exec()
+// Note: Include functionality will be added in a future version
+posts, err := client.Post.FindMany().
+	Where(inputs.PostWhereInput{
+		// Add conditions
+	}).
+	Exec(ctx)
 ```
 
 ## Aggregations
@@ -361,52 +383,47 @@ posts, err := client.Posts().FindMany().
 
 ```go
 // Count all
-count, err := client.Users().Count().Exec()
+count, err := client.User.Count().
+	Exec(ctx)
 
 // Count with where
-count, err := client.Users().Count(
-	db.UserWhereInput{
-		Email: db.StringContains("@example.com"),
-	},
-).Exec()
+count, err := client.User.Count().
+	Where(inputs.UserWhereInput{
+		Email: db.Contains("@example.com"),
+	}).
+	Exec(ctx)
 ```
 
 ### Sum
 
 ```go
 // Sum numeric field
-total, err := client.Posts().Sum("views").Exec()
+// Note: Aggregation methods will be added in a future version
+// For now, use raw SQL for aggregations
 ```
 
 ### Average
 
 ```go
 // Average numeric field
-avg, err := client.Posts().Avg("views").Exec()
+// Note: Aggregation methods will be added in a future version
+// For now, use raw SQL for aggregations
 ```
 
 ### Min/Max
 
 ```go
-// Minimum value
-min, err := client.Posts().Min("views").Exec()
-
-// Maximum value
-max, err := client.Posts().Max("views").Exec()
+// Minimum/Maximum value
+// Note: Aggregation methods will be added in a future version
+// For now, use raw SQL for aggregations
 ```
 
 ### Group By
 
 ```go
 // Group by field
-results, err := client.Posts().GroupBy(
-	[]string{"authorId"},
-	db.PostGroupByInput{
-		Count: true,
-		Sum:   []string{"views"},
-		Avg:   []string{"views"},
-	},
-).Exec()
+// Note: GroupBy functionality will be added in a future version
+// For now, use raw SQL for grouping
 ```
 
 ## Transactions
@@ -580,58 +597,57 @@ If your model has `deletedAt` field:
 
 ```go
 // Soft delete
-err := client.Users().Delete(...).Exec()
+err := client.User.Delete().
+	Where(inputs.UserWhereInput{
+		Id: db.Int(1),
+	}).
+	Exec(ctx)
 
 // Restore
-err := client.Users().Restore(...).Exec()
+// Note: Restore functionality will be added in a future version
 
 // Force delete (permanent)
-err := client.Users().ForceDelete(...).Exec()
+// Note: ForceDelete functionality will be added in a future version
 
 // Include deleted records
-users, err := client.Users().FindMany().
-	IncludeDeleted().Exec()
+// Note: IncludeDeleted functionality will be added in a future version
 
 // Only deleted records
-users, err := client.Users().FindMany().
-	OnlyDeleted().Exec()
+// Note: OnlyDeleted functionality will be added in a future version
 ```
 
 ## JSON Fields
 
 ```go
 // Set JSON field
-user, err := client.Users().Update(
-	...,
-	db.UserUpdateInput{
-		Metadata: db.JSON(map[string]interface{}{
-			"key": "value",
-		}),
-	},
-).Exec()
+err := client.User.Update().
+	Where(inputs.UserWhereInput{
+		Id: db.Int(1),
+	}).
+	Data(inputs.UserUpdateInput{
+		// Add JSON field update when supported
+	}).
+	Exec(ctx)
 
 // Get JSON field
-metadata := user.Metadata.Get("key")
+// Note: JSON field access methods will be added in a future version
 
 // Check if JSON contains key
-hasKey := user.Metadata.Contains("key")
+// Note: JSON field access methods will be added in a future version
 ```
 
 ## Full-Text Search (PostgreSQL)
 
 ```go
 // Search
-posts, err := client.Posts().Search("search term").Exec()
+// Note: Full-text search functionality will be added in a future version
+// For now, use raw SQL for full-text search
 
 // Search with ranking
-results, err := client.Posts().SearchRanked("search term").Exec()
+// Note: Full-text search functionality will be added in a future version
 
 // Search in where clause
-posts, err := client.Posts().FindMany(
-	db.PostWhereInput{
-		Content: db.StringSearch("term"),
-	},
-).Exec()
+// Note: Full-text search functionality will be added in a future version
 ```
 
 ## Validation
@@ -648,16 +664,10 @@ if err != nil {
 
 ```go
 // Before create hook
-client.Users().BeforeCreate(func(user *db.User) error {
-	// Validate or modify before creation
-	return nil
-})
+// Note: Hooks functionality will be added in a future version
 
 // After create hook
-client.Users().AfterCreate(func(user *db.User) error {
-	// Send notification, log, etc.
-	return nil
-})
+// Note: Hooks functionality will be added in a future version
 ```
 
 Available hooks:
@@ -674,7 +684,11 @@ Available hooks:
 ## Error Handling
 
 ```go
-user, err := client.Users().FindUnique(...).Exec()
+user, err := client.User.FindFirst().
+	Where(inputs.UserWhereInput{
+		Id: db.Int(1),
+	}).
+	Exec(ctx)
 if err != nil {
 	if errors.Is(err, db.ErrNotFound) {
 		// Record not found

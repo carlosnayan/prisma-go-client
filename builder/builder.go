@@ -380,7 +380,7 @@ func (b *TableQueryBuilder) buildQuery(where Where, opts *QueryOptions, single b
 			quotedField := b.dialect.QuoteIdentifier(order.Field)
 			orderDir := strings.ToUpper(strings.TrimSpace(order.Order))
 			if orderDir != "ASC" && orderDir != "DESC" {
-				orderDir = "ASC" // Default seguro
+				orderDir = "ASC"
 			}
 			orderParts = append(orderParts, fmt.Sprintf("%s %s", quotedField, orderDir))
 		}
