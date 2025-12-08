@@ -23,14 +23,27 @@ func (d *PostgreSQLDialect) QuoteString(value string) string {
 }
 
 func (d *PostgreSQLDialect) MapType(prismaType string, isNullable bool) string {
-	prismaTypeUpper := strings.ToUpper(prismaType)
-	
-	// Se já é um tipo SQL (vem de @db.*), retornar como está
-	if isSQLType(prismaTypeUpper) {
-		return prismaType
+	prismaTypeLower := strings.ToLower(prismaType)
+
+	// Lista de tipos Prisma conhecidos - verificar primeiro para evitar confusão com tipos SQL
+	prismaTypes := []string{"string", "int", "bigint", "boolean", "bool", "datetime", "float", "decimal", "json", "bytes", "uuid"}
+	isPrismaType := false
+	for _, pt := range prismaTypes {
+		if prismaTypeLower == pt {
+			isPrismaType = true
+			break
+		}
 	}
-	
-	switch strings.ToLower(prismaType) {
+
+	// Se não é um tipo Prisma conhecido, pode ser um tipo SQL (vem de @db.*)
+	if !isPrismaType {
+		prismaTypeUpper := strings.ToUpper(prismaType)
+		if isSQLType(prismaTypeUpper) {
+			return prismaType
+		}
+	}
+
+	switch prismaTypeLower {
 	case "string":
 		return "TEXT"
 	case "int":
@@ -114,4 +127,3 @@ func (d *PostgreSQLDialect) GetLimitOffsetSyntax(limit, offset int) string {
 	}
 	return ""
 }
-

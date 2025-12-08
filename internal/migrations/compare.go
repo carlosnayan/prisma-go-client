@@ -9,11 +9,11 @@ import (
 // CompareSchema compares the Prisma schema with the database and returns differences
 func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider string) (*SchemaDiff, error) {
 	diff := &SchemaDiff{
-		TablesToCreate:     []TableDefinition{},
-		TablesToAlter:      []TableAlteration{},
-		TablesToDrop:       []string{},
-		IndexesToCreate:    []IndexDefinition{},
-		IndexesToDrop:      []string{},
+		TablesToCreate:      []TableDefinition{},
+		TablesToAlter:       []TableAlteration{},
+		TablesToDrop:        []string{},
+		IndexesToCreate:     []IndexDefinition{},
+		IndexesToDrop:       []string{},
 		ForeignKeysToCreate: []ForeignKeyDefinition{},
 	}
 
@@ -27,7 +27,7 @@ func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider str
 			Columns:     []ColumnDefinition{},
 			CompositePK: []string{},
 		}
-		
+
 		// Process @@id attribute (composite primary key)
 		for _, attr := range model.Attributes {
 			if attr.Name == "id" {
@@ -298,7 +298,7 @@ func processRelationsAndUnique(schema *parser.Schema, diff *SchemaDiff) {
 	for _, model := range schema.Models {
 		// Get mapped table name
 		tableName := getTableNameFromModel(model)
-		
+
 		// Process @@unique attributes
 		for _, attr := range model.Attributes {
 			if attr.Name == "unique" {

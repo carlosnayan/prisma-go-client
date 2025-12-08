@@ -10,23 +10,23 @@ import (
 
 // SchemaDiff represents differences between schema and database
 type SchemaDiff struct {
-	TablesToCreate     []TableDefinition
-	TablesToAlter      []TableAlteration
-	TablesToDrop       []string
-	IndexesToCreate    []IndexDefinition
-	IndexesToDrop      []string
+	TablesToCreate      []TableDefinition
+	TablesToAlter       []TableAlteration
+	TablesToDrop        []string
+	IndexesToCreate     []IndexDefinition
+	IndexesToDrop       []string
 	ForeignKeysToCreate []ForeignKeyDefinition
 }
 
 // ForeignKeyDefinition represents a foreign key constraint
 type ForeignKeyDefinition struct {
-	Name             string   // Constraint name (e.g., "table_column_fkey")
-	TableName        string   // Table containing the FK
-	Columns          []string // Local columns (fields)
-	ReferencedTable  string   // Referenced table
+	Name              string   // Constraint name (e.g., "table_column_fkey")
+	TableName         string   // Table containing the FK
+	Columns           []string // Local columns (fields)
+	ReferencedTable   string   // Referenced table
 	ReferencedColumns []string // Referenced columns (references)
-	OnDelete         string   // "CASCADE", "SET NULL", "RESTRICT", "NO ACTION"
-	OnUpdate         string   // "CASCADE", "SET NULL", "RESTRICT", "NO ACTION"
+	OnDelete          string   // "CASCADE", "SET NULL", "RESTRICT", "NO ACTION"
+	OnUpdate          string   // "CASCADE", "SET NULL", "RESTRICT", "NO ACTION"
 }
 
 // TableDefinition represents a table to be created
@@ -143,8 +143,8 @@ func GenerateMigrationSQL(diff *SchemaDiff, provider string) (string, error) {
 			if provider == "mysql" {
 				sql.WriteString(fmt.Sprintf(",\n  PRIMARY KEY (%s)", strings.Join(quotedPKs, ", ")))
 			} else {
-				sql.WriteString(fmt.Sprintf(",\n  CONSTRAINT %s PRIMARY KEY (%s)", 
-					d.QuoteIdentifier(table.Name+"_pkey"), 
+				sql.WriteString(fmt.Sprintf(",\n  CONSTRAINT %s PRIMARY KEY (%s)",
+					d.QuoteIdentifier(table.Name+"_pkey"),
 					strings.Join(quotedPKs, ", ")))
 			}
 		} else if len(primaryKeys) > 0 {
@@ -158,8 +158,8 @@ func GenerateMigrationSQL(diff *SchemaDiff, provider string) (string, error) {
 			if provider == "mysql" {
 				sql.WriteString(fmt.Sprintf(",\n  PRIMARY KEY (%s)", strings.Join(quotedPKs, ", ")))
 			} else {
-				sql.WriteString(fmt.Sprintf(",\n  CONSTRAINT %s PRIMARY KEY (%s)", 
-					d.QuoteIdentifier(table.Name+"_pkey"), 
+				sql.WriteString(fmt.Sprintf(",\n  CONSTRAINT %s PRIMARY KEY (%s)",
+					d.QuoteIdentifier(table.Name+"_pkey"),
 					strings.Join(quotedPKs, ", ")))
 			}
 		}
@@ -448,10 +448,10 @@ func SchemaToSQL(schema *parser.Schema, provider string) (*SchemaDiff, error) {
 // processRelationsAndUniqueForSchema processes @relation, @@unique, and @@index for SchemaToSQL
 func processRelationsAndUniqueForSchema(schema *parser.Schema, diff *SchemaDiff, modelMap map[string]*parser.Model) {
 	// Process each model
-		for _, model := range schema.Models {
+	for _, model := range schema.Models {
 		// Get mapped table name
 		tableName := getTableNameFromModel(model)
-		
+
 		// Find the table definition to add composite PK if needed
 		var tableDef *TableDefinition
 		for i := range diff.TablesToCreate {
@@ -460,7 +460,7 @@ func processRelationsAndUniqueForSchema(schema *parser.Schema, diff *SchemaDiff,
 				break
 			}
 		}
-		
+
 		// Process @@id attribute (composite primary key)
 		for _, attr := range model.Attributes {
 			if attr.Name == "id" {
@@ -503,7 +503,7 @@ func processRelationsAndUniqueForSchema(schema *parser.Schema, diff *SchemaDiff,
 				}
 			}
 		}
-		
+
 		// Process @@unique attributes
 		for _, attr := range model.Attributes {
 			if attr.Name == "unique" {
@@ -793,13 +793,13 @@ func extractForeignKey(tableName string, field *parser.ModelField, attr *parser.
 	fkName := generateForeignKeyName(tableName, fields)
 
 	return &ForeignKeyDefinition{
-		Name:             fkName,
-		TableName:        tableName,
-		Columns:          fields,
-		ReferencedTable:  referencedTable,
+		Name:              fkName,
+		TableName:         tableName,
+		Columns:           fields,
+		ReferencedTable:   referencedTable,
 		ReferencedColumns: references,
-		OnDelete:         onDelete,
-		OnUpdate:         onUpdate,
+		OnDelete:          onDelete,
+		OnUpdate:          onUpdate,
 	}
 }
 

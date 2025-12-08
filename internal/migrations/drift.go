@@ -79,17 +79,17 @@ func FormatDriftDiff(diff *SchemaDiff) string {
 	// Format table changes (most common in drift)
 	for _, alter := range diff.TablesToAlter {
 		output.WriteString(fmt.Sprintf("[*] Changed the `%s` table\n", alter.TableName))
-		
+
 		// Added columns
 		for _, col := range alter.AddColumns {
 			output.WriteString(fmt.Sprintf("  [+] Added column `%s`\n", col.Name))
 		}
-		
+
 		// Removed columns
 		for _, colName := range alter.DropColumns {
 			output.WriteString(fmt.Sprintf("  [-] Removed column `%s`\n", colName))
 		}
-		
+
 		// Altered columns (type or nullable changes)
 		for _, colAlter := range alter.AlterColumns {
 			output.WriteString(fmt.Sprintf("  [*] Changed column `%s`\n", colAlter.ColumnName))
@@ -120,4 +120,3 @@ func FormatDriftDiff(diff *SchemaDiff) string {
 
 	return output.String()
 }
-

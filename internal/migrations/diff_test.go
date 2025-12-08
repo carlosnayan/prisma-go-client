@@ -588,13 +588,6 @@ func testComplexSchemaForProvider(t *testing.T, schema *parser.Schema, provider 
 
 	// Verify order: CreateTable -> CreateIndex -> AddForeignKey
 	createTableIdx := strings.Index(sql, "CREATE TABLE")
-	createIndexIdx := strings.Index(sql, "CREATE")
-	if createIndexIdx != -1 && strings.Contains(sql[createIndexIdx:], "INDEX") {
-		createIndexIdx = strings.Index(sql[createIndexIdx:], "CREATE")
-		if createIndexIdx != -1 {
-			createIndexIdx += strings.Index(sql[createIndexIdx:], "INDEX")
-		}
-	}
 	addFkIdx := strings.Index(sql, "ALTER TABLE")
 
 	if createTableIdx == -1 {
@@ -1486,4 +1479,3 @@ func TestCompositePKWithMap(t *testing.T) {
 		t.Errorf("Expected composite PK with mapped names, got:\n%s", sql)
 	}
 }
-

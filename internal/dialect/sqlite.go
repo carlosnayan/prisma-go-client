@@ -24,7 +24,7 @@ func (d *SQLiteDialect) QuoteString(value string) string {
 
 func (d *SQLiteDialect) MapType(prismaType string, isNullable bool) string {
 	prismaTypeUpper := strings.ToUpper(prismaType)
-	
+
 	// Se já é um tipo SQL (vem de @db.*), adaptar para SQLite
 	if isSQLType(prismaTypeUpper) {
 		// SQLite tem tipos limitados, mapear para tipos suportados
@@ -67,7 +67,7 @@ func (d *SQLiteDialect) MapType(prismaType string, isNullable bool) string {
 		}
 		return prismaType
 	}
-	
+
 	// SQLite tem tipos dinâmicos, mas mapeamos para tipos recomendados
 	switch strings.ToLower(prismaType) {
 	case "string":

@@ -18,4 +18,3 @@ func isSQLType(typ string) bool {
 	}
 	return false
 }
-

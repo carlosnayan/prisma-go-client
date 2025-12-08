@@ -48,4 +48,3 @@ func getNumericValue(value interface{}) string {
 	}
 	return ""
 }
-

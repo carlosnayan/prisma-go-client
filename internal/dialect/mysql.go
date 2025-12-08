@@ -24,36 +24,49 @@ func (d *MySQLDialect) QuoteString(value string) string {
 }
 
 func (d *MySQLDialect) MapType(prismaType string, isNullable bool) string {
-	prismaTypeUpper := strings.ToUpper(prismaType)
-	
-	// Se já é um tipo SQL (vem de @db.*), adaptar para MySQL se necessário
-	if isSQLType(prismaTypeUpper) {
-		// Adaptar tipos específicos do PostgreSQL para MySQL
-		if strings.HasPrefix(prismaTypeUpper, "BYTEA") {
-			return "BLOB"
+	prismaTypeLower := strings.ToLower(prismaType)
+
+	// Lista de tipos Prisma conhecidos - verificar primeiro para evitar confusão com tipos SQL
+	prismaTypes := []string{"string", "int", "bigint", "boolean", "bool", "datetime", "float", "decimal", "json", "bytes", "uuid"}
+	isPrismaType := false
+	for _, pt := range prismaTypes {
+		if prismaTypeLower == pt {
+			isPrismaType = true
+			break
 		}
-		if strings.HasPrefix(prismaTypeUpper, "JSONB") {
-			return "JSON"
-		}
-		if strings.HasPrefix(prismaTypeUpper, "TIMESTAMPTZ") {
-			return "TIMESTAMP"
-		}
-		if strings.HasPrefix(prismaTypeUpper, "DOUBLE PRECISION") {
-			return "DOUBLE"
-		}
-		if strings.HasPrefix(prismaTypeUpper, "BOOLEAN") || strings.HasPrefix(prismaTypeUpper, "BOOL") {
-			return "TINYINT(1)"
-		}
-		// Tipos PostgreSQL não suportados em MySQL
-		if strings.HasPrefix(prismaTypeUpper, "INET") || strings.HasPrefix(prismaTypeUpper, "CIDR") ||
-			strings.HasPrefix(prismaTypeUpper, "MONEY") || strings.HasPrefix(prismaTypeUpper, "BIT") ||
-			strings.HasPrefix(prismaTypeUpper, "VARBIT") {
-			return "VARCHAR(255)" // Fallback
-		}
-		return prismaType
 	}
-	
-	switch strings.ToLower(prismaType) {
+
+	// Se não é um tipo Prisma conhecido, pode ser um tipo SQL (vem de @db.*)
+	if !isPrismaType {
+		prismaTypeUpper := strings.ToUpper(prismaType)
+		if isSQLType(prismaTypeUpper) {
+			// Adaptar tipos específicos do PostgreSQL para MySQL
+			if strings.HasPrefix(prismaTypeUpper, "BYTEA") {
+				return "BLOB"
+			}
+			if strings.HasPrefix(prismaTypeUpper, "JSONB") {
+				return "JSON"
+			}
+			if strings.HasPrefix(prismaTypeUpper, "TIMESTAMPTZ") {
+				return "TIMESTAMP"
+			}
+			if strings.HasPrefix(prismaTypeUpper, "DOUBLE PRECISION") {
+				return "DOUBLE"
+			}
+			if strings.HasPrefix(prismaTypeUpper, "BOOLEAN") || strings.HasPrefix(prismaTypeUpper, "BOOL") {
+				return "TINYINT(1)"
+			}
+			// Tipos PostgreSQL não suportados em MySQL
+			if strings.HasPrefix(prismaTypeUpper, "INET") || strings.HasPrefix(prismaTypeUpper, "CIDR") ||
+				strings.HasPrefix(prismaTypeUpper, "MONEY") || strings.HasPrefix(prismaTypeUpper, "BIT") ||
+				strings.HasPrefix(prismaTypeUpper, "VARBIT") {
+				return "VARCHAR(255)" // Fallback
+			}
+			return prismaType
+		}
+	}
+
+	switch prismaTypeLower {
 	case "string":
 		return "VARCHAR(191)" // MySQL tem limite menor por padrão
 	case "int":
