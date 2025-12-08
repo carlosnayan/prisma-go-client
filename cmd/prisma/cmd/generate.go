@@ -4,16 +4,27 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/carlosnayan/prisma-go-client/cli"
 	"github.com/carlosnayan/prisma-go-client/internal/generator"
 	"github.com/carlosnayan/prisma-go-client/internal/parser"
+	"github.com/fsnotify/fsnotify"
 )
 
 const version = "0.1.8"
+
+var (
+	watchFlag         bool
+	generatorFlags    []string
+	noHintsFlag       bool
+	requireModelsFlag bool
+)
 
 var generateCmd = &cli.Command{
 	Name:  "generate",
@@ -23,6 +34,29 @@ var generateCmd = &cli.Command{
   - Type-safe query builders
   - Auxiliary types (CreateInput, UpdateInput, WhereInput)
   - Main Prisma client`,
+	Flags: []*cli.Flag{
+		{
+			Name:  "watch",
+			Short: "w",
+			Usage: "Watch the Prisma schema and rerun after a change",
+			Value: &watchFlag,
+		},
+		{
+			Name:  "generator",
+			Usage: "Generator to use (may be provided multiple times)",
+			Value: &generatorFlags,
+		},
+		{
+			Name:  "no-hints",
+			Usage: "Hides the hint messages but still outputs errors and warnings",
+			Value: &noHintsFlag,
+		},
+		{
+			Name:  "require-models",
+			Usage: "Do not allow generating a client without models",
+			Value: &requireModelsFlag,
+		},
+	},
 	Run: runGenerate,
 }
 
@@ -31,17 +65,55 @@ func runGenerate(args []string) error {
 		return err
 	}
 
-	// Show config loaded
-	fmt.Println()
-	fmt.Println("Loaded Prisma config from prisma.conf.")
-
 	schemaPath := getSchemaPath()
-	fmt.Printf("Prisma schema loaded from %s\n", schemaPath)
+
+	// Parse --generator flags from args (can appear multiple times)
+	// This is done manually because the CLI framework doesn't support multiple values natively
+	parsedGeneratorFlags := parseGeneratorFlags(args)
+	if len(parsedGeneratorFlags) > 0 {
+		generatorFlags = parsedGeneratorFlags
+	}
+
+	// If watch mode, run in watch loop
+	if watchFlag {
+		return runGenerateWatch(schemaPath)
+	}
+
+	// Single generation
+	return runGenerateOnce(schemaPath)
+}
+
+// parseGeneratorFlags extracts --generator flags from args
+func parseGeneratorFlags(args []string) []string {
+	var generators []string
+	for i, arg := range args {
+		if arg == "--generator" || arg == "-g" {
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				generators = append(generators, args[i+1])
+			}
+		} else if strings.HasPrefix(arg, "--generator=") {
+			value := strings.TrimPrefix(arg, "--generator=")
+			generators = append(generators, value)
+		}
+	}
+	return generators
+}
+
+func runGenerateOnce(schemaPath string) error {
+	// Show config loaded
+	if !noHintsFlag {
+		fmt.Println()
+		fmt.Println("Loaded Prisma config from prisma.conf.")
+		fmt.Printf("Prisma schema loaded from %s\n", schemaPath)
+	}
 
 	// Start timing
 	startTime := time.Now()
 
-	// Parse schema
+	// Parse schema with progress indicator
+	if !noHintsFlag {
+		fmt.Print("Parsing schema... ")
+	}
 	schema, errors, err := parser.ParseFile(schemaPath)
 	if err != nil {
 		if len(errors) > 0 {
@@ -52,16 +124,29 @@ func runGenerate(args []string) error {
 			}
 			return fmt.Errorf("cannot generate code with invalid schema")
 		}
-		return err
+		return fmt.Errorf("error parsing schema: %w", err)
 	}
+
+	// Check if models are required
+	if requireModelsFlag && len(schema.Models) == 0 {
+		return fmt.Errorf("no models found in schema. Use --require-models=false to allow generating without models")
+	}
+
+	if !noHintsFlag {
+		fmt.Println("✓")
+	}
+
+	// Filter generators if --generator flags are provided
+	generatorsToUse := filterGenerators(schema, generatorFlags)
 
 	// Determine output directory from generator in schema
 	outputDir := "./db" // default
-	for _, gen := range schema.Generators {
+	for _, gen := range generatorsToUse {
 		for _, field := range gen.Fields {
 			if field.Name == "output" {
 				if val, ok := field.Value.(string); ok {
 					outputDir = val
+					break
 				}
 			}
 		}
@@ -93,37 +178,85 @@ func runGenerate(args []string) error {
 		}
 	}
 
-	// Generate code silently
+	// Generate code with progress indicators
+	if !noHintsFlag {
+		fmt.Print("Generating models... ")
+	}
 	if err := generator.GenerateModels(schema, absoluteOutputDir); err != nil {
 		return fmt.Errorf("error generating models: %w", err)
 	}
+	if !noHintsFlag {
+		fmt.Println("✓")
+	}
 
+	if !noHintsFlag {
+		fmt.Print("Generating raw SQL helpers... ")
+	}
 	if err := generator.GenerateRaw(absoluteOutputDir); err != nil {
 		return fmt.Errorf("error generating raw: %w", err)
 	}
+	if !noHintsFlag {
+		fmt.Println("✓")
+	}
 
+	if !noHintsFlag {
+		fmt.Print("Generating query builders... ")
+	}
 	if err := generator.GenerateBuilder(schema, absoluteOutputDir); err != nil {
 		return fmt.Errorf("error generating builder: %w", err)
 	}
+	if !noHintsFlag {
+		fmt.Println("✓")
+	}
 
+	if !noHintsFlag {
+		fmt.Print("Generating input types... ")
+	}
 	if err := generator.GenerateInputs(schema, absoluteOutputDir); err != nil {
 		return fmt.Errorf("error generating inputs: %w", err)
 	}
+	if !noHintsFlag {
+		fmt.Println("✓")
+	}
 
+	if !noHintsFlag {
+		fmt.Print("Generating queries... ")
+	}
 	if err := generator.GenerateQueries(schema, absoluteOutputDir); err != nil {
 		return fmt.Errorf("error generating queries: %w", err)
 	}
+	if !noHintsFlag {
+		fmt.Println("✓")
+	}
 
+	if !noHintsFlag {
+		fmt.Print("Generating helpers... ")
+	}
 	if err := generator.GenerateHelpers(schema, absoluteOutputDir); err != nil {
 		return fmt.Errorf("error generating helpers: %w", err)
 	}
+	if !noHintsFlag {
+		fmt.Println("✓")
+	}
 
+	if !noHintsFlag {
+		fmt.Print("Generating client... ")
+	}
 	if err := generator.GenerateClient(schema, absoluteOutputDir); err != nil {
 		return fmt.Errorf("error generating client: %w", err)
 	}
+	if !noHintsFlag {
+		fmt.Println("✓")
+	}
 
+	if !noHintsFlag {
+		fmt.Print("Generating driver adapters... ")
+	}
 	if err := generator.GenerateDriver(schema, absoluteOutputDir); err != nil {
 		return fmt.Errorf("error generating driver: %w", err)
+	}
+	if !noHintsFlag {
+		fmt.Println("✓")
 	}
 
 	// Calculate elapsed time
@@ -131,53 +264,177 @@ func runGenerate(args []string) error {
 	elapsedMs := elapsed.Milliseconds()
 
 	// Show success message
-	fmt.Printf("\n✔ Generated Prisma Client (%s) to %s in %dms\n", version, outputDir, elapsedMs)
-
-	// Atualizar cache do Go para que staticcheck e outras ferramentas reconheçam os novos pacotes
-	fmt.Println("Updating Go module cache...")
-	cmd := exec.Command("go", "mod", "tidy")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	// Executar no diretório do projeto
-	wd, err := filepath.Abs(".")
-	if err == nil {
-		cmd.Dir = wd
-	}
-
-	if err := cmd.Run(); err != nil {
-		// Não falhar se go mod tidy falhar, apenas avisar
-		fmt.Printf("⚠ Warning: failed to run 'go mod tidy': %v\n", err)
-		fmt.Println("  You may need to run 'go mod tidy' manually for staticcheck to recognize new packages.")
+	if !noHintsFlag {
+		fmt.Printf("\n✔ Generated Prisma Client (%s) to %s in %dms\n", version, outputDir, elapsedMs)
 	} else {
-		fmt.Println("✔ Go module cache updated")
+		fmt.Printf("✔ Generated Prisma Client to %s in %dms\n", outputDir, elapsedMs)
 	}
 
-	// Após go mod tidy, forçar reconhecimento dos pacotes gerados
-	fmt.Println("Refreshing Go package cache...")
-	refreshCommands := []struct {
-		name string
-		args []string
-		dir  string
-	}{
-		{"go list", []string{"go", "list", "./..."}, absoluteOutputDir},
-		{"go build", []string{"go", "build", "./..."}, absoluteOutputDir},
-	}
-
-	for _, cmdInfo := range refreshCommands {
-		cmd := exec.Command(cmdInfo.args[0], cmdInfo.args[1:]...)
-		cmd.Stdout = os.Stderr // Redirecionar para stderr para não poluir stdout
+	// Update Go module cache (only if not in watch mode and hints are enabled)
+	if !noHintsFlag {
+		fmt.Print("Updating Go module cache... ")
+		cmd := exec.Command("go", "mod", "tidy")
+		cmd.Stdout = os.Stderr // Redirect to stderr to avoid polluting output
 		cmd.Stderr = os.Stderr
-		cmd.Dir = cmdInfo.dir
+
+		// Execute in project directory
+		wd, err := filepath.Abs(".")
+		if err == nil {
+			cmd.Dir = wd
+		}
 
 		if err := cmd.Run(); err != nil {
-			// Não falhar, apenas avisar
-			fmt.Printf("⚠ Warning: failed to run '%s': %v\n", cmdInfo.name, err)
+			// Don't fail if go mod tidy fails, just warn
+			fmt.Printf("⚠ Warning: failed to run 'go mod tidy': %v\n", err)
+			fmt.Println("  You may need to run 'go mod tidy' manually for staticcheck to recognize new packages.")
+		} else {
+			fmt.Println("✓")
 		}
 	}
-	fmt.Println("✔ Go package cache refreshed")
 
-	fmt.Println()
+	if !noHintsFlag {
+		fmt.Println()
+		fmt.Println("Next steps:")
+		fmt.Println("  Import your Prisma Client in your code:")
+		fmt.Printf("    import \"%s\"\n", absoluteOutputDir)
+		fmt.Println()
+	}
 
 	return nil
+}
+
+// filterGenerators filters generators based on --generator flags
+func filterGenerators(schema *parser.Schema, generatorNames []string) []*parser.Generator {
+	if len(generatorNames) == 0 {
+		return schema.Generators
+	}
+
+	var filtered []*parser.Generator
+	for _, gen := range schema.Generators {
+		// Get generator provider name
+		var providerName string
+		for _, field := range gen.Fields {
+			if field.Name == "provider" {
+				if val, ok := field.Value.(string); ok {
+					providerName = val
+					break
+				}
+			}
+		}
+
+		// Check if this generator matches any of the requested names
+		for _, requestedName := range generatorNames {
+			if providerName == requestedName || strings.Contains(providerName, requestedName) {
+				filtered = append(filtered, gen)
+				break
+			}
+		}
+	}
+
+	return filtered
+}
+
+// runGenerateWatch runs generate in watch mode, monitoring schema changes
+func runGenerateWatch(schemaPath string) error {
+	schemaDir := filepath.Dir(schemaPath)
+	if schemaDir == "." {
+		schemaDir, _ = filepath.Abs(".")
+	}
+
+	fmt.Println()
+	fmt.Printf("Watching... %s\n", schemaDir)
+	fmt.Println()
+
+	// Initial generation
+	if err := runGenerateOnce(schemaPath); err != nil {
+		fmt.Printf("Error in initial generation: %v\n", err)
+	}
+
+	// Create watcher
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return fmt.Errorf("error creating file watcher: %w", err)
+	}
+	defer watcher.Close()
+
+	// Watch schema directory
+	if err := watcher.Add(schemaDir); err != nil {
+		return fmt.Errorf("error watching directory: %w", err)
+	}
+
+	// Watch schema file specifically
+	if err := watcher.Add(schemaPath); err != nil {
+		return fmt.Errorf("error watching schema file: %w", err)
+	}
+
+	// Setup signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	// Debounce mechanism
+	var mu sync.Mutex
+	var lastEventTime time.Time
+	debounceDelay := 300 * time.Millisecond
+
+	// Channel for debounced events
+	debouncedEvents := make(chan struct{}, 1)
+
+	// Debounce goroutine
+	go func() {
+		for range time.Tick(100 * time.Millisecond) {
+			mu.Lock()
+			if !lastEventTime.IsZero() && time.Since(lastEventTime) > debounceDelay {
+				select {
+				case debouncedEvents <- struct{}{}:
+				default:
+				}
+				lastEventTime = time.Time{}
+			}
+			mu.Unlock()
+		}
+	}()
+
+	// Event processing loop
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return nil
+			}
+
+			// Only react to write events on .prisma files
+			if event.Op&fsnotify.Write == fsnotify.Write || event.Op&fsnotify.Create == fsnotify.Create {
+				if strings.HasSuffix(event.Name, ".prisma") {
+					mu.Lock()
+					lastEventTime = time.Now()
+					mu.Unlock()
+				}
+			}
+
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return nil
+			}
+			fmt.Printf("Watcher error: %v\n", err)
+
+		case <-debouncedEvents:
+			// Schema changed, regenerate
+			relPath, _ := filepath.Rel(".", schemaPath)
+			fmt.Printf("Change detected in %s\n", relPath)
+			fmt.Println("Building...")
+			fmt.Println()
+
+			if err := runGenerateOnce(schemaPath); err != nil {
+				fmt.Printf("Error during generation: %v\n", err)
+				fmt.Println()
+			} else {
+				fmt.Printf("Watching... %s\n", schemaDir)
+				fmt.Println()
+			}
+
+		case <-sigChan:
+			fmt.Println("\nStopping watch mode...")
+			return nil
+		}
+	}
 }

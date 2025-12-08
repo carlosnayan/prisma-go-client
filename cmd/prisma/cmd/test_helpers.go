@@ -153,7 +153,6 @@ func resetGlobalFlags() {
 	verbose = false
 	providerFlag = ""
 	databaseFlag = ""
-	formatWriteFlag = false
 	formatCheckFlag = false
 	migrateResolveAppliedFlag = ""
 	migrateResolveRolledBackFlag = ""
@@ -164,6 +163,10 @@ func resetGlobalFlags() {
 	diffFrom = ""
 	diffTo = ""
 	diffOut = ""
+	watchFlag = false
+	generatorFlags = nil
+	noHintsFlag = false
+	requireModelsFlag = false
 }
 
 // setEnv sets an environment variable and returns a cleanup function

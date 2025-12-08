@@ -3,7 +3,9 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/carlosnayan/prisma-go-client/cli"
 	"github.com/carlosnayan/prisma-go-client/internal/formatter"
@@ -24,13 +26,14 @@ var formatCmd = &cli.Command{
   - Removes unnecessary whitespace`,
 	Flags: []*cli.Flag{
 		{
-			Name:  "write",
-			Usage: "Write changes to file (default: true)",
-			Value: &formatWriteFlag,
+			Name:  "schema",
+			Short: "s",
+			Usage: "Custom path to your Prisma schema",
+			Value: &schemaPath,
 		},
 		{
 			Name:  "check",
-			Usage: "Only check if file is formatted",
+			Usage: "Only check if file is formatted (does not write)",
 			Value: &formatCheckFlag,
 		},
 	},
@@ -42,14 +45,17 @@ func runFormat(args []string) error {
 		return err
 	}
 
-	write := formatWriteFlag
-	if !formatCheckFlag && !formatWriteFlag {
-		write = true // default
-	}
+	startTime := time.Now()
 	check := formatCheckFlag
 
 	schemaPath := getSchemaPath()
-	fmt.Printf("Formatting %s...\n", schemaPath)
+
+	// Print schema loaded message (consistent with official)
+	relPath, err := filepath.Rel(".", schemaPath)
+	if err != nil {
+		relPath = schemaPath
+	}
+	fmt.Printf("Prisma schema loaded from %s\n", relPath)
 	fmt.Println()
 
 	// Parse schema
@@ -78,39 +84,69 @@ func runFormat(args []string) error {
 		return fmt.Errorf("error: formatting returned empty string")
 	}
 
+	// Validate the formatted schema
+	formattedSchema, validationErrors, validateErr := parser.Parse(formatted)
+	if validateErr != nil || len(validationErrors) > 0 {
+		return fmt.Errorf("formatted schema is invalid - this should not happen")
+	}
+
+	// Ensure formatted schema is valid
+	if formattedSchema == nil {
+		return fmt.Errorf("formatted schema is nil after parsing")
+	}
+
 	// Read original file to compare
 	original, err := os.ReadFile(schemaPath)
 	if err != nil {
 		return fmt.Errorf("error reading file: %w", err)
 	}
 
-	// Normalize strings for comparison (remove extra spaces)
-	originalStr := strings.TrimSpace(string(original))
-	formattedStr := strings.TrimSpace(formatted)
+	// Normalize strings for comparison
+	// Remove trailing whitespace from each line and normalize line endings
+	originalLines := strings.Split(string(original), "\n")
+	formattedLines := strings.Split(formatted, "\n")
+
+	// Trim trailing whitespace from each line
+	for i := range originalLines {
+		originalLines[i] = strings.TrimRight(originalLines[i], " \t")
+	}
+	for i := range formattedLines {
+		formattedLines[i] = strings.TrimRight(formattedLines[i], " \t")
+	}
+
+	originalStr := strings.Join(originalLines, "\n")
+	formattedStr := strings.Join(formattedLines, "\n")
+
+	// Normalize line endings and trim
+	originalStr = strings.TrimSpace(originalStr)
+	formattedStr = strings.TrimSpace(formattedStr)
 
 	// Check if formatting is needed
 	if originalStr == formattedStr {
-		fmt.Println("Schema is already formatted!")
+		if check {
+			fmt.Println("All files are formatted correctly!")
+			return nil
+		}
+		fmt.Printf("The schema at %s is already formatted!\n", relPath)
 		return nil
 	}
 
 	if check {
-		fmt.Println("Warning: Schema needs formatting")
-		fmt.Println("   Run 'prisma format' without --check to format")
+		fmt.Printf("There are unformatted files. Run %s to format them.\n", "prisma format")
 		return fmt.Errorf("schema is not formatted")
 	}
 
 	// Write back
-	if write {
-		if err := os.WriteFile(schemaPath, []byte(formatted), 0644); err != nil {
-			return fmt.Errorf("error writing file: %w", err)
-		}
-		fmt.Println("Schema formatted and saved!")
-	} else {
-		fmt.Println("Formatted schema (use --write to save):")
-		fmt.Println()
-		fmt.Println(formatted)
+	if err := os.WriteFile(schemaPath, []byte(formatted), 0644); err != nil {
+		return fmt.Errorf("error writing file: %w", err)
 	}
+
+	// Calculate elapsed time
+	elapsed := time.Since(startTime)
+	elapsedMs := elapsed.Milliseconds()
+
+	// Show success message (consistent with official format)
+	fmt.Printf("Formatted %s in %dms 🚀\n", relPath, elapsedMs)
 
 	return nil
 }

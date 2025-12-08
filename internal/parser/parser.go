@@ -488,7 +488,20 @@ func (p *Parser) parseValue() interface{} {
 			p.nextToken()
 			args := []interface{}{}
 			for p.curToken.Type != TokenRParen && p.curToken.Type != TokenEOF {
-				args = append(args, p.parseValue())
+				// Check if this is a named argument (name: value)
+				if p.curToken.Type == TokenIdent && (p.peekToken.Type == TokenColon || p.peekToken.Type == TokenEqual) {
+					argName := p.curToken.Literal
+					p.nextToken() // pular nome
+					p.nextToken() // pular : ou =
+					argValue := p.parseValue()
+					// Store as named argument
+					args = append(args, map[string]interface{}{
+						"name":  argName,
+						"value": argValue,
+					})
+				} else {
+					args = append(args, p.parseValue())
+				}
 				if p.curToken.Type == TokenComma {
 					p.nextToken()
 				}

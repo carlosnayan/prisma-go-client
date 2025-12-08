@@ -282,3 +282,172 @@ func TestGenerate_RequiresConfigFile(t *testing.T) {
 		t.Error("runGenerate should fail without config file")
 	}
 }
+
+// Test new features
+
+func TestGenerate_WithNoHintsFlag(t *testing.T) {
+	resetGlobalFlags()
+	dir := setupTestDir(t)
+	defer func() { _ = cleanupTestDir(dir) }()
+
+	createTestGoMod(t, "test-module")
+	createTestConfig(t, "")
+	createTestSchema(t, "")
+
+	noHintsFlag = true
+	err := runGenerate([]string{})
+	if err != nil {
+		t.Fatalf("runGenerate failed: %v", err)
+	}
+
+	// With no-hints, we should still generate files but with less output
+	if !fileExists("./db/client.go") {
+		t.Error("Client file should still be created with --no-hints")
+	}
+}
+
+func TestGenerate_WithRequireModelsFlag_NoModels(t *testing.T) {
+	resetGlobalFlags()
+	dir := setupTestDir(t)
+	defer func() { _ = cleanupTestDir(dir) }()
+
+	createTestGoMod(t, "test-module")
+	createTestConfig(t, "")
+
+	// Create schema without models
+	schemaContent := `datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-go"
+  output   = "./db"
+}
+`
+	createTestSchema(t, schemaContent)
+
+	requireModelsFlag = true
+	err := runGenerate([]string{})
+	if err == nil {
+		t.Error("runGenerate should fail with --require-models when no models exist")
+	}
+	if !strings.Contains(err.Error(), "no models") {
+		t.Errorf("Error should mention 'no models', got: %v", err)
+	}
+}
+
+func TestGenerate_WithRequireModelsFlag_WithModels(t *testing.T) {
+	resetGlobalFlags()
+	dir := setupTestDir(t)
+	defer func() { _ = cleanupTestDir(dir) }()
+
+	createTestGoMod(t, "test-module")
+	createTestConfig(t, "")
+	createTestSchema(t, "") // This has a users model
+
+	requireModelsFlag = true
+	err := runGenerate([]string{})
+	if err != nil {
+		t.Fatalf("runGenerate should succeed with --require-models when models exist: %v", err)
+	}
+}
+
+func TestGenerate_ProgressIndicators(t *testing.T) {
+	resetGlobalFlags()
+	dir := setupTestDir(t)
+	defer func() { _ = cleanupTestDir(dir) }()
+
+	createTestGoMod(t, "test-module")
+	createTestConfig(t, "")
+	createTestSchema(t, "")
+
+	err := runGenerate([]string{})
+	if err != nil {
+		t.Fatalf("runGenerate failed: %v", err)
+	}
+
+	// Progress indicators should show during generation
+	// We can't easily test the output, but we can verify files were created
+	if !fileExists("./db/client.go") {
+		t.Error("Client file should be created")
+	}
+}
+
+func TestGenerate_ErrorHandling_InvalidSchema(t *testing.T) {
+	resetGlobalFlags()
+	dir := setupTestDir(t)
+	defer func() { _ = cleanupTestDir(dir) }()
+
+	createTestGoMod(t, "test-module")
+	createTestConfig(t, "")
+	createInvalidSchema(t)
+
+	err := runGenerate([]string{})
+	if err == nil {
+		t.Error("runGenerate should fail with invalid schema")
+	}
+
+	// Error message should be helpful
+	if !strings.Contains(err.Error(), "invalid") && !strings.Contains(err.Error(), "error") {
+		t.Errorf("Error message should be helpful, got: %v", err)
+	}
+}
+
+func TestGenerate_ErrorHandling_MissingSchema(t *testing.T) {
+	resetGlobalFlags()
+	dir := setupTestDir(t)
+	defer func() { _ = cleanupTestDir(dir) }()
+
+	createTestGoMod(t, "test-module")
+	createTestConfig(t, "")
+	// Don't create schema
+
+	schemaPath = "nonexistent.prisma"
+	err := runGenerate([]string{})
+	if err == nil {
+		t.Error("runGenerate should fail with missing schema")
+	}
+}
+
+func TestGenerate_ParseGeneratorFlags(t *testing.T) {
+	testCases := []struct {
+		name     string
+		args     []string
+		expected []string
+	}{
+		{
+			name:     "single generator flag",
+			args:     []string{"--generator", "client"},
+			expected: []string{"client"},
+		},
+		{
+			name:     "multiple generator flags",
+			args:     []string{"--generator", "client", "--generator", "client2"},
+			expected: []string{"client", "client2"},
+		},
+		{
+			name:     "generator with equals",
+			args:     []string{"--generator=client"},
+			expected: []string{"client"},
+		},
+		{
+			name:     "no generator flags",
+			args:     []string{},
+			expected: []string{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := parseGeneratorFlags(tc.args)
+			if len(result) != len(tc.expected) {
+				t.Errorf("Expected %d generators, got %d", len(tc.expected), len(result))
+			}
+			for i, expected := range tc.expected {
+				if i < len(result) && result[i] != expected {
+					t.Errorf("Expected generator[%d] = %s, got %s", i, expected, result[i])
+				}
+			}
+		})
+	}
+}

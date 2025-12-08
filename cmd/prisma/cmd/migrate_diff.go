@@ -80,7 +80,7 @@ func runMigrateDiff(args []string) error {
 			return fmt.Errorf("error introspecting database: %w", err)
 		}
 
-		fromSchema, err = migrations.GenerateSchemaFromDatabase(dbSchema, provider)
+		fromSchema, err = migrations.GenerateSchemaFromDatabase(dbSchema, provider, db)
 		if err != nil {
 			return fmt.Errorf("error generating schema from database: %w", err)
 		}
@@ -126,7 +126,7 @@ func runMigrateDiff(args []string) error {
 			return fmt.Errorf("error introspecting database: %w", err)
 		}
 
-		toSchema, err = migrations.GenerateSchemaFromDatabase(dbSchema, provider)
+		toSchema, err = migrations.GenerateSchemaFromDatabase(dbSchema, provider, db)
 		if err != nil {
 			return fmt.Errorf("error generating schema from database: %w", err)
 		}

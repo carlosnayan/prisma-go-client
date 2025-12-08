@@ -1,7 +1,9 @@
 package migrations
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +12,7 @@ import (
 	"time"
 
 	"github.com/carlosnayan/prisma-go-client/internal/config"
+	"github.com/google/uuid"
 )
 
 // Migration represents a migration
@@ -44,19 +47,70 @@ func NewManager(cfg *config.Config, db *sql.DB) (*Manager, error) {
 }
 
 // EnsureMigrationsTable ensures that the _prisma_migrations table exists
+// This must match Prisma's exact table structure for 100% compatibility
 func (m *Manager) EnsureMigrationsTable() error {
-	query := `
-		CREATE TABLE IF NOT EXISTS _prisma_migrations (
-			id VARCHAR(36) PRIMARY KEY,
-			checksum VARCHAR(64) NOT NULL,
-			finished_at TIMESTAMP,
-			migration_name VARCHAR(255) NOT NULL,
-			logs TEXT,
-			rolled_back_at TIMESTAMP,
-			started_at TIMESTAMP NOT NULL,
-			applied_steps_count INTEGER NOT NULL DEFAULT 0
-		)
-	`
+	// Get provider to use correct SQL syntax
+	provider := m.getProvider()
+
+	var query string
+	switch provider {
+	case "postgresql", "postgres":
+		// PostgreSQL: Use TIMESTAMPTZ for better timezone handling (Prisma uses this)
+		query = `
+			CREATE TABLE IF NOT EXISTS _prisma_migrations (
+				id VARCHAR(36) PRIMARY KEY,
+				checksum VARCHAR(64) NOT NULL,
+				finished_at TIMESTAMPTZ,
+				migration_name VARCHAR(255) NOT NULL,
+				logs TEXT,
+				rolled_back_at TIMESTAMPTZ,
+				started_at TIMESTAMPTZ NOT NULL,
+				applied_steps_count INTEGER NOT NULL DEFAULT 0
+			)
+		`
+	case "mysql":
+		// MySQL: Use DATETIME(3) for millisecond precision (matching Prisma)
+		query = `
+			CREATE TABLE IF NOT EXISTS _prisma_migrations (
+				id VARCHAR(36) PRIMARY KEY,
+				checksum VARCHAR(64) NOT NULL,
+				finished_at DATETIME(3),
+				migration_name VARCHAR(255) NOT NULL,
+				logs TEXT,
+				rolled_back_at DATETIME(3),
+				started_at DATETIME(3) NOT NULL,
+				applied_steps_count INTEGER NOT NULL DEFAULT 0
+			)
+		`
+	case "sqlite":
+		// SQLite: Use TEXT for timestamps (ISO 8601 format)
+		query = `
+			CREATE TABLE IF NOT EXISTS _prisma_migrations (
+				id TEXT PRIMARY KEY,
+				checksum TEXT NOT NULL,
+				finished_at TEXT,
+				migration_name TEXT NOT NULL,
+				logs TEXT,
+				rolled_back_at TEXT,
+				started_at TEXT NOT NULL,
+				applied_steps_count INTEGER NOT NULL DEFAULT 0
+			)
+		`
+	default:
+		// Default to PostgreSQL format
+		query = `
+			CREATE TABLE IF NOT EXISTS _prisma_migrations (
+				id VARCHAR(36) PRIMARY KEY,
+				checksum VARCHAR(64) NOT NULL,
+				finished_at TIMESTAMPTZ,
+				migration_name VARCHAR(255) NOT NULL,
+				logs TEXT,
+				rolled_back_at TIMESTAMPTZ,
+				started_at TIMESTAMPTZ NOT NULL,
+				applied_steps_count INTEGER NOT NULL DEFAULT 0
+			)
+		`
+	}
 
 	_, err := m.db.Exec(query)
 	if err != nil {
@@ -64,6 +118,29 @@ func (m *Manager) EnsureMigrationsTable() error {
 	}
 
 	return nil
+}
+
+// getProvider determines the database provider from the connection string
+func (m *Manager) getProvider() string {
+	if m.config == nil || m.config.Datasource == nil {
+		return "postgresql" // Default
+	}
+
+	dbURL := m.config.GetDatabaseURL()
+	if dbURL == "" {
+		return "postgresql" // Default
+	}
+
+	// Parse URL to detect provider
+	if strings.HasPrefix(dbURL, "postgresql://") || strings.HasPrefix(dbURL, "postgres://") {
+		return "postgresql"
+	} else if strings.HasPrefix(dbURL, "mysql://") {
+		return "mysql"
+	} else if strings.HasPrefix(dbURL, "sqlite://") || strings.HasPrefix(dbURL, "file:") {
+		return "sqlite"
+	}
+
+	return "postgresql" // Default
 }
 
 // GetAppliedMigrations returns list of applied migrations
@@ -106,7 +183,8 @@ func (m *Manager) GetLocalMigrations() ([]*Migration, error) {
 
 		name := entry.Name()
 		// Check if it's a migration directory (format: YYYYMMDDHHMMSS_name)
-		if !isValidMigrationName(name) {
+		// Skip migration_lock.toml directory if it exists
+		if name == "migration_lock.toml" || !isValidMigrationName(name) {
 			continue
 		}
 
@@ -132,6 +210,56 @@ func (m *Manager) GetLocalMigrations() ([]*Migration, error) {
 	})
 
 	return migrations, nil
+}
+
+// GetModifiedMigrations returns migrations that have been modified after being applied
+// This checks if the checksum of the local migration file differs from the stored checksum
+func (m *Manager) GetModifiedMigrations() ([]string, error) {
+	if err := m.EnsureMigrationsTable(); err != nil {
+		return nil, err
+	}
+
+	local, err := m.GetLocalMigrations()
+	if err != nil {
+		return nil, err
+	}
+
+	// Get checksums from database
+	query := `SELECT migration_name, checksum FROM _prisma_migrations WHERE finished_at IS NOT NULL`
+	rows, err := m.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("error querying migration checksums: %w", err)
+	}
+	defer rows.Close()
+
+	// Build map of migration name -> stored checksum
+	storedChecksums := make(map[string]string)
+	for rows.Next() {
+		var name, checksum string
+		if err := rows.Scan(&name, &checksum); err != nil {
+			return nil, fmt.Errorf("error reading checksum: %w", err)
+		}
+		storedChecksums[name] = checksum
+	}
+
+	// Check each local migration
+	var modified []string
+	for _, migration := range local {
+		storedChecksum, exists := storedChecksums[migration.Name]
+		if !exists {
+			continue // Not applied yet, skip
+		}
+
+		// Calculate current checksum
+		currentChecksum := calculateChecksum(migration.SQL)
+
+		// If checksums differ, migration was modified
+		if storedChecksum != currentChecksum && storedChecksum != "manual" {
+			modified = append(modified, migration.Name)
+		}
+	}
+
+	return modified, nil
 }
 
 // isValidMigrationName checks if the migration name is in the correct format
@@ -278,15 +406,39 @@ func (m *Manager) ApplyMigration(migration *Migration) error {
 	return nil
 }
 
-// generateMigrationID generates a unique ID for the migration
+// generateMigrationID generates a unique UUID v4 for the migration
+// This must match Prisma's format for compatibility
 func generateMigrationID() string {
-	return fmt.Sprintf("%d", time.Now().UnixNano())
+	return uuid.New().String()
 }
 
-// calculateChecksum calculates a simple checksum of the SQL
+// calculateChecksum calculates SHA256 checksum of the SQL content
+// This must match exactly how Prisma calculates checksums for compatibility
+// Prisma's Schema Engine calculates checksum on the raw file content with specific normalization:
+// 1. Remove trailing whitespace from each line (spaces, tabs, carriage returns)
+// 2. Keep line endings as \n (normalize to Unix line endings)
+// 3. Calculate SHA256 of the normalized content
 func calculateChecksum(sql string) string {
-	// Simple checksum (in production, use SHA256)
-	return fmt.Sprintf("%d", len(sql))
+	// Normalize line endings to \n (Unix style)
+	// Replace \r\n (Windows) and \r (old Mac) with \n
+	normalized := strings.ReplaceAll(sql, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+
+	// Split into lines and remove trailing whitespace from each line
+	lines := strings.Split(normalized, "\n")
+	normalizedLines := make([]string, 0, len(lines))
+	for _, line := range lines {
+		// Remove trailing spaces, tabs, and carriage returns
+		normalizedLine := strings.TrimRight(line, " \t\r")
+		normalizedLines = append(normalizedLines, normalizedLine)
+	}
+
+	// Rejoin with \n (ensuring consistent line endings)
+	normalizedSQL := strings.Join(normalizedLines, "\n")
+
+	// Calculate SHA256 hash (64 hex characters)
+	hash := sha256.Sum256([]byte(normalizedSQL))
+	return hex.EncodeToString(hash[:])
 }
 
 // SplitSQLStatements splits SQL into individual statements
@@ -397,6 +549,38 @@ func (m *Manager) MarkMigrationAsRolledBack(migrationName string) error {
 
 	if rowsAffected == 0 {
 		return fmt.Errorf("migration '%s' not found", migrationName)
+	}
+
+	return nil
+}
+
+// EnsureMigrationLockfile ensures that migration_lock.toml exists in the migrations directory
+// This file locks the database provider to prevent mixing providers
+func EnsureMigrationLockfile(migrationsPath, provider string) error {
+	lockfilePath := filepath.Join(migrationsPath, "migration_lock.toml")
+
+	// Check if lockfile already exists
+	if _, err := os.Stat(lockfilePath); err == nil {
+		// Read existing lockfile to verify provider matches
+		content, err := os.ReadFile(lockfilePath)
+		if err != nil {
+			return fmt.Errorf("error reading migration_lock.toml: %w", err)
+		}
+
+		// Check if provider matches
+		contentStr := string(content)
+		expectedProvider := fmt.Sprintf("provider = \"%s\"", provider)
+		if !strings.Contains(contentStr, expectedProvider) {
+			return fmt.Errorf("migration_lock.toml exists with different provider. Expected: %s", provider)
+		}
+
+		return nil
+	}
+
+	// Create lockfile with provider
+	lockfileContent := fmt.Sprintf("provider = \"%s\"\n", provider)
+	if err := os.WriteFile(lockfilePath, []byte(lockfileContent), 0644); err != nil {
+		return fmt.Errorf("error writing migration_lock.toml: %w", err)
 	}
 
 	return nil

@@ -6,7 +6,19 @@ import (
 	"github.com/carlosnayan/prisma-go-client/internal/parser"
 )
 
-// CompareSchema compares the Prisma schema with the database and returns differences
+func isBuiltInType(typeName string) bool {
+	builtInTypes := []string{
+		"String", "Int", "Float", "Boolean", "DateTime", "Json", "Bytes",
+		"BigInt", "Decimal",
+	}
+	for _, t := range builtInTypes {
+		if t == typeName {
+			return true
+		}
+	}
+	return false
+}
+
 func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider string) (*SchemaDiff, error) {
 	diff := &SchemaDiff{
 		TablesToCreate:      []TableDefinition{},
@@ -17,10 +29,8 @@ func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider str
 		ForeignKeysToCreate: []ForeignKeyDefinition{},
 	}
 
-	// Convert Prisma schema to comparable structure
 	prismaTables := make(map[string]*TableDefinition)
 	for _, model := range schema.Models {
-		// Use @@map if present, otherwise use model name
 		tableName := getTableNameFromModel(model)
 		table := &TableDefinition{
 			Name:        tableName,
@@ -28,10 +38,8 @@ func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider str
 			CompositePK: []string{},
 		}
 
-		// Process @@id attribute (composite primary key)
 		for _, attr := range model.Attributes {
 			if attr.Name == "id" {
-				// Extract fields from @@id([field1, field2])
 				var pkFields []string
 				for _, arg := range attr.Arguments {
 					if arg.Name == "" {
@@ -45,7 +53,6 @@ func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider str
 					}
 				}
 				if len(pkFields) > 0 {
-					// Map column names
 					mappedPKFields := make([]string, len(pkFields))
 					for i, pkField := range pkFields {
 						for _, field := range model.Fields {
@@ -55,7 +62,7 @@ func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider str
 							}
 						}
 						if mappedPKFields[i] == "" {
-							mappedPKFields[i] = pkField // Fallback
+							mappedPKFields[i] = pkField
 						}
 					}
 					table.CompositePK = mappedPKFields
@@ -64,7 +71,13 @@ func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider str
 		}
 
 		for _, field := range model.Fields {
-			// Use @map if present, otherwise use field name
+			cleanTypeName := strings.TrimSuffix(strings.TrimSuffix(field.Type.Name, "[]"), "?")
+			isRelationField := strings.HasSuffix(field.Type.Name, "[]") || (!isBuiltInType(cleanTypeName) && isModel(schema, cleanTypeName))
+			
+			if isRelationField {
+				continue
+			}
+			
 			columnName := getColumnNameFromField(field)
 			col := ColumnDefinition{
 				Name:       columnName,
@@ -72,13 +85,10 @@ func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider str
 				IsNullable: field.Type.IsOptional,
 			}
 
-			// Check attributes
-			// Skip @id if there's a composite PK (handled by @@id)
 			hasCompositePK := len(table.CompositePK) > 0
 			for _, attr := range field.Attributes {
 				switch attr.Name {
 				case "id":
-					// Only set as PK if there's no composite PK
 					if !hasCompositePK {
 						col.IsPrimaryKey = true
 						col.IsNullable = false
@@ -90,7 +100,6 @@ func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider str
 						col.DefaultValue = extractDefaultValue(attr.Arguments[0])
 					}
 				case "updatedAt":
-					// @updatedAt doesn't need special SQL
 				case "db.Uuid", "db.UUID":
 					col.Type = "UUID"
 				case "db.VarChar":
@@ -199,197 +208,185 @@ func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider str
 			table.Columns = append(table.Columns, col)
 		}
 
-		prismaTables[model.Name] = table
+		prismaTables[tableName] = table
 	}
 
-	// Comparar tabelas
-	for modelName, prismaTable := range prismaTables {
-		dbTable, exists := dbSchema.Tables[modelName]
-
+	for tableName, prismaTable := range prismaTables {
+		dbTable, exists := dbSchema.Tables[tableName]
 		if !exists {
-			// Table doesn't exist in database, needs to be created
 			diff.TablesToCreate = append(diff.TablesToCreate, *prismaTable)
-		} else {
-			// Table exists, compare columns
-			alteration := TableAlteration{
-				TableName:    modelName,
-				AddColumns:   []ColumnDefinition{},
-				DropColumns:  []string{},
-				AlterColumns: []ColumnAlteration{},
+			continue
+		}
+
+		alteration := TableAlteration{
+			TableName:    tableName,
+			AddColumns:   []ColumnDefinition{},
+			DropColumns:  []string{},
+			AlterColumns: []ColumnAlteration{},
+		}
+
+		for _, prismaCol := range prismaTable.Columns {
+			dbCol, exists := dbTable.Columns[prismaCol.Name]
+			if !exists {
+				alteration.AddColumns = append(alteration.AddColumns, prismaCol)
+				continue
 			}
 
-			// Check columns to add or alter
+			prismaTypeSQL := mapTypeToSQL(prismaCol.Type, provider)
+			if dbCol.Type != prismaTypeSQL || dbCol.IsNullable != prismaCol.IsNullable {
+				alteration.AlterColumns = append(alteration.AlterColumns, ColumnAlteration{
+					ColumnName:  prismaCol.Name,
+					NewType:     prismaCol.Type,
+					NewNullable: prismaCol.IsNullable,
+				})
+			}
+		}
+
+		for dbColName := range dbTable.Columns {
+			found := false
 			for _, prismaCol := range prismaTable.Columns {
-				dbCol, exists := dbTable.Columns[prismaCol.Name]
-
-				if !exists {
-					// Column doesn't exist, needs to be added
-					alteration.AddColumns = append(alteration.AddColumns, prismaCol)
-				} else {
-					// Column exists, check if it needs to be altered
-					needsAlter := false
-					colAlter := ColumnAlteration{
-						ColumnName:  prismaCol.Name,
-						NewType:     prismaCol.Type,
-						NewNullable: prismaCol.IsNullable,
-					}
-
-					// Compare type
-					prismaTypeSQL := mapTypeToSQL(prismaCol.Type, provider)
-					if dbCol.Type != prismaTypeSQL {
-						needsAlter = true
-					}
-
-					// Compare nullable
-					if dbCol.IsNullable != prismaCol.IsNullable {
-						needsAlter = true
-					}
-
-					if needsAlter {
-						alteration.AlterColumns = append(alteration.AlterColumns, colAlter)
-					}
+				if prismaCol.Name == dbColName {
+					found = true
+					break
 				}
 			}
-
-			// Check columns to remove (exist in database but not in schema)
-			for dbColName := range dbTable.Columns {
-				found := false
-				for _, prismaCol := range prismaTable.Columns {
-					if prismaCol.Name == dbColName {
-						found = true
-						break
-					}
-				}
-				if !found {
-					alteration.DropColumns = append(alteration.DropColumns, dbColName)
-				}
+			if !found {
+				alteration.DropColumns = append(alteration.DropColumns, dbColName)
 			}
+		}
 
-			// Only add alteration if there are changes
-			if len(alteration.AddColumns) > 0 || len(alteration.DropColumns) > 0 || len(alteration.AlterColumns) > 0 {
-				diff.TablesToAlter = append(diff.TablesToAlter, alteration)
-			}
+		if len(alteration.AddColumns) > 0 || len(alteration.DropColumns) > 0 || len(alteration.AlterColumns) > 0 {
+			diff.TablesToAlter = append(diff.TablesToAlter, alteration)
 		}
 	}
 
-	// Check tables to remove (exist in database but not in schema)
 	for dbTableName := range dbSchema.Tables {
-		_, exists := prismaTables[dbTableName]
-		if !exists {
+		if _, exists := prismaTables[dbTableName]; !exists {
 			diff.TablesToDrop = append(diff.TablesToDrop, dbTableName)
 		}
 	}
 
-	// Process relations, @@unique, and @@index attributes
-	processRelationsAndUnique(schema, diff)
+	processRelationsAndUnique(schema, diff, dbSchema)
 
 	return diff, nil
 }
 
-// processRelationsAndUnique processes @relation attributes, @@unique, and @@index attributes
-func processRelationsAndUnique(schema *parser.Schema, diff *SchemaDiff) {
-	// Create a map of model names for quick lookup
+func processRelationsAndUnique(schema *parser.Schema, diff *SchemaDiff, dbSchema *DatabaseSchema) {
 	modelMap := make(map[string]*parser.Model)
 	for _, model := range schema.Models {
 		modelMap[model.Name] = model
 	}
 
-	// Process each model
 	for _, model := range schema.Models {
-		// Get mapped table name
 		tableName := getTableNameFromModel(model)
 
-		// Process @@unique attributes
 		for _, attr := range model.Attributes {
+			var indexDef *IndexDefinition
 			if attr.Name == "unique" {
-				indexDef := extractUniqueIndex(tableName, attr)
-				if indexDef != nil {
-					// Map column names in index
-					mappedColumns := make([]string, len(indexDef.Columns))
-					for i, col := range indexDef.Columns {
-						// Find field and get mapped name
-						for _, field := range model.Fields {
-							if field.Name == col {
-								mappedColumns[i] = getColumnNameFromField(field)
-								break
-							}
-						}
-						if mappedColumns[i] == "" {
-							mappedColumns[i] = col // Fallback to original name
-						}
-					}
-					indexDef.Columns = mappedColumns
-					diff.IndexesToCreate = append(diff.IndexesToCreate, *indexDef)
-				}
+				indexDef = extractUniqueIndex(tableName, attr)
+			} else if attr.Name == "index" {
+				indexDef = extractIndex(tableName, attr)
 			}
-			// Process @@index attributes (non-unique indexes)
-			if attr.Name == "index" {
-				indexDef := extractIndex(tableName, attr)
-				if indexDef != nil {
-					// Map column names in index
-					mappedColumns := make([]string, len(indexDef.Columns))
-					for i, col := range indexDef.Columns {
-						// Find field and get mapped name
-						for _, field := range model.Fields {
-							if field.Name == col {
-								mappedColumns[i] = getColumnNameFromField(field)
-								break
-							}
-						}
-						if mappedColumns[i] == "" {
-							mappedColumns[i] = col // Fallback to original name
-						}
-					}
-					indexDef.Columns = mappedColumns
+			if indexDef != nil {
+				mappedColumns := mapColumnNames(model, indexDef.Columns)
+				indexDef.Columns = mappedColumns
+				if !indexExists(dbSchema, tableName, indexDef.Name, indexDef.Columns) {
 					diff.IndexesToCreate = append(diff.IndexesToCreate, *indexDef)
 				}
 			}
 		}
 
-		// Process @relation attributes to extract foreign keys
 		for _, field := range model.Fields {
 			for _, attr := range field.Attributes {
 				if attr.Name == "relation" {
 					fkDef := extractForeignKey(tableName, field, attr, modelMap)
 					if fkDef != nil {
-						// Map column names in foreign key
-						mappedColumns := make([]string, len(fkDef.Columns))
-						for i, col := range fkDef.Columns {
-							// Find field and get mapped name
-							for _, f := range model.Fields {
-								if f.Name == col {
-									mappedColumns[i] = getColumnNameFromField(f)
-									break
-								}
-							}
-							if mappedColumns[i] == "" {
-								mappedColumns[i] = col // Fallback to original name
-							}
-						}
-						fkDef.Columns = mappedColumns
-						// Map referenced table and columns if referenced table has @@map
+						fkDef.Columns = mapColumnNames(model, fkDef.Columns)
 						if refModel, exists := modelMap[fkDef.ReferencedTable]; exists {
 							fkDef.ReferencedTable = getTableNameFromModel(refModel)
-							// Map referenced column names
-							mappedRefColumns := make([]string, len(fkDef.ReferencedColumns))
-							for i, refCol := range fkDef.ReferencedColumns {
-								// Find field in referenced model and get mapped name
-								for _, refField := range refModel.Fields {
-									if refField.Name == refCol {
-										mappedRefColumns[i] = getColumnNameFromField(refField)
-										break
-									}
-								}
-								if mappedRefColumns[i] == "" {
-									mappedRefColumns[i] = refCol // Fallback to original name
-								}
-							}
-							fkDef.ReferencedColumns = mappedRefColumns
+							fkDef.ReferencedColumns = mapColumnNames(refModel, fkDef.ReferencedColumns)
 						}
-						diff.ForeignKeysToCreate = append(diff.ForeignKeysToCreate, *fkDef)
+						if !foreignKeyExists(dbSchema, fkDef.TableName, fkDef.Name, fkDef.Columns, fkDef.ReferencedTable, fkDef.ReferencedColumns) {
+							diff.ForeignKeysToCreate = append(diff.ForeignKeysToCreate, *fkDef)
+						}
 					}
 				}
 			}
 		}
 	}
+}
+
+func mapColumnNames(model *parser.Model, columns []string) []string {
+	mapped := make([]string, len(columns))
+	for i, col := range columns {
+		for _, field := range model.Fields {
+			if field.Name == col {
+				mapped[i] = getColumnNameFromField(field)
+				break
+			}
+		}
+		if mapped[i] == "" {
+			mapped[i] = col
+		}
+	}
+	return mapped
+}
+
+func isModel(schema *parser.Schema, typeName string) bool {
+	for _, m := range schema.Models {
+		if m.Name == typeName {
+			return true
+		}
+	}
+	return false
+}
+
+func foreignKeyExists(dbSchema *DatabaseSchema, tableName, fkName string, columns []string, referencedTable string, referencedColumns []string) bool {
+	dbTable, exists := dbSchema.Tables[tableName]
+	if !exists {
+		return false
+	}
+
+	for _, dbFK := range dbTable.ForeignKeys {
+		if strings.EqualFold(dbFK.Name, fkName) {
+			return true
+		}
+		if strings.EqualFold(dbFK.ReferencedTable, referencedTable) &&
+			len(dbFK.Columns) == len(columns) &&
+			len(dbFK.ReferencedColumns) == len(referencedColumns) &&
+			columnsMatch(dbFK.Columns, columns) &&
+			columnsMatch(dbFK.ReferencedColumns, referencedColumns) {
+			return true
+		}
+	}
+	return false
+}
+
+func indexExists(dbSchema *DatabaseSchema, tableName, indexName string, columns []string) bool {
+	dbTable, exists := dbSchema.Tables[tableName]
+	if !exists {
+		return false
+	}
+
+	for _, dbIndex := range dbTable.Indexes {
+		if strings.EqualFold(dbIndex.Name, indexName) {
+			return true
+		}
+		if len(dbIndex.Columns) == len(columns) && columnsMatch(dbIndex.Columns, columns) {
+			return true
+		}
+	}
+	return false
+}
+
+func columnsMatch(cols1, cols2 []string) bool {
+	if len(cols1) != len(cols2) {
+		return false
+	}
+	for i, col := range cols1 {
+		if !strings.EqualFold(col, cols2[i]) {
+			return false
+		}
+	}
+	return true
 }

@@ -244,54 +244,73 @@ func runMigrateDev(args []string) error {
 	// Get provider
 	provider := migrations.GetProviderFromSchema(schema)
 
-	// Step 1: Check for drift (schema expected from migrations vs actual database)
-	driftDiff, hasDrift, err := migrations.DetectDrift(manager, db, schema, provider)
+	// Step 1: Run devDiagnostic (equivalent to Prisma's devDiagnostic)
+	// This checks for drift, modified migrations, and missing migrations
+	devDiagnostic, err := migrations.DevDiagnostic(manager, db, schema, provider)
 	if err != nil {
-		return fmt.Errorf("error detecting drift: %w", err)
+		return fmt.Errorf("error running diagnostic: %w", err)
 	}
 
-	// Step 2: Check for missing migrations (applied in DB but not in local directory)
-	missingMigrations, err := manager.GetMissingMigrations()
-	if err != nil {
-		return fmt.Errorf("error checking for missing migrations: %w", err)
-	}
-
-	// Step 3: If drift or missing migrations detected, show error and suggest reset
-	if hasDrift || len(missingMigrations) > 0 {
+	// Step 2: If diagnostic says we need to reset, show message and exit
+	if devDiagnostic.Action.Tag == "reset" {
 		fmt.Println()
-		if hasDrift {
-			// Warning message in red
-			fmt.Println(Warning("- Drift detected: Your database schema is not in sync with your migration history."))
-			fmt.Println()
-			// Explanatory text without color (normal text)
-			fmt.Println("The following is a summary of the differences between the expected database schema given your migrations files, and the actual schema of the database.")
-			fmt.Println()
-			fmt.Println("It should be understood as the set of changes to get from the expected schema to the actual schema.")
-			fmt.Println()
-			// Drift output without color (normal text with symbols)
-			driftOutput := migrations.FormatDriftDiff(driftDiff)
-			if driftOutput != "" {
-				fmt.Print(driftOutput)
+		fmt.Println(devDiagnostic.Action.Reason)
+		fmt.Println()
+
+		// Build reset message based on provider
+		var resetMessage string
+		if dbInfo.Provider == "PostgreSQL" || dbInfo.Provider == "SQL Server" {
+			if dbInfo.Schema != "" {
+				resetMessage = fmt.Sprintf("We need to reset the \"%s\" schema", dbInfo.Schema)
+			} else {
+				resetMessage = "We need to reset the database schema"
 			}
+		} else {
+			resetMessage = fmt.Sprintf("We need to reset the %s database \"%s\"", dbInfo.Provider, dbInfo.Database)
 		}
 
-		if len(missingMigrations) > 0 {
-			fmt.Println()
-			// Warning message in red
-			fmt.Printf("%s", Warning(fmt.Sprintf("- The following migration(s) are applied to the database but missing from the local migrations directory: %s\n",
-				strings.Join(missingMigrations, ", "))))
+		if dbInfo.Host != "" {
+			resetMessage += fmt.Sprintf(" at \"%s\"", dbInfo.Host)
 		}
 
-		fmt.Println()
-		// Normal text (no color)
-		fmt.Printf("We need to reset the \"%s\" schema at \"%s\"\n", dbInfo.Schema, dbInfo.Host)
+		fmt.Println(resetMessage)
 		fmt.Println()
 		fmt.Println("You may use prisma migrate reset to drop the development database.")
 		fmt.Println("All data will be lost.")
-		return fmt.Errorf("drift detected or migrations missing")
+
+		// Exit with code 130 (SIGINT) to match Prisma's behavior
+		os.Exit(130)
+	}
+
+	// Step 3: Apply pending migrations (equivalent to migrate.applyMigrations())
+	// This applies any migrations that exist locally but haven't been applied yet
+	appliedMigrations, err := manager.GetPendingMigrations()
+	if err != nil {
+		return fmt.Errorf("error getting pending migrations: %w", err)
+	}
+
+	if len(appliedMigrations) > 0 {
+		// Apply each pending migration
+		for _, migration := range appliedMigrations {
+			if err := manager.ApplyMigration(migration); err != nil {
+				return fmt.Errorf("error applying migration %s: %w", migration.Name, err)
+			}
+		}
+
+		// Show applied migrations (matching Prisma's format)
+		fmt.Println()
+		fmt.Println("The following migration(s) have been applied:")
+		fmt.Println()
+		fmt.Println("migrations/")
+		for _, migration := range appliedMigrations {
+			fmt.Printf("  └─ %s/\n", MigrationName(migration.Name+"/"))
+			fmt.Printf("    └─ migration.sql\n")
+		}
+		fmt.Println()
 	}
 
 	// Step 4: Check for pending changes (schema.prisma vs current database)
+	// This is equivalent to evaluateDataLoss + createMigration
 	// Introspect database to detect incremental changes
 	dbSchema, err := migrations.IntrospectDatabase(db, provider)
 	if err != nil {
@@ -306,6 +325,8 @@ func runMigrateDev(args []string) error {
 	}
 
 	// Check if there are changes
+	// Note: ForeignKeysToCreate is not included because foreign keys are usually
+	// created as part of table creation/alteration, not as separate operations
 	hasChanges := len(diff.TablesToCreate) > 0 ||
 		len(diff.TablesToAlter) > 0 ||
 		len(diff.TablesToDrop) > 0 ||
@@ -314,13 +335,31 @@ func runMigrateDev(args []string) error {
 
 	// Step 5: If no changes, show sync message and return
 	if !hasChanges {
+		if len(appliedMigrations) > 0 {
+			fmt.Println(Success("Your database is now in sync with your schema."))
+		} else {
+			fmt.Println()
+			fmt.Println("Already in sync, no schema change or pending migration was found.")
+		}
+		fmt.Println()
+		return nil
+	}
+
+	// Step 6: There are changes, so we need to create a migration
+	// Generate migration SQL first to check if there are real changes
+	sql, err := migrations.GenerateMigrationSQL(diff, provider)
+	if err != nil {
+		return fmt.Errorf("error generating migration SQL: %w", err)
+	}
+
+	// If SQL is empty, there are no real changes (only relation differences)
+	if sql == "" || strings.TrimSpace(sql) == "" {
 		fmt.Println()
 		fmt.Println("Already in sync, no schema change or pending migration was found.")
 		fmt.Println()
 		return nil
 	}
 
-	// Step 6: There are changes, so we need to create a migration
 	// Get migration name
 	migrationName := ""
 	if len(args) > 0 {
@@ -342,19 +381,6 @@ func runMigrateDev(args []string) error {
 		return fmt.Errorf("migration name is required")
 	}
 
-	// Generate migration SQL
-	sql, err := migrations.GenerateMigrationSQL(diff, provider)
-	if err != nil {
-		return fmt.Errorf("error generating migration SQL: %w", err)
-	}
-
-	if sql == "" || strings.TrimSpace(sql) == "" {
-		fmt.Println()
-		fmt.Println("Already in sync, no schema change or pending migration was found.")
-		fmt.Println()
-		return nil
-	}
-
 	// Create migration directory
 	timestamp := time.Now().Format("20060102150405")
 	migrationDirName := fmt.Sprintf("%s_%s", timestamp, migrationName)
@@ -374,6 +400,13 @@ func runMigrateDev(args []string) error {
 	// Normal text (no color) for migration created message
 	fmt.Printf("Migration created: %s\n", migrationDirName)
 
+	// Ensure migration_lock.toml exists (compatible with Prisma official)
+	// Note: lockfile goes in migrations directory root, not in individual migration directories
+	// This is created AFTER the first migration is created (not before)
+	if err := migrations.EnsureMigrationLockfile(cfg.GetMigrationsPath(), provider); err != nil {
+		return fmt.Errorf("error ensuring migration_lock.toml: %w", err)
+	}
+
 	// Apply migration
 	migration := &migrations.Migration{
 		Name: migrationDirName,
@@ -381,17 +414,25 @@ func runMigrateDev(args []string) error {
 		SQL:  sql,
 	}
 
-	// Normal text (no color) for progress message
+	// Apply the newly created migration
 	fmt.Println("Applying migration...")
 	if err := manager.ApplyMigration(migration); err != nil {
 		return fmt.Errorf("error applying migration: %w", err)
 	}
 
-	// Success message in green
-	fmt.Println(Success("Migration applied successfully!"))
+	// Show success message (matching Prisma's format)
+	fmt.Println()
+	fmt.Println("The following migration(s) have been created and applied from new schema changes:")
+	fmt.Println()
+	fmt.Println("migrations/")
+	fmt.Printf("  └─ %s/\n", MigrationName(migrationDirName+"/"))
+	fmt.Printf("    └─ migration.sql\n")
+	fmt.Println()
+	fmt.Println(Success("Your database is now in sync with your schema."))
 
 	// Run generate automatically
 	// Normal text (no color) for progress message
+	fmt.Println()
 	fmt.Println("Generating code...")
 	return runGenerate([]string{})
 }

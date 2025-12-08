@@ -71,15 +71,23 @@ func Load(configPath string) (*Config, error) {
 		}
 	}
 
-	// Carregar arquivo .env se existir
+	// Carregar arquivo .env ou env se existir
 	// Primeiro tenta no mesmo diretório do prisma.conf, depois sobe os diretórios
 	envLoaded := false
 	if configDir != "" {
 		// Tentar carregar .env do diretório do prisma.conf
 		envPath := filepath.Join(configDir, ".env")
 		if _, err := os.Stat(envPath); err == nil {
-			if err := godotenv.Load(envPath); err == nil {
+			if err := loadEnvFile(envPath); err == nil {
 				envLoaded = true
+			}
+		} else {
+			// Tentar carregar arquivo "env" (sem ponto) do diretório do prisma.conf
+			envPathNoDot := filepath.Join(configDir, "env")
+			if _, err := os.Stat(envPathNoDot); err == nil {
+				if err := loadEnvFile(envPathNoDot); err == nil {
+					envLoaded = true
+				}
 			}
 		}
 	}
@@ -90,17 +98,27 @@ func Load(configPath string) (*Config, error) {
 		if wd != "" {
 			dir := wd
 			for {
+				// Tentar .env primeiro
 				envPath := filepath.Join(dir, ".env")
 				if _, err := os.Stat(envPath); err == nil {
-					if err := godotenv.Load(envPath); err == nil {
+					if err := loadEnvFile(envPath); err == nil {
 						envLoaded = true // nolint: ineffassign // Usado para controle de fluxo
 						break
+					}
+				} else {
+					// Tentar arquivo "env" (sem ponto)
+					envPathNoDot := filepath.Join(dir, "env")
+					if _, err := os.Stat(envPathNoDot); err == nil {
+						if err := loadEnvFile(envPathNoDot); err == nil {
+							envLoaded = true // nolint: ineffassign // Usado para controle de fluxo
+							break
+						}
 					}
 				}
 
 				parent := filepath.Dir(dir)
 				if parent == dir {
-					// Não encontrou .env, tenta carregar do diretório atual
+					// Não encontrou .env ou env, tenta carregar do diretório atual
 					_ = godotenv.Load()
 					break
 				}
@@ -301,6 +319,51 @@ Para resolver:
   3. Ou defina diretamente no prisma.conf:
      url = "postgresql://user:password@localhost:5432/database?sslmode=disable"`)
 		}
+	}
+
+	return nil
+}
+
+// loadEnvFile carrega um arquivo .env ou env e remove aspas dos valores
+// Suporta formato: KEY='value' ou KEY="value" ou KEY=value
+func loadEnvFile(envPath string) error {
+	// Carregar usando godotenv
+	if err := godotenv.Load(envPath); err != nil {
+		return err
+	}
+
+	// Ler o arquivo para processar e remover aspas
+	content, err := os.ReadFile(envPath)
+	if err != nil {
+		return err
+	}
+
+	lines := strings.Split(string(content), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Procurar por =
+		idx := strings.Index(line, "=")
+		if idx == -1 {
+			continue
+		}
+
+		key := strings.TrimSpace(line[:idx])
+		value := strings.TrimSpace(line[idx+1:])
+
+		// Remover aspas simples ou duplas do início e fim
+		if len(value) >= 2 {
+			if (value[0] == '\'' && value[len(value)-1] == '\'') ||
+				(value[0] == '"' && value[len(value)-1] == '"') {
+				value = value[1 : len(value)-1]
+			}
+		}
+
+		// Atualizar variável de ambiente
+		os.Setenv(key, value)
 	}
 
 	return nil

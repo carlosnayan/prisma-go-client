@@ -15,6 +15,13 @@ var (
 	databaseFlag string
 )
 
+// Supported providers
+var supportedProviders = []string{
+	"postgresql",
+	"mysql",
+	"sqlite",
+}
+
 var initCmd = &cli.Command{
 	Name:  "init",
 	Short: "Initialize a new Prisma project",
@@ -43,19 +50,28 @@ func runInit(args []string) error {
 	fmt.Println("Initializing Prisma project...")
 	fmt.Println()
 
-	// Check if prisma.conf already exists
-	if _, err := os.Stat("prisma.conf"); err == nil {
-		return fmt.Errorf("prisma.conf already exists in this directory. Use 'prisma init --force' to overwrite")
+	// Validate that we're not in an existing Prisma project
+	if err := validateNoExistingProject(); err != nil {
+		return err
 	}
+
+	// Get provider
+	provider := providerFlag
+	if provider != "" {
+		if !isValidProvider(provider) {
+			return fmt.Errorf(`provider "%s" is invalid or not supported. Try again with %s`,
+				provider, strings.Join(supportedProviders, ", "))
+		}
+	} else {
+		provider = promptForProvider()
+	}
+
+	// Normalize provider name
+	provider = normalizeProvider(provider)
 
 	// Create prisma directory if it doesn't exist
 	if err := os.MkdirAll("prisma/migrations", 0755); err != nil {
 		return fmt.Errorf("error creating prisma/migrations directory: %w", err)
-	}
-
-	provider := providerFlag
-	if provider == "" {
-		provider = promptForProvider()
 	}
 
 	// Create prisma.conf
@@ -78,12 +94,68 @@ func runInit(args []string) error {
 	fmt.Println()
 	fmt.Println("Next steps:")
 	fmt.Println("  1. Configure the DATABASE_URL environment variable:")
-	fmt.Println("     export DATABASE_URL=\"postgresql://user:password@localhost:5432/mydb\"")
+	fmt.Printf("     export DATABASE_URL=\"%s\"\n", getDefaultURL(provider))
 	fmt.Println("  2. Edit prisma/schema.prisma with your models")
 	fmt.Println("  3. Run 'prisma generate' to generate types")
 	fmt.Println("  4. Run 'prisma migrate dev' to create migrations")
 
 	return nil
+}
+
+// validateNoExistingProject checks if we're already in a Prisma project
+func validateNoExistingProject() error {
+	// Check for schema.prisma in root
+	if _, err := os.Stat("schema.prisma"); err == nil {
+		return fmt.Errorf(`file %s already exists in your project.
+Please try again in a project that is not yet using Prisma.`, "schema.prisma")
+	}
+
+	// Check for prisma folder
+	if _, err := os.Stat("prisma"); err == nil {
+		return fmt.Errorf(`a folder called %s already exists in your project.
+Please try again in a project that is not yet using Prisma.`, "prisma")
+	}
+
+	// Check for prisma/schema.prisma
+	schemaPath := filepath.Join("prisma", "schema.prisma")
+	if _, err := os.Stat(schemaPath); err == nil {
+		return fmt.Errorf(`file %s already exists in your project.
+Please try again in a project that is not yet using Prisma.`, schemaPath)
+	}
+
+	// Check for prisma.conf
+	if _, err := os.Stat("prisma.conf"); err == nil {
+		return fmt.Errorf(`file %s already exists in this directory.
+Please try again in a project that is not yet using Prisma.`, "prisma.conf")
+	}
+
+	return nil
+}
+
+// isValidProvider checks if a provider is supported
+func isValidProvider(provider string) bool {
+	provider = strings.ToLower(provider)
+	for _, p := range supportedProviders {
+		if p == provider || p == normalizeProvider(provider) {
+			return true
+		}
+	}
+	return false
+}
+
+// normalizeProvider normalizes provider names (e.g., "postgres" -> "postgresql")
+func normalizeProvider(provider string) string {
+	provider = strings.ToLower(provider)
+	switch provider {
+	case "postgres", "postgresql":
+		return "postgresql"
+	case "mysql", "mariadb":
+		return "mysql"
+	case "sqlite", "sqlite3":
+		return "sqlite"
+	default:
+		return provider
+	}
 }
 
 func generateConfig(provider string) string {
@@ -123,18 +195,35 @@ log = ["warn","error"]
 }
 
 func generateSchema(provider string) string {
-	return `// Database schema
-// Database URL is configured in prisma.conf, not here
-
-datasource db {
-  provider = "` + provider + `"
-}
+	// Base schema with comments consistent with official Prisma
+	schema := `// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
   provider = "prisma-client-go"
   output   = "./generated"
 }
+
+datasource db {
+  provider = "` + provider + `"
+}
 `
+
+	return schema
+}
+
+// getDefaultURL returns a default connection URL for the provider
+func getDefaultURL(provider string) string {
+	switch provider {
+	case "postgresql":
+		return "postgresql://johndoe:randompassword@localhost:5432/mydb?schema=public"
+	case "mysql":
+		return "mysql://johndoe:randompassword@localhost:3306/mydb"
+	case "sqlite":
+		return "file:./dev.db"
+	default:
+		return "postgresql://johndoe:randompassword@localhost:5432/mydb?schema=public"
+	}
 }
 
 // promptForProvider prompts the user to choose a database provider interactively

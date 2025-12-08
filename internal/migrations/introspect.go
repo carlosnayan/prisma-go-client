@@ -13,27 +13,50 @@ type DatabaseSchema struct {
 
 // TableInfo represents information about a table in the database
 type TableInfo struct {
-	Name    string
-	Columns map[string]*ColumnInfo
-	Indexes []*IndexInfo
+	Name        string
+	Columns     map[string]*ColumnInfo
+	ColumnOrder []string // Preserves the order of columns as they appear in the database
+	Indexes     []*IndexInfo
+	ForeignKeys []*ForeignKeyInfo
+}
+
+// ForeignKeyInfo represents information about a foreign key constraint
+type ForeignKeyInfo struct {
+	Name              string
+	TableName         string
+	Columns           []string
+	ReferencedTable   string
+	ReferencedColumns []string
+	OnDelete          string
+	OnUpdate          string
 }
 
 // ColumnInfo represents information about a column
 type ColumnInfo struct {
-	Name         string
-	Type         string
-	IsNullable   bool
-	IsPrimaryKey bool
-	IsUnique     bool
-	DefaultValue *string
+	Name                   string
+	Type                   string
+	UdtName                string // PostgreSQL UDT name (for enum detection)
+	DateTimePrecision      *int   // Precision for timestamp types (e.g., 3 for TIMESTAMPTZ(3))
+	CharacterMaximumLength *int   // Maximum length for character types (e.g., 1000 for VARCHAR(1000))
+	IsNullable             bool
+	IsPrimaryKey           bool
+	IsUnique               bool
+	DefaultValue           *string
+}
+
+// IndexColumnInfo represents a column in an index with its sort order
+type IndexColumnInfo struct {
+	ColumnName string
+	SortOrder  string // "ASC" or "DESC"
 }
 
 // IndexInfo represents information about an index
 type IndexInfo struct {
-	Name      string
-	TableName string
-	Columns   []string
-	IsUnique  bool
+	Name        string
+	TableName   string
+	Columns     []string
+	ColumnInfos []IndexColumnInfo // Detailed column info with sort order
+	IsUnique    bool
 }
 
 // IntrospectDatabase performs database introspection
@@ -84,9 +107,10 @@ func introspectPostgreSQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, 
 	// For each table, get columns
 	for _, tableName := range tableNames {
 		table := &TableInfo{
-			Name:    tableName,
-			Columns: make(map[string]*ColumnInfo),
-			Indexes: []*IndexInfo{},
+			Name:        tableName,
+			Columns:     make(map[string]*ColumnInfo),
+			Indexes:     []*IndexInfo{},
+			ForeignKeys: []*ForeignKeyInfo{},
 		}
 
 		// Get columns
@@ -94,6 +118,9 @@ func introspectPostgreSQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, 
 			SELECT 
 				c.column_name,
 				c.data_type,
+				c.udt_name,
+				c.datetime_precision,
+				c.character_maximum_length,
 				c.is_nullable,
 				c.column_default,
 				CASE WHEN pk.column_name IS NOT NULL THEN true ELSE false END as is_primary_key
@@ -118,21 +145,34 @@ func introspectPostgreSQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, 
 		}
 
 		for colsRows.Next() {
-			var colName, dataType, isNullable string
+			var colName, dataType, udtName, isNullable string
 			var columnDefault sql.NullString
+			var datetimePrecision sql.NullInt64
+			var characterMaxLength sql.NullInt64
 			var isPrimaryKey bool
 
-			if err := colsRows.Scan(&colName, &dataType, &isNullable, &columnDefault, &isPrimaryKey); err != nil {
+			if err := colsRows.Scan(&colName, &dataType, &udtName, &datetimePrecision, &characterMaxLength, &isNullable, &columnDefault, &isPrimaryKey); err != nil {
 				colsRows.Close()
 				return nil, fmt.Errorf("error reading column: %w", err)
 			}
 
 			col := &ColumnInfo{
 				Name:         colName,
-				Type:         mapPostgreSQLType(dataType),
+				Type:         dataType,
+				UdtName:      udtName,
 				IsNullable:   isNullable == "YES",
 				IsPrimaryKey: isPrimaryKey,
-				IsUnique:     false, // Will be filled later
+				IsUnique:     false,
+			}
+
+			if datetimePrecision.Valid {
+				precision := int(datetimePrecision.Int64)
+				col.DateTimePrecision = &precision
+			}
+
+			if characterMaxLength.Valid {
+				maxLength := int(characterMaxLength.Int64)
+				col.CharacterMaximumLength = &maxLength
 			}
 
 			if columnDefault.Valid {
@@ -140,38 +180,61 @@ func introspectPostgreSQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, 
 			}
 
 			table.Columns[colName] = col
+			table.ColumnOrder = append(table.ColumnOrder, colName)
 		}
 		colsRows.Close()
 
-		// Get unique indexes
+		// Get indexes with correct order and sort direction
 		idxQuery := `
 			SELECT
 				i.indexname,
 				a.attname,
-				ix.indisunique
+				ix.indisunique,
+				array_position(ix.indkey, a.attnum) as col_order,
+				CASE 
+					WHEN (ix.indoption[array_position(ix.indkey, a.attnum)] & 2) = 2 THEN 'DESC'
+					ELSE 'ASC'
+				END as sort_order
 			FROM pg_indexes i
 			JOIN pg_index ix ON i.indexname = (SELECT relname FROM pg_class WHERE oid = ix.indexrelid)
 			JOIN pg_attribute a ON a.attrelid = ix.indrelid AND a.attnum = ANY(ix.indkey)
 			WHERE i.schemaname = 'public'
 			AND i.tablename = $1
 			AND i.indexname NOT LIKE '%_pkey'
+			AND a.attname IS NOT NULL
+			ORDER BY i.indexname, array_position(ix.indkey, a.attnum)
 		`
 
 		idxRows, err := db.Query(idxQuery, tableName)
 		if err == nil {
 			indexMap := make(map[string]*IndexInfo)
 			for idxRows.Next() {
-				var idxName, colName string
+				var idxName, colName, sortOrder string
 				var isUnique bool
-				if err := idxRows.Scan(&idxName, &colName, &isUnique); err == nil {
+				var colOrder int
+				if err := idxRows.Scan(&idxName, &colName, &isUnique, &colOrder, &sortOrder); err == nil {
+					// Skip if column name is empty
+					if colName == "" {
+						continue
+					}
 					if idx, exists := indexMap[idxName]; exists {
 						idx.Columns = append(idx.Columns, colName)
+						idx.ColumnInfos = append(idx.ColumnInfos, IndexColumnInfo{
+							ColumnName: colName,
+							SortOrder:  sortOrder,
+						})
 					} else {
 						indexMap[idxName] = &IndexInfo{
 							Name:      idxName,
 							TableName: tableName,
 							Columns:   []string{colName},
-							IsUnique:  isUnique,
+							ColumnInfos: []IndexColumnInfo{
+								{
+									ColumnName: colName,
+									SortOrder:  sortOrder,
+								},
+							},
+							IsUnique: isUnique,
 						}
 					}
 				}
@@ -186,6 +249,71 @@ func introspectPostgreSQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, 
 						col.IsUnique = true
 					}
 				}
+			}
+		}
+
+		// Get foreign key constraints
+		fkQuery := `
+			SELECT
+				tc.constraint_name,
+				kcu.column_name,
+				ccu.table_name AS foreign_table_name,
+				ccu.column_name AS foreign_column_name,
+				COALESCE(rc.delete_rule, 'NO ACTION') AS delete_rule,
+				COALESCE(rc.update_rule, 'NO ACTION') AS update_rule
+			FROM information_schema.table_constraints AS tc
+			JOIN information_schema.key_column_usage AS kcu
+				ON tc.constraint_name = kcu.constraint_name
+				AND tc.table_schema = kcu.table_schema
+			JOIN information_schema.constraint_column_usage AS ccu
+				ON ccu.constraint_name = tc.constraint_name
+				AND ccu.table_schema = tc.table_schema
+			LEFT JOIN information_schema.referential_constraints AS rc
+				ON tc.constraint_name = rc.constraint_name
+				AND tc.table_schema = rc.constraint_schema
+			WHERE tc.constraint_type = 'FOREIGN KEY'
+				AND tc.table_schema = 'public'
+				AND tc.table_name = $1
+			ORDER BY tc.constraint_name, kcu.ordinal_position
+		`
+
+		fkRows, err := db.Query(fkQuery, tableName)
+		if err == nil {
+			fkMap := make(map[string]*ForeignKeyInfo)
+			for fkRows.Next() {
+				var constraintName, columnName, foreignTableName, foreignColumnName, deleteRule, updateRule sql.NullString
+				if err := fkRows.Scan(&constraintName, &columnName, &foreignTableName, &foreignColumnName, &deleteRule, &updateRule); err == nil {
+					if !constraintName.Valid {
+						continue
+					}
+					if fk, exists := fkMap[constraintName.String]; exists {
+						fk.Columns = append(fk.Columns, columnName.String)
+						fk.ReferencedColumns = append(fk.ReferencedColumns, foreignColumnName.String)
+					} else {
+						deleteRuleStr := "CASCADE"
+						if deleteRule.Valid {
+							deleteRuleStr = deleteRule.String
+						}
+						updateRuleStr := "CASCADE"
+						if updateRule.Valid {
+							updateRuleStr = updateRule.String
+						}
+						fkMap[constraintName.String] = &ForeignKeyInfo{
+							Name:              constraintName.String,
+							TableName:         tableName,
+							Columns:           []string{columnName.String},
+							ReferencedTable:   foreignTableName.String,
+							ReferencedColumns: []string{foreignColumnName.String},
+							OnDelete:          deleteRuleStr,
+							OnUpdate:          updateRuleStr,
+						}
+					}
+				}
+			}
+			fkRows.Close()
+
+			for _, fk := range fkMap {
+				table.ForeignKeys = append(table.ForeignKeys, fk)
 			}
 		}
 
@@ -225,9 +353,11 @@ func introspectMySQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, error
 	// For each table, get columns
 	for _, tableName := range tableNames {
 		table := &TableInfo{
-			Name:    tableName,
-			Columns: make(map[string]*ColumnInfo),
-			Indexes: []*IndexInfo{},
+			Name:        tableName,
+			Columns:     make(map[string]*ColumnInfo),
+			ColumnOrder: []string{},
+			Indexes:     []*IndexInfo{},
+			ForeignKeys: []*ForeignKeyInfo{},
 		}
 
 		// Get columns
@@ -281,6 +411,7 @@ func introspectMySQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, error
 			}
 
 			table.Columns[colName] = col
+			table.ColumnOrder = append(table.ColumnOrder, colName)
 		}
 		colsRows.Close()
 
@@ -365,9 +496,11 @@ func introspectSQLite(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, erro
 	// For each table, get columns usando PRAGMA
 	for _, tableName := range tableNames {
 		table := &TableInfo{
-			Name:    tableName,
-			Columns: make(map[string]*ColumnInfo),
-			Indexes: []*IndexInfo{},
+			Name:        tableName,
+			Columns:     make(map[string]*ColumnInfo),
+			ColumnOrder: []string{},
+			Indexes:     []*IndexInfo{},
+			ForeignKeys: []*ForeignKeyInfo{},
 		}
 
 		// Get column information using PRAGMA table_info
@@ -406,6 +539,7 @@ func introspectSQLite(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, erro
 			}
 
 			table.Columns[colName.String] = col
+			table.ColumnOrder = append(table.ColumnOrder, colName.String)
 		}
 		colsRows.Close()
 
@@ -472,11 +606,22 @@ func introspectSQLite(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, erro
 }
 
 // mapPostgreSQLType mapeia tipo PostgreSQL para tipo Prisma
+// Retorna o tipo original do PostgreSQL (não mapeado) para uso em pull.go
 func mapPostgreSQLType(pgType string) string {
 	pgType = strings.ToLower(pgType)
 
+	if strings.Contains(pgType, "timestamp") || strings.Contains(pgType, "timestamptz") {
+		return "timestamp"
+	}
+	if strings.Contains(pgType, "varchar") || strings.Contains(pgType, "character varying") {
+		return "varchar"
+	}
+	if strings.Contains(pgType, "char(") {
+		return "char"
+	}
+
 	switch {
-	case strings.HasPrefix(pgType, "varchar"), pgType == "text", pgType == "char":
+	case pgType == "text" || pgType == "char" || pgType == "character":
 		return "String"
 	case pgType == "integer" || pgType == "int" || pgType == "int4":
 		return "Int"
@@ -495,7 +640,7 @@ func mapPostgreSQLType(pgType string) string {
 	case pgType == "bytea":
 		return "Bytes"
 	default:
-		return "String" // Default
+		return pgType
 	}
 }
 
