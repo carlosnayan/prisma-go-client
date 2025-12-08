@@ -59,6 +59,29 @@ func TestInit_CreatesCorrectConfig(t *testing.T) {
 	}
 }
 
+func TestInit_CreatesDebugSection(t *testing.T) {
+	resetGlobalFlags()
+	dir := setupTestDir(t)
+	defer func() { _ = cleanupTestDir(dir) }()
+
+	err := runInit([]string{})
+	if err != nil {
+		t.Fatalf("runInit failed: %v", err)
+	}
+
+	configContent := readFile(t, "prisma.conf")
+
+	// Check for [debug] section
+	if !contains(configContent, "[debug]") {
+		t.Error("Config should contain [debug] section")
+	}
+
+	// Check for default log levels
+	if !contains(configContent, `log = ["warn","error"]`) {
+		t.Errorf("Config should contain default log levels ['warn','error'], got: %s", configContent)
+	}
+}
+
 func TestInit_CreatesCorrectSchema(t *testing.T) {
 	resetGlobalFlags()
 	dir := setupTestDir(t)

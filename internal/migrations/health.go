@@ -7,22 +7,22 @@ import (
 	"time"
 )
 
-// HealthCheck representa o resultado de um health check
+// HealthCheck represents the result of a health check
 type HealthCheck struct {
 	Status       string        `json:"status"`          // "healthy", "unhealthy"
-	Database     string        `json:"database"`        // Nome do banco
-	ResponseTime time.Duration `json:"response_time"`   // Tempo de resposta
-	Error        string        `json:"error,omitempty"` // Erro se houver
+	Database     string        `json:"database"`        // Database name
+	ResponseTime time.Duration `json:"response_time"`   // Response time
+	Error        string        `json:"error,omitempty"` // Error if any
 }
 
-// CheckHealth verifica a saúde da conexão com o banco
+// CheckHealth checks the health of the database connection
 func CheckHealth(db *sql.DB, timeout time.Duration) (*HealthCheck, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	start := time.Now()
 
-	// Tentar fazer ping
+	// Try to ping
 	err := db.PingContext(ctx)
 	responseTime := time.Since(start)
 
@@ -36,7 +36,7 @@ func CheckHealth(db *sql.DB, timeout time.Duration) (*HealthCheck, error) {
 		return check, err
 	}
 
-	// Verificar se consegue executar uma query simples
+	// Check if it can execute a simple query
 	var result int
 	queryErr := db.QueryRowContext(ctx, "SELECT 1").Scan(&result)
 	if queryErr != nil {
@@ -45,10 +45,10 @@ func CheckHealth(db *sql.DB, timeout time.Duration) (*HealthCheck, error) {
 		return check, queryErr
 	}
 
-	// Obter nome do banco (se possível)
+	// Get database name (if possible)
 	dbName := "unknown"
 	if nameErr := db.QueryRowContext(ctx, "SELECT current_database()").Scan(&dbName); nameErr != nil {
-		_ = nameErr // Ignorar erro, usar "unknown"
+		_ = nameErr // Ignore error, use "unknown"
 	}
 	check.Database = dbName
 
@@ -56,24 +56,24 @@ func CheckHealth(db *sql.DB, timeout time.Duration) (*HealthCheck, error) {
 	return check, nil
 }
 
-// CheckHealthWithPool verifica a saúde incluindo estatísticas do pool
+// CheckHealthWithPool checks health including pool statistics
 func CheckHealthWithPool(db *sql.DB, timeout time.Duration) (*HealthCheck, error) {
 	check, err := CheckHealth(db, timeout)
 	if err != nil {
 		return check, err
 	}
 
-	// Adicionar informações do pool ao status
+	// Add pool information to status
 	stats := db.Stats()
 	if stats.OpenConnections > stats.MaxOpenConnections*9/10 {
-		// Pool quase cheio, considerar warning
-		check.Status = "healthy" // Ainda healthy, mas próximo do limite
+		// Pool almost full, consider warning
+		check.Status = "healthy" // Still healthy, but close to limit
 	}
 
 	return check, nil
 }
 
-// PrintHealthCheck imprime o resultado do health check de forma legível
+// PrintHealthCheck prints the health check result in a readable format
 func PrintHealthCheck(check *HealthCheck) {
 	fmt.Printf("Health Check:\n")
 	fmt.Printf("  Status: %s\n", check.Status)

@@ -6,19 +6,19 @@ import (
 	"strings"
 )
 
-// DatabaseSchema representa o schema atual do banco de dados
+// DatabaseSchema represents the current database schema
 type DatabaseSchema struct {
 	Tables map[string]*TableInfo
 }
 
-// TableInfo representa informações de uma tabela no banco
+// TableInfo represents information about a table in the database
 type TableInfo struct {
 	Name    string
 	Columns map[string]*ColumnInfo
 	Indexes []*IndexInfo
 }
 
-// ColumnInfo representa informações de uma coluna
+// ColumnInfo represents information about a column
 type ColumnInfo struct {
 	Name         string
 	Type         string
@@ -28,7 +28,7 @@ type ColumnInfo struct {
 	DefaultValue *string
 }
 
-// IndexInfo representa informações de um índice
+// IndexInfo represents information about an index
 type IndexInfo struct {
 	Name      string
 	TableName string
@@ -36,7 +36,7 @@ type IndexInfo struct {
 	IsUnique  bool
 }
 
-// IntrospectDatabase faz introspection do banco de dados
+// IntrospectDatabase performs database introspection
 func IntrospectDatabase(db *sql.DB, provider string) (*DatabaseSchema, error) {
 	schema := &DatabaseSchema{
 		Tables: make(map[string]*TableInfo),
@@ -50,13 +50,13 @@ func IntrospectDatabase(db *sql.DB, provider string) (*DatabaseSchema, error) {
 	case "sqlite":
 		return introspectSQLite(db, schema)
 	default:
-		return nil, fmt.Errorf("provider não suportado para introspection: %s", provider)
+		return nil, fmt.Errorf("provider not supported for introspection: %s", provider)
 	}
 }
 
-// introspectPostgreSQL faz introspection de PostgreSQL
+// introspectPostgreSQL performs PostgreSQL introspection
 func introspectPostgreSQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, error) {
-	// Obter lista de tabelas (excluindo tabelas do sistema)
+	// Get list of tables (excluding system tables)
 	query := `
 		SELECT table_name 
 		FROM information_schema.tables 
@@ -68,7 +68,7 @@ func introspectPostgreSQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, 
 
 	rows, err := db.Query(query)
 	if err != nil {
-		return nil, fmt.Errorf("erro ao listar tabelas: %w", err)
+		return nil, fmt.Errorf("error listing tables: %w", err)
 	}
 	defer rows.Close()
 
@@ -76,12 +76,12 @@ func introspectPostgreSQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, 
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
-			return nil, fmt.Errorf("erro ao ler nome da tabela: %w", err)
+			return nil, fmt.Errorf("error reading table name: %w", err)
 		}
 		tableNames = append(tableNames, name)
 	}
 
-	// Para cada tabela, obter colunas
+	// For each table, get columns
 	for _, tableName := range tableNames {
 		table := &TableInfo{
 			Name:    tableName,
@@ -89,7 +89,7 @@ func introspectPostgreSQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, 
 			Indexes: []*IndexInfo{},
 		}
 
-		// Obter colunas
+		// Get columns
 		colsQuery := `
 			SELECT 
 				c.column_name,
@@ -114,7 +114,7 @@ func introspectPostgreSQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, 
 
 		colsRows, err := db.Query(colsQuery, tableName)
 		if err != nil {
-			return nil, fmt.Errorf("erro ao obter colunas da tabela %s: %w", tableName, err)
+			return nil, fmt.Errorf("error getting columns for table %s: %w", tableName, err)
 		}
 
 		for colsRows.Next() {
@@ -124,7 +124,7 @@ func introspectPostgreSQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, 
 
 			if err := colsRows.Scan(&colName, &dataType, &isNullable, &columnDefault, &isPrimaryKey); err != nil {
 				colsRows.Close()
-				return nil, fmt.Errorf("erro ao ler coluna: %w", err)
+				return nil, fmt.Errorf("error reading column: %w", err)
 			}
 
 			col := &ColumnInfo{
@@ -132,7 +132,7 @@ func introspectPostgreSQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, 
 				Type:         mapPostgreSQLType(dataType),
 				IsNullable:   isNullable == "YES",
 				IsPrimaryKey: isPrimaryKey,
-				IsUnique:     false, // Será preenchido depois
+				IsUnique:     false, // Will be filled later
 			}
 
 			if columnDefault.Valid {
@@ -143,7 +143,7 @@ func introspectPostgreSQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, 
 		}
 		colsRows.Close()
 
-		// Obter índices únicos
+		// Get unique indexes
 		idxQuery := `
 			SELECT
 				i.indexname,
@@ -180,7 +180,7 @@ func introspectPostgreSQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, 
 
 			for _, idx := range indexMap {
 				table.Indexes = append(table.Indexes, idx)
-				// Marcar colunas como unique se o índice for único
+				// Mark columns as unique if the index is unique
 				if idx.IsUnique && len(idx.Columns) == 1 {
 					if col, exists := table.Columns[idx.Columns[0]]; exists {
 						col.IsUnique = true
@@ -197,7 +197,7 @@ func introspectPostgreSQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, 
 
 // introspectMySQL faz introspection de MySQL
 func introspectMySQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, error) {
-	// Obter lista de tabelas (excluindo tabelas do sistema)
+	// Get list of tables (excluding system tables)
 	query := `
 		SELECT table_name 
 		FROM information_schema.tables 
@@ -209,7 +209,7 @@ func introspectMySQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, error
 
 	rows, err := db.Query(query)
 	if err != nil {
-		return nil, fmt.Errorf("erro ao listar tabelas: %w", err)
+		return nil, fmt.Errorf("error listing tables: %w", err)
 	}
 	defer rows.Close()
 
@@ -217,12 +217,12 @@ func introspectMySQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, error
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
-			return nil, fmt.Errorf("erro ao ler nome da tabela: %w", err)
+			return nil, fmt.Errorf("error reading table name: %w", err)
 		}
 		tableNames = append(tableNames, name)
 	}
 
-	// Para cada tabela, obter colunas
+	// For each table, get columns
 	for _, tableName := range tableNames {
 		table := &TableInfo{
 			Name:    tableName,
@@ -230,7 +230,7 @@ func introspectMySQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, error
 			Indexes: []*IndexInfo{},
 		}
 
-		// Obter colunas
+		// Get columns
 		colsQuery := `
 			SELECT 
 				c.column_name,
@@ -255,7 +255,7 @@ func introspectMySQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, error
 
 		colsRows, err := db.Query(colsQuery, tableName)
 		if err != nil {
-			return nil, fmt.Errorf("erro ao obter colunas da tabela %s: %w", tableName, err)
+			return nil, fmt.Errorf("error getting columns for table %s: %w", tableName, err)
 		}
 
 		for colsRows.Next() {
@@ -265,7 +265,7 @@ func introspectMySQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, error
 
 			if err := colsRows.Scan(&colName, &dataType, &isNullable, &columnDefault, &isPrimaryKey); err != nil {
 				colsRows.Close()
-				return nil, fmt.Errorf("erro ao ler coluna: %w", err)
+				return nil, fmt.Errorf("error reading column: %w", err)
 			}
 
 			col := &ColumnInfo{
@@ -273,7 +273,7 @@ func introspectMySQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, error
 				Type:         mapMySQLType(dataType),
 				IsNullable:   isNullable == "YES",
 				IsPrimaryKey: isPrimaryKey,
-				IsUnique:     false, // Será preenchido depois
+				IsUnique:     false, // Will be filled later
 			}
 
 			if columnDefault.Valid {
@@ -284,7 +284,7 @@ func introspectMySQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, error
 		}
 		colsRows.Close()
 
-		// Obter índices únicos
+		// Get unique indexes
 		idxQuery := `
 			SELECT
 				s.index_name,
@@ -320,7 +320,7 @@ func introspectMySQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, error
 
 			for _, idx := range indexMap {
 				table.Indexes = append(table.Indexes, idx)
-				// Marcar colunas como unique se o índice for único
+				// Mark columns as unique if the index is unique
 				if idx.IsUnique && len(idx.Columns) == 1 {
 					if col, exists := table.Columns[idx.Columns[0]]; exists {
 						col.IsUnique = true
@@ -337,7 +337,7 @@ func introspectMySQL(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, error
 
 // introspectSQLite faz introspection de SQLite
 func introspectSQLite(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, error) {
-	// Obter lista de tabelas (excluindo tabelas do sistema)
+	// Get list of tables (excluding system tables)
 	query := `
 		SELECT name 
 		FROM sqlite_master 
@@ -349,7 +349,7 @@ func introspectSQLite(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, erro
 
 	rows, err := db.Query(query)
 	if err != nil {
-		return nil, fmt.Errorf("erro ao listar tabelas: %w", err)
+		return nil, fmt.Errorf("error listing tables: %w", err)
 	}
 	defer rows.Close()
 
@@ -357,12 +357,12 @@ func introspectSQLite(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, erro
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
-			return nil, fmt.Errorf("erro ao ler nome da tabela: %w", err)
+			return nil, fmt.Errorf("error reading table name: %w", err)
 		}
 		tableNames = append(tableNames, name)
 	}
 
-	// Para cada tabela, obter colunas usando PRAGMA
+	// For each table, get columns usando PRAGMA
 	for _, tableName := range tableNames {
 		table := &TableInfo{
 			Name:    tableName,
@@ -370,11 +370,11 @@ func introspectSQLite(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, erro
 			Indexes: []*IndexInfo{},
 		}
 
-		// Obter informações das colunas usando PRAGMA table_info
+		// Get column information using PRAGMA table_info
 		pragmaQuery := fmt.Sprintf("PRAGMA table_info(%s)", tableName)
 		colsRows, err := db.Query(pragmaQuery)
 		if err != nil {
-			return nil, fmt.Errorf("erro ao obter colunas da tabela %s: %w", tableName, err)
+			return nil, fmt.Errorf("error getting columns for table %s: %w", tableName, err)
 		}
 
 		for colsRows.Next() {
@@ -384,7 +384,7 @@ func introspectSQLite(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, erro
 
 			if err := colsRows.Scan(&cid, &colName, &dataType, &notNull, &defaultValue, &pk); err != nil {
 				colsRows.Close()
-				return nil, fmt.Errorf("erro ao ler coluna: %w", err)
+				return nil, fmt.Errorf("error reading column: %w", err)
 			}
 
 			if !colName.Valid {
@@ -398,7 +398,7 @@ func introspectSQLite(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, erro
 				Type:         mapSQLiteType(dataType.String),
 				IsNullable:   notNull.String != "1",
 				IsPrimaryKey: isPrimaryKey,
-				IsUnique:     false, // Será preenchido depois
+				IsUnique:     false, // Will be filled later
 			}
 
 			if defaultValue.Valid && defaultValue.String != "" {
@@ -409,7 +409,7 @@ func introspectSQLite(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, erro
 		}
 		colsRows.Close()
 
-		// Obter índices únicos
+		// Get unique indexes
 		idxQuery := fmt.Sprintf("PRAGMA index_list(%s)", tableName)
 		idxListRows, err := db.Query(idxQuery)
 		if err == nil {
@@ -421,7 +421,7 @@ func introspectSQLite(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, erro
 					if !idxName.Valid {
 						continue
 					}
-					// Ignorar índices automáticos do SQLite
+					// Ignore automatic SQLite indexes
 					if strings.HasPrefix(idxName.String, "sqlite_") {
 						continue
 					}
@@ -434,7 +434,7 @@ func introspectSQLite(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, erro
 						IsUnique:  unique,
 					}
 
-					// Obter colunas do índice
+					// Get index columns
 					idxInfoQuery := fmt.Sprintf("PRAGMA index_info(%s)", idxName.String)
 					idxInfoRows, err := db.Query(idxInfoQuery)
 					if err == nil {
@@ -456,7 +456,7 @@ func introspectSQLite(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, erro
 
 			for _, idx := range indexMap {
 				table.Indexes = append(table.Indexes, idx)
-				// Marcar colunas como unique se o índice for único
+				// Mark columns as unique if the index is unique
 				if idx.IsUnique && len(idx.Columns) == 1 {
 					if col, exists := table.Columns[idx.Columns[0]]; exists {
 						col.IsUnique = true
@@ -535,7 +535,7 @@ func mapSQLiteType(sqliteType string) string {
 	case strings.Contains(sqliteType, "text") || strings.Contains(sqliteType, "char") || strings.Contains(sqliteType, "clob"):
 		return "String"
 	case strings.Contains(sqliteType, "int"):
-		// SQLite não distingue entre INT e BIGINT, mas vamos usar BigInt para valores maiores
+		// SQLite doesn't distinguish between INT and BIGINT, but we'll use BigInt for larger values
 		if strings.Contains(sqliteType, "big") {
 			return "BigInt"
 		}

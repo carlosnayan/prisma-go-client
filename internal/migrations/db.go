@@ -31,10 +31,10 @@ func ConnectDatabase(url string) (*sql.DB, error) {
 		if err != nil {
 			// Check if it's a driver registration error
 			if strings.Contains(err.Error(), "unknown driver") || strings.Contains(err.Error(), "sql: unknown driver") {
-				return nil, fmt.Errorf(`driver "pgx" não está registrado. Importe o driver no seu código:
+				return nil, fmt.Errorf(`driver "pgx" is not registered. Import the driver in your code:
   import _ "github.com/jackc/pgx/v5/stdlib"
   
-Ou use o driver padrão do PostgreSQL alterando o dialect para usar "postgres" em vez de "pgx"`)
+Or use the default PostgreSQL driver by changing the dialect to use "postgres" instead of "pgx"`)
 			}
 			return nil, fmt.Errorf("failed to open database connection: %w", err)
 		}
@@ -43,7 +43,7 @@ Ou use o driver padrão do PostgreSQL alterando o dialect para usar "postgres" e
 		if err := db.Ping(); err != nil {
 			db.Close()
 			// Provide more detailed error information
-			return nil, fmt.Errorf("failed to connect to database server: %w\n\nVerifique:\n  - Se o servidor PostgreSQL está rodando\n  - Se a URL está correta: %s\n  - Se as credenciais estão corretas\n  - Se a porta está acessível", err, url)
+			return nil, fmt.Errorf("failed to connect to database server: %w\n\nCheck:\n  - If the PostgreSQL server is running\n  - If the URL is correct: %s\n  - If the credentials are correct\n  - If the port is accessible", err, url)
 		}
 
 		return db, nil
@@ -64,7 +64,7 @@ Ou use o driver padrão do PostgreSQL alterando o dialect para usar "postgres" e
 	return db, nil
 }
 
-// DetectProvider detecta o provider pela URL
+// DetectProvider detects the provider from the URL
 func DetectProvider(url string) string {
 	url = strings.ToLower(url)
 
@@ -78,11 +78,11 @@ func DetectProvider(url string) string {
 		return "sqlite"
 	}
 
-	// Default para PostgreSQL
+	// Default to PostgreSQL
 	return "postgresql"
 }
 
-// GetProviderFromSchema obtém o provider do schema parseado
+// GetProviderFromSchema gets the provider from the parsed schema
 func GetProviderFromSchema(schema *parser.Schema) string {
 	if len(schema.Datasources) > 0 {
 		for _, field := range schema.Datasources[0].Fields {

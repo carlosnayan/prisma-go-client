@@ -116,6 +116,9 @@ path = "prisma/migrations"
 
 [datasource]
 url = %q
+
+[debug]
+log = ["warn","error"]
 `, urlEscaped)
 }
 

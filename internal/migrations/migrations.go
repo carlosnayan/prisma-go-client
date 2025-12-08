@@ -12,28 +12,28 @@ import (
 	"github.com/carlosnayan/prisma-go-client/internal/config"
 )
 
-// Migration representa uma migration
+// Migration represents a migration
 type Migration struct {
-	Name      string    // Nome da migration (ex: "20241219120000_add_users")
-	Path      string    // Caminho completo para o diretório da migration
-	SQL       string    // Conteúdo do arquivo migration.sql
-	AppliedAt time.Time // Quando foi aplicada (zero se não aplicada)
+	Name      string    // Migration name (e.g., "20241219120000_add_users")
+	Path      string    // Full path to the migration directory
+	SQL       string    // Content of the migration.sql file
+	AppliedAt time.Time // When it was applied (zero if not applied)
 }
 
-// Manager gerencia migrations
+// Manager manages migrations
 type Manager struct {
 	config         *config.Config
 	db             *sql.DB
 	migrationsPath string
 }
 
-// NewManager cria um novo gerenciador de migrations
+// NewManager creates a new migration manager
 func NewManager(cfg *config.Config, db *sql.DB) (*Manager, error) {
 	migrationsPath := cfg.GetMigrationsPath()
 
-	// Criar diretório se não existir
+	// Create directory if it doesn't exist
 	if err := os.MkdirAll(migrationsPath, 0755); err != nil {
-		return nil, fmt.Errorf("erro ao criar diretório de migrations: %w", err)
+		return nil, fmt.Errorf("error creating migrations directory: %w", err)
 	}
 
 	return &Manager{
@@ -43,7 +43,7 @@ func NewManager(cfg *config.Config, db *sql.DB) (*Manager, error) {
 	}, nil
 }
 
-// EnsureMigrationsTable garante que a tabela _prisma_migrations existe
+// EnsureMigrationsTable ensures that the _prisma_migrations table exists
 func (m *Manager) EnsureMigrationsTable() error {
 	query := `
 		CREATE TABLE IF NOT EXISTS _prisma_migrations (
@@ -60,13 +60,13 @@ func (m *Manager) EnsureMigrationsTable() error {
 
 	_, err := m.db.Exec(query)
 	if err != nil {
-		return fmt.Errorf("erro ao criar tabela _prisma_migrations: %w", err)
+		return fmt.Errorf("error creating _prisma_migrations table: %w", err)
 	}
 
 	return nil
 }
 
-// GetAppliedMigrations retorna lista de migrations aplicadas
+// GetAppliedMigrations returns list of applied migrations
 func (m *Manager) GetAppliedMigrations() ([]string, error) {
 	if err := m.EnsureMigrationsTable(); err != nil {
 		return nil, err
@@ -75,7 +75,7 @@ func (m *Manager) GetAppliedMigrations() ([]string, error) {
 	query := `SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY started_at`
 	rows, err := m.db.Query(query)
 	if err != nil {
-		return nil, fmt.Errorf("erro ao consultar migrations aplicadas: %w", err)
+		return nil, fmt.Errorf("error querying applied migrations: %w", err)
 	}
 	defer rows.Close()
 
@@ -83,7 +83,7 @@ func (m *Manager) GetAppliedMigrations() ([]string, error) {
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
-			return nil, fmt.Errorf("erro ao ler migration: %w", err)
+			return nil, fmt.Errorf("error reading migration: %w", err)
 		}
 		migrations = append(migrations, name)
 	}
@@ -91,11 +91,11 @@ func (m *Manager) GetAppliedMigrations() ([]string, error) {
 	return migrations, nil
 }
 
-// GetLocalMigrations retorna lista de migrations locais (arquivos)
+// GetLocalMigrations returns list of local migrations (files)
 func (m *Manager) GetLocalMigrations() ([]*Migration, error) {
 	entries, err := os.ReadDir(m.migrationsPath)
 	if err != nil {
-		return nil, fmt.Errorf("erro ao ler diretório de migrations: %w", err)
+		return nil, fmt.Errorf("error reading migrations directory: %w", err)
 	}
 
 	var migrations []*Migration
@@ -105,7 +105,7 @@ func (m *Manager) GetLocalMigrations() ([]*Migration, error) {
 		}
 
 		name := entry.Name()
-		// Verificar se é um diretório de migration (formato: YYYYMMDDHHMMSS_nome)
+		// Check if it's a migration directory (format: YYYYMMDDHHMMSS_name)
 		if !isValidMigrationName(name) {
 			continue
 		}
@@ -115,7 +115,7 @@ func (m *Manager) GetLocalMigrations() ([]*Migration, error) {
 
 		sqlContent, err := os.ReadFile(sqlPath)
 		if err != nil {
-			// Se não tem migration.sql, pular
+			// If migration.sql doesn't exist, skip
 			continue
 		}
 
@@ -126,7 +126,7 @@ func (m *Manager) GetLocalMigrations() ([]*Migration, error) {
 		})
 	}
 
-	// Ordenar por nome (que contém timestamp)
+	// Sort by name (which contains timestamp)
 	sort.Slice(migrations, func(i, j int) bool {
 		return migrations[i].Name < migrations[j].Name
 	})
@@ -134,9 +134,9 @@ func (m *Manager) GetLocalMigrations() ([]*Migration, error) {
 	return migrations, nil
 }
 
-// isValidMigrationName verifica se o nome da migration está no formato correto
+// isValidMigrationName checks if the migration name is in the correct format
 func isValidMigrationName(name string) bool {
-	// Formato: YYYYMMDDHHMMSS_nome (pelo menos 14 dígitos + underscore + nome)
+	// Format: YYYYMMDDHHMMSS_name (at least 14 digits + underscore + name)
 	if len(name) < 16 {
 		return false
 	}
@@ -146,7 +146,7 @@ func isValidMigrationName(name string) bool {
 		return false
 	}
 
-	// Verificar se a primeira parte é numérica e tem 14 dígitos
+	// Check if the first part is numeric and has 14 digits
 	if len(parts[0]) != 14 {
 		return false
 	}
@@ -160,7 +160,7 @@ func isValidMigrationName(name string) bool {
 	return true
 }
 
-// GetPendingMigrations retorna migrations pendentes (locais mas não aplicadas)
+// GetPendingMigrations returns pending migrations (local but not applied)
 func (m *Manager) GetPendingMigrations() ([]*Migration, error) {
 	local, err := m.GetLocalMigrations()
 	if err != nil {
@@ -187,20 +187,20 @@ func (m *Manager) GetPendingMigrations() ([]*Migration, error) {
 	return pending, nil
 }
 
-// ApplyMigration aplica uma migration no banco
+// ApplyMigration applies a migration to the database
 func (m *Manager) ApplyMigration(migration *Migration) error {
 	if err := m.EnsureMigrationsTable(); err != nil {
 		return err
 	}
 
-	// Iniciar transação
+	// Start transaction
 	tx, err := m.db.Begin()
 	if err != nil {
-		return fmt.Errorf("erro ao iniciar transação: %w", err)
+		return fmt.Errorf("error starting transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Registrar início da migration
+	// Register migration start
 	migrationID := generateMigrationID()
 	startedAt := time.Now()
 
@@ -212,11 +212,11 @@ func (m *Manager) ApplyMigration(migration *Migration) error {
 	checksum := calculateChecksum(migration.SQL)
 	_, err = tx.Exec(insertQuery, migrationID, checksum, migration.Name, startedAt)
 	if err != nil {
-		return fmt.Errorf("erro ao registrar migration: %w", err)
+		return fmt.Errorf("error registering migration: %w", err)
 	}
 
-	// Executar SQL da migration
-	// Dividir por ; para executar múltiplos statements
+	// Execute migration SQL
+	// Split by ; to execute multiple statements
 	statements := SplitSQLStatements(migration.SQL)
 	for _, stmt := range statements {
 		stmt = strings.TrimSpace(stmt)
@@ -225,11 +225,11 @@ func (m *Manager) ApplyMigration(migration *Migration) error {
 		}
 
 		if _, err := tx.Exec(stmt); err != nil {
-			return fmt.Errorf("erro ao executar migration %s: %w\nSQL: %s", migration.Name, err, stmt)
+			return fmt.Errorf("error executing migration %s: %w\nSQL: %s", migration.Name, err, stmt)
 		}
 	}
 
-	// Marcar como finalizada
+	// Mark as finished
 	finishedAt := time.Now()
 	updateQuery := `
 		UPDATE _prisma_migrations 
@@ -238,31 +238,31 @@ func (m *Manager) ApplyMigration(migration *Migration) error {
 	`
 	_, err = tx.Exec(updateQuery, finishedAt, len(statements), migrationID)
 	if err != nil {
-		return fmt.Errorf("erro ao finalizar migration: %w", err)
+		return fmt.Errorf("error finishing migration: %w", err)
 	}
 
 	// Commit
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("erro ao commitar migration: %w", err)
+		return fmt.Errorf("error committing migration: %w", err)
 	}
 
 	return nil
 }
 
-// generateMigrationID gera um ID único para a migration
+// generateMigrationID generates a unique ID for the migration
 func generateMigrationID() string {
 	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
 
-// calculateChecksum calcula checksum simples do SQL
+// calculateChecksum calculates a simple checksum of the SQL
 func calculateChecksum(sql string) string {
-	// Checksum simples (em produção, usar SHA256)
+	// Simple checksum (in production, use SHA256)
 	return fmt.Sprintf("%d", len(sql))
 }
 
-// SplitSQLStatements divide SQL em statements individuais
+// SplitSQLStatements splits SQL into individual statements
 func SplitSQLStatements(sql string) []string {
-	// Dividir por ; mas respeitar strings e comentários
+	// Split by ; but respect strings and comments
 	var statements []string
 	var current strings.Builder
 	inString := false
@@ -293,7 +293,7 @@ func SplitSQLStatements(sql string) []string {
 		}
 	}
 
-	// Adicionar último statement se houver
+	// Add last statement if any
 	stmt := strings.TrimSpace(current.String())
 	if stmt != "" {
 		statements = append(statements, stmt)
@@ -302,21 +302,21 @@ func SplitSQLStatements(sql string) []string {
 	return statements
 }
 
-// MarkMigrationAsApplied marca uma migration como aplicada manualmente
+// MarkMigrationAsApplied marks a migration as manually applied
 func (m *Manager) MarkMigrationAsApplied(migrationName string) error {
 	if err := m.EnsureMigrationsTable(); err != nil {
 		return err
 	}
 
-	// Verificar se já existe
+	// Check if it already exists
 	var exists bool
 	checkQuery := `SELECT EXISTS(SELECT 1 FROM _prisma_migrations WHERE migration_name = $1)`
 	if err := m.db.QueryRow(checkQuery, migrationName).Scan(&exists); err != nil {
-		return fmt.Errorf("erro ao verificar migration: %w", err)
+		return fmt.Errorf("error checking migration: %w", err)
 	}
 
 	if exists {
-		// Atualizar para marcar como aplicada
+		// Update to mark as applied
 		updateQuery := `
 			UPDATE _prisma_migrations 
 			SET finished_at = COALESCE(finished_at, NOW()),
@@ -325,10 +325,10 @@ func (m *Manager) MarkMigrationAsApplied(migrationName string) error {
 		`
 		_, err := m.db.Exec(updateQuery, migrationName)
 		if err != nil {
-			return fmt.Errorf("erro ao atualizar migration: %w", err)
+			return fmt.Errorf("error updating migration: %w", err)
 		}
 	} else {
-		// Criar registro
+		// Create record
 		insertQuery := `
 			INSERT INTO _prisma_migrations (id, checksum, migration_name, started_at, finished_at, applied_steps_count)
 			VALUES ($1, $2, $3, NOW(), NOW(), 1)
@@ -337,14 +337,14 @@ func (m *Manager) MarkMigrationAsApplied(migrationName string) error {
 		checksum := "manual"
 		_, err := m.db.Exec(insertQuery, migrationID, checksum, migrationName)
 		if err != nil {
-			return fmt.Errorf("erro ao criar registro de migration: %w", err)
+			return fmt.Errorf("error creating migration record: %w", err)
 		}
 	}
 
 	return nil
 }
 
-// MarkMigrationAsRolledBack marca uma migration como rolled back (não aplicada)
+// MarkMigrationAsRolledBack marks a migration as rolled back (not applied)
 func (m *Manager) MarkMigrationAsRolledBack(migrationName string) error {
 	if err := m.EnsureMigrationsTable(); err != nil {
 		return err
@@ -358,16 +358,16 @@ func (m *Manager) MarkMigrationAsRolledBack(migrationName string) error {
 	`
 	result, err := m.db.Exec(updateQuery, migrationName)
 	if err != nil {
-		return fmt.Errorf("erro ao atualizar migration: %w", err)
+		return fmt.Errorf("error updating migration: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("erro ao verificar linhas afetadas: %w", err)
+		return fmt.Errorf("error checking affected rows: %w", err)
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("migration '%s' não encontrada", migrationName)
+		return fmt.Errorf("migration '%s' not found", migrationName)
 	}
 
 	return nil

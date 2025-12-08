@@ -4,7 +4,7 @@ import (
 	"github.com/carlosnayan/prisma-go-client/internal/parser"
 )
 
-// CompareSchema compara o schema Prisma com o banco de dados e retorna diferenças
+// CompareSchema compares the Prisma schema with the database and returns differences
 func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider string) (*SchemaDiff, error) {
 	diff := &SchemaDiff{
 		TablesToCreate:  []TableDefinition{},
@@ -14,7 +14,7 @@ func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider str
 		IndexesToDrop:   []string{},
 	}
 
-	// Converter schema Prisma para estrutura comparável
+	// Convert Prisma schema to comparable structure
 	prismaTables := make(map[string]*TableDefinition)
 	for _, model := range schema.Models {
 		table := &TableDefinition{
@@ -29,7 +29,7 @@ func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider str
 				IsNullable: field.Type.IsOptional,
 			}
 
-			// Verificar atributos
+			// Check attributes
 			for _, attr := range field.Attributes {
 				switch attr.Name {
 				case "id":
@@ -69,10 +69,10 @@ func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider str
 		dbTable, exists := dbSchema.Tables[modelName]
 
 		if !exists {
-			// Tabela não existe no banco, precisa criar
+			// Table doesn't exist in database, needs to be created
 			diff.TablesToCreate = append(diff.TablesToCreate, *prismaTable)
 		} else {
-			// Tabela existe, comparar colunas
+			// Table exists, compare columns
 			alteration := TableAlteration{
 				TableName:    modelName,
 				AddColumns:   []ColumnDefinition{},
@@ -80,15 +80,15 @@ func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider str
 				AlterColumns: []ColumnAlteration{},
 			}
 
-			// Verificar colunas a adicionar ou alterar
+			// Check columns to add or alter
 			for _, prismaCol := range prismaTable.Columns {
 				dbCol, exists := dbTable.Columns[prismaCol.Name]
 
 				if !exists {
-					// Coluna não existe, precisa adicionar
+					// Column doesn't exist, needs to be added
 					alteration.AddColumns = append(alteration.AddColumns, prismaCol)
 				} else {
-					// Coluna existe, verificar se precisa alterar
+					// Column exists, check if it needs to be altered
 					needsAlter := false
 					colAlter := ColumnAlteration{
 						ColumnName:  prismaCol.Name,
@@ -96,13 +96,13 @@ func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider str
 						NewNullable: prismaCol.IsNullable,
 					}
 
-					// Comparar tipo
+					// Compare type
 					prismaTypeSQL := mapTypeToSQL(prismaCol.Type, provider)
 					if dbCol.Type != prismaTypeSQL {
 						needsAlter = true
 					}
 
-					// Comparar nullable
+					// Compare nullable
 					if dbCol.IsNullable != prismaCol.IsNullable {
 						needsAlter = true
 					}
@@ -113,7 +113,7 @@ func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider str
 				}
 			}
 
-			// Verificar colunas a remover (existem no banco mas não no schema)
+			// Check columns to remove (exist in database but not in schema)
 			for dbColName := range dbTable.Columns {
 				found := false
 				for _, prismaCol := range prismaTable.Columns {
@@ -127,14 +127,14 @@ func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider str
 				}
 			}
 
-			// Só adicionar alteração se houver mudanças
+			// Only add alteration if there are changes
 			if len(alteration.AddColumns) > 0 || len(alteration.DropColumns) > 0 || len(alteration.AlterColumns) > 0 {
 				diff.TablesToAlter = append(diff.TablesToAlter, alteration)
 			}
 		}
 	}
 
-	// Verificar tabelas a remover (existem no banco mas não no schema)
+	// Check tables to remove (exist in database but not in schema)
 	for dbTableName := range dbSchema.Tables {
 		_, exists := prismaTables[dbTableName]
 		if !exists {

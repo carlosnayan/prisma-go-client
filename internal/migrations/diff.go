@@ -8,7 +8,7 @@ import (
 	"github.com/carlosnayan/prisma-go-client/internal/parser"
 )
 
-// SchemaDiff representa diferenças entre schema e banco
+// SchemaDiff represents differences between schema and database
 type SchemaDiff struct {
 	TablesToCreate  []TableDefinition
 	TablesToAlter   []TableAlteration
@@ -17,13 +17,13 @@ type SchemaDiff struct {
 	IndexesToDrop   []string
 }
 
-// TableDefinition representa uma tabela a ser criada
+// TableDefinition represents a table to be created
 type TableDefinition struct {
 	Name    string
 	Columns []ColumnDefinition
 }
 
-// ColumnDefinition representa uma coluna
+// ColumnDefinition represents a column
 type ColumnDefinition struct {
 	Name         string
 	Type         string
@@ -33,7 +33,7 @@ type ColumnDefinition struct {
 	DefaultValue string
 }
 
-// TableAlteration representa alterações em uma tabela
+// TableAlteration represents alterations to a table
 type TableAlteration struct {
 	TableName    string
 	AddColumns   []ColumnDefinition
@@ -41,14 +41,14 @@ type TableAlteration struct {
 	AlterColumns []ColumnAlteration
 }
 
-// ColumnAlteration representa alteração em uma coluna
+// ColumnAlteration represents an alteration to a column
 type ColumnAlteration struct {
 	ColumnName  string
 	NewType     string
 	NewNullable bool
 }
 
-// IndexDefinition representa um índice
+// IndexDefinition represents an index
 type IndexDefinition struct {
 	Name      string
 	TableName string
@@ -56,9 +56,9 @@ type IndexDefinition struct {
 	IsUnique  bool
 }
 
-// needsUUIDExtension verifica se a migration precisa da extensão pgcrypto para gen_random_uuid()
+// needsUUIDExtension checks if the migration needs the pgcrypto extension for gen_random_uuid()
 func needsUUIDExtension(diff *SchemaDiff) bool {
-	// Verificar em tabelas a serem criadas
+	// Check in tables to be created
 	for _, table := range diff.TablesToCreate {
 		for _, col := range table.Columns {
 			if strings.Contains(strings.ToLower(col.DefaultValue), "gen_random_uuid") {
@@ -67,7 +67,7 @@ func needsUUIDExtension(diff *SchemaDiff) bool {
 		}
 	}
 
-	// Verificar em colunas a serem adicionadas
+	// Check in columns to be added
 	for _, alter := range diff.TablesToAlter {
 		for _, col := range alter.AddColumns {
 			if strings.Contains(strings.ToLower(col.DefaultValue), "gen_random_uuid") {
@@ -79,18 +79,18 @@ func needsUUIDExtension(diff *SchemaDiff) bool {
 	return false
 }
 
-// GenerateMigrationSQL gera SQL de migration baseado nas diferenças
+// GenerateMigrationSQL generates migration SQL based on differences
 func GenerateMigrationSQL(diff *SchemaDiff, provider string) (string, error) {
 	var sql strings.Builder
 	d := dialect.GetDialect(provider)
 
-	// Se for PostgreSQL e precisar de gen_random_uuid(), criar extensão
+	// If PostgreSQL and needs gen_random_uuid(), create extension
 	if provider == "postgresql" && needsUUIDExtension(diff) {
 		sql.WriteString("-- Enable pgcrypto extension for gen_random_uuid()\n")
 		sql.WriteString("CREATE EXTENSION IF NOT EXISTS \"pgcrypto\";\n\n")
 	}
 
-	// Criar tabelas
+	// Create tables
 	for _, table := range diff.TablesToCreate {
 		sql.WriteString(fmt.Sprintf("CREATE TABLE %s (\n", d.QuoteIdentifier(table.Name)))
 
@@ -162,7 +162,7 @@ func GenerateMigrationSQL(diff *SchemaDiff, provider string) (string, error) {
 		sql.WriteString("\n")
 	}
 
-	// Criar índices
+	// Create indexes
 	for _, idx := range diff.IndexesToCreate {
 		unique := ""
 		if idx.IsUnique {
@@ -179,7 +179,7 @@ func GenerateMigrationSQL(diff *SchemaDiff, provider string) (string, error) {
 			strings.Join(quotedCols, ", ")))
 	}
 
-	// Remover índices
+	// Remove indexes
 	for _, idxName := range diff.IndexesToDrop {
 		sql.WriteString(fmt.Sprintf("DROP INDEX %s;\n", quoteIdentifier(idxName, provider)))
 	}
@@ -187,8 +187,8 @@ func GenerateMigrationSQL(diff *SchemaDiff, provider string) (string, error) {
 	return sql.String(), nil
 }
 
-// SchemaToSQL converte um schema Prisma para SQL (cria tudo do zero)
-// Use CompareSchema para detectar mudanças incrementais
+// SchemaToSQL converts a Prisma schema to SQL (creates everything from scratch)
+// Use CompareSchema to detect incremental changes
 func SchemaToSQL(schema *parser.Schema, provider string) (*SchemaDiff, error) {
 	diff := &SchemaDiff{}
 
@@ -205,7 +205,7 @@ func SchemaToSQL(schema *parser.Schema, provider string) (*SchemaDiff, error) {
 				IsNullable: field.Type.IsOptional,
 			}
 
-			// Verificar atributos
+			// Check attributes
 			for _, attr := range field.Attributes {
 				switch attr.Name {
 				case "id":
@@ -215,7 +215,7 @@ func SchemaToSQL(schema *parser.Schema, provider string) (*SchemaDiff, error) {
 					col.IsUnique = true
 				case "default":
 					if len(attr.Arguments) > 0 {
-						// Extrair valor padrão
+						// Extract default value
 						col.DefaultValue = extractDefaultValue(attr.Arguments[0])
 					}
 				}
@@ -230,25 +230,25 @@ func SchemaToSQL(schema *parser.Schema, provider string) (*SchemaDiff, error) {
 	return diff, nil
 }
 
-// extractDefaultValue extrai valor padrão de um argumento
+// extractDefaultValue extracts default value from an argument
 func extractDefaultValue(arg *parser.AttributeArgument) string {
 	if str, ok := arg.Value.(string); ok {
 		return fmt.Sprintf("'%s'", strings.ReplaceAll(str, "'", "''"))
 	}
 
-	// Se for função (autoincrement, now, dbgenerated, etc.)
+	// If it's a function (autoincrement, now, dbgenerated, etc.)
 	if m, ok := arg.Value.(map[string]interface{}); ok {
 		if fn, ok := m["function"].(string); ok {
 			switch fn {
 			case "autoincrement":
-				return "" // Será tratado como SERIAL/BIGSERIAL
+				return "" // Will be treated as SERIAL/BIGSERIAL
 			case "now":
 				return "CURRENT_TIMESTAMP"
 			case "dbgenerated":
-				// dbgenerated("gen_random_uuid()") -> extrair o argumento
+				// dbgenerated("gen_random_uuid()") -> extract the argument
 				if args, ok := m["args"].([]interface{}); ok && len(args) > 0 {
 					if sqlStr, ok := args[0].(string); ok {
-						// Retornar o SQL diretamente, sem aspas
+						// Return SQL directly, without quotes
 						return sqlStr
 					}
 				}
@@ -262,7 +262,7 @@ func extractDefaultValue(arg *parser.AttributeArgument) string {
 	return ""
 }
 
-// mapTypeToSQL mapeia tipo Prisma para SQL
+// mapTypeToSQL maps Prisma type to SQL
 func mapTypeToSQL(prismaType string, provider string) string {
 	switch provider {
 	case "postgresql":
@@ -299,7 +299,7 @@ func mapTypeToPostgreSQL(prismaType string) string {
 	case "UUID", "Uuid":
 		return "UUID"
 	default:
-		// Se começar com VARCHAR, retornar como está (já vem do @db.VarChar)
+		// If it starts with VARCHAR, return as is (already comes from @db.VarChar)
 		if strings.HasPrefix(prismaType, "VARCHAR") {
 			return prismaType
 		}

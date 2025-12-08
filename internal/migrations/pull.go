@@ -25,7 +25,7 @@ func GenerateSchemaFromDatabase(dbSchema *DatabaseSchema, provider string) (*par
 	}
 	schema.Datasources = append(schema.Datasources, datasource)
 
-	// Criar generator padrão
+	// Create default generator
 	generator := &parser.Generator{
 		Name: "client",
 		Fields: []*parser.Field{

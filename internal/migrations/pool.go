@@ -6,15 +6,15 @@ import (
 	"time"
 )
 
-// PoolConfig configura o pool de conexões
+// PoolConfig configures the connection pool
 type PoolConfig struct {
-	MaxOpenConns    int           // Número máximo de conexões abertas
-	MaxIdleConns    int           // Número máximo de conexões ociosas
-	ConnMaxLifetime time.Duration // Tempo máximo de vida de uma conexão
-	ConnMaxIdleTime time.Duration // Tempo máximo que uma conexão pode ficar ociosa
+	MaxOpenConns    int           // Maximum number of open connections
+	MaxIdleConns    int           // Maximum number of idle connections
+	ConnMaxLifetime time.Duration // Maximum lifetime of a connection
+	ConnMaxIdleTime time.Duration // Maximum time a connection can be idle
 }
 
-// DefaultPoolConfig retorna configuração padrão do pool
+// DefaultPoolConfig returns default pool configuration
 func DefaultPoolConfig() *PoolConfig {
 	return &PoolConfig{
 		MaxOpenConns:    25,
@@ -24,7 +24,7 @@ func DefaultPoolConfig() *PoolConfig {
 	}
 }
 
-// ConfigurePool configura o pool de conexões do banco
+// ConfigurePool configures the database connection pool
 func ConfigurePool(db *sql.DB, config *PoolConfig) {
 	if config == nil {
 		config = DefaultPoolConfig()
@@ -36,7 +36,7 @@ func ConfigurePool(db *sql.DB, config *PoolConfig) {
 	db.SetConnMaxIdleTime(config.ConnMaxIdleTime)
 }
 
-// ConnectDatabaseWithPool conecta ao banco e configura o pool
+// ConnectDatabaseWithPool connects to the database and configures the pool
 func ConnectDatabaseWithPool(url string, poolConfig *PoolConfig) (*sql.DB, error) {
 	db, err := ConnectDatabase(url)
 	if err != nil {
@@ -47,13 +47,13 @@ func ConnectDatabaseWithPool(url string, poolConfig *PoolConfig) (*sql.DB, error
 	return db, nil
 }
 
-// GetPoolStats retorna estatísticas do pool de conexões
+// GetPoolStats returns connection pool statistics
 func GetPoolStats(db *sql.DB) (openConns, idleConns int, err error) {
 	stats := db.Stats()
 	return stats.OpenConnections, stats.Idle, nil
 }
 
-// PrintPoolStats imprime estatísticas do pool (útil para debug)
+// PrintPoolStats prints pool statistics (useful for debugging)
 func PrintPoolStats(db *sql.DB) {
 	stats := db.Stats()
 	fmt.Printf("Pool Stats:\n")

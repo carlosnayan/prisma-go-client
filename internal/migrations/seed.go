@@ -8,32 +8,32 @@ import (
 	"strings"
 )
 
-// ExecuteSeed executa o comando de seed configurado
+// ExecuteSeed executes the configured seed command
 func ExecuteSeed(seedCommand string) error {
 	if seedCommand == "" {
-		return fmt.Errorf("comando de seed não configurado")
+		return fmt.Errorf("seed command not configured")
 	}
 
-	// Dividir comando em partes
+	// Split command into parts
 	parts := strings.Fields(seedCommand)
 	if len(parts) == 0 {
-		return fmt.Errorf("comando de seed vazio")
+		return fmt.Errorf("seed command is empty")
 	}
 
-	// Primeiro elemento é o comando
+	// First element is the command
 	cmdName := parts[0]
 	var args []string
 	if len(parts) > 1 {
 		args = parts[1:]
 	}
 
-	// Criar comando
+	// Create command
 	cmd := exec.Command(cmdName, args...)
 
-	// Configurar diretório de trabalho (raiz do projeto)
+	// Set working directory (project root)
 	wd, err := os.Getwd()
 	if err == nil {
-		// Procurar raiz do projeto (onde está prisma.conf)
+		// Find project root (where prisma.conf is)
 		dir := wd
 		for {
 			configPath := filepath.Join(dir, "prisma.conf")
@@ -50,14 +50,14 @@ func ExecuteSeed(seedCommand string) error {
 		}
 	}
 
-	// Capturar stdout e stderr
+	// Capture stdout and stderr
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 
-	// Executar
+	// Execute
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("erro ao executar seed: %w", err)
+		return fmt.Errorf("error executing seed: %w", err)
 	}
 
 	return nil
