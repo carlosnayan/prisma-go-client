@@ -35,4 +35,4 @@
 // https://github.com/carlosnayan/prisma-go-client
 package prisma
 
-const Version = "0.1.6"
+const Version = "0.1.7"
