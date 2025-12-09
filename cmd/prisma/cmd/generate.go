@@ -110,10 +110,6 @@ func runGenerateOnce(schemaPath string) error {
 	// Start timing
 	startTime := time.Now()
 
-	// Parse schema with progress indicator
-	if !noHintsFlag {
-		fmt.Print("Parsing schema... ")
-	}
 	schema, errors, err := parser.ParseFile(schemaPath)
 	if err != nil {
 		if len(errors) > 0 {
@@ -130,10 +126,6 @@ func runGenerateOnce(schemaPath string) error {
 	// Check if models are required
 	if requireModelsFlag && len(schema.Models) == 0 {
 		return fmt.Errorf("no models found in schema. Use --require-models=false to allow generating without models")
-	}
-
-	if !noHintsFlag {
-		fmt.Println("✓")
 	}
 
 	// Filter generators if --generator flags are provided
@@ -178,85 +170,47 @@ func runGenerateOnce(schemaPath string) error {
 		}
 	}
 
-	// Generate code with progress indicators
-	if !noHintsFlag {
-		fmt.Print("Generating models... ")
+	// Cleanup existing directories to ensure fresh generation
+	dirsToClean := []string{"inputs", "models", "queries"}
+	for _, dirName := range dirsToClean {
+		dirPath := filepath.Join(absoluteOutputDir, dirName)
+		if _, err := os.Stat(dirPath); err == nil {
+			if err := os.RemoveAll(dirPath); err != nil {
+				return fmt.Errorf("error cleaning %s directory: %w", dirName, err)
+			}
+		}
 	}
+
 	if err := generator.GenerateModels(schema, absoluteOutputDir); err != nil {
 		return fmt.Errorf("error generating models: %w", err)
 	}
-	if !noHintsFlag {
-		fmt.Println("✓")
-	}
 
-	if !noHintsFlag {
-		fmt.Print("Generating raw SQL helpers... ")
-	}
 	if err := generator.GenerateRaw(absoluteOutputDir); err != nil {
 		return fmt.Errorf("error generating raw: %w", err)
 	}
-	if !noHintsFlag {
-		fmt.Println("✓")
-	}
 
-	if !noHintsFlag {
-		fmt.Print("Generating query builders... ")
-	}
 	if err := generator.GenerateBuilder(schema, absoluteOutputDir); err != nil {
 		return fmt.Errorf("error generating builder: %w", err)
 	}
-	if !noHintsFlag {
-		fmt.Println("✓")
-	}
 
-	if !noHintsFlag {
-		fmt.Print("Generating input types... ")
-	}
 	if err := generator.GenerateInputs(schema, absoluteOutputDir); err != nil {
 		return fmt.Errorf("error generating inputs: %w", err)
 	}
-	if !noHintsFlag {
-		fmt.Println("✓")
-	}
 
-	if !noHintsFlag {
-		fmt.Print("Generating queries... ")
-	}
 	if err := generator.GenerateQueries(schema, absoluteOutputDir); err != nil {
 		return fmt.Errorf("error generating queries: %w", err)
 	}
-	if !noHintsFlag {
-		fmt.Println("✓")
-	}
 
-	if !noHintsFlag {
-		fmt.Print("Generating helpers... ")
-	}
 	if err := generator.GenerateHelpers(schema, absoluteOutputDir); err != nil {
 		return fmt.Errorf("error generating helpers: %w", err)
 	}
-	if !noHintsFlag {
-		fmt.Println("✓")
-	}
 
-	if !noHintsFlag {
-		fmt.Print("Generating client... ")
-	}
 	if err := generator.GenerateClient(schema, absoluteOutputDir); err != nil {
 		return fmt.Errorf("error generating client: %w", err)
 	}
-	if !noHintsFlag {
-		fmt.Println("✓")
-	}
 
-	if !noHintsFlag {
-		fmt.Print("Generating driver adapters... ")
-	}
 	if err := generator.GenerateDriver(schema, absoluteOutputDir); err != nil {
 		return fmt.Errorf("error generating driver: %w", err)
-	}
-	if !noHintsFlag {
-		fmt.Println("✓")
 	}
 
 	// Calculate elapsed time
@@ -272,7 +226,7 @@ func runGenerateOnce(schemaPath string) error {
 
 	// Update Go module cache (only if not in watch mode and hints are enabled)
 	if !noHintsFlag {
-		fmt.Print("Updating Go module cache... ")
+		fmt.Print("\nUpdating Go module cache... ")
 		cmd := exec.Command("go", "mod", "tidy")
 		cmd.Stdout = os.Stderr // Redirect to stderr to avoid polluting output
 		cmd.Stderr = os.Stderr
@@ -287,14 +241,12 @@ func runGenerateOnce(schemaPath string) error {
 			// Don't fail if go mod tidy fails, just warn
 			fmt.Printf("⚠ Warning: failed to run 'go mod tidy': %v\n", err)
 			fmt.Println("  You may need to run 'go mod tidy' manually for staticcheck to recognize new packages.")
-		} else {
-			fmt.Println("✓")
 		}
 	}
 
 	if !noHintsFlag {
 		fmt.Println()
-		fmt.Println("Next steps:")
+		fmt.Println("\nNext steps:")
 		fmt.Println("  Import your Prisma Client in your code:")
 		fmt.Printf("    import \"%s\"\n", absoluteOutputDir)
 		fmt.Println()
