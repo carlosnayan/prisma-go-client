@@ -159,7 +159,7 @@ func resetGlobalFlags() {
 	dbPushAcceptDataLossFlag = false
 	dbPushSkipGenerateFlag = false
 	dbExecuteFileFlag = ""
-	dbExecuteStdinFlag = ""
+	dbExecuteStdinFlag = false
 	diffFrom = ""
 	diffTo = ""
 	diffOut = ""

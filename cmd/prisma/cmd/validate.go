@@ -131,11 +131,8 @@ func performAdditionalValidations(schema *parser.Schema) []string {
 		errors = append(errors, "Schema must have at least one datasource")
 	}
 
-	// Validate that generator exists (optional but recommended)
-	if len(schema.Generators) == 0 {
-		// This is a warning, not an error, but we can note it
-		// For now, we'll allow schemas without generators
-	}
+	// Note: Generators are optional but recommended
+	// Schemas without generators are allowed
 
 	return errors
 }

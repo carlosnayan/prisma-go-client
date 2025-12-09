@@ -607,42 +607,6 @@ func introspectSQLite(db *sql.DB, schema *DatabaseSchema) (*DatabaseSchema, erro
 
 // mapPostgreSQLType mapeia tipo PostgreSQL para tipo Prisma
 // Retorna o tipo original do PostgreSQL (não mapeado) para uso em pull.go
-func mapPostgreSQLType(pgType string) string {
-	pgType = strings.ToLower(pgType)
-
-	if strings.Contains(pgType, "timestamp") || strings.Contains(pgType, "timestamptz") {
-		return "timestamp"
-	}
-	if strings.Contains(pgType, "varchar") || strings.Contains(pgType, "character varying") {
-		return "varchar"
-	}
-	if strings.Contains(pgType, "char(") {
-		return "char"
-	}
-
-	switch {
-	case pgType == "text" || pgType == "char" || pgType == "character":
-		return "String"
-	case pgType == "integer" || pgType == "int" || pgType == "int4":
-		return "Int"
-	case pgType == "bigint" || pgType == "int8":
-		return "BigInt"
-	case pgType == "boolean" || pgType == "bool":
-		return "Boolean"
-	case pgType == "timestamp" || pgType == "timestamptz" || pgType == "date" || pgType == "time":
-		return "DateTime"
-	case pgType == "real" || pgType == "double precision" || pgType == "float8":
-		return "Float"
-	case strings.HasPrefix(pgType, "numeric") || strings.HasPrefix(pgType, "decimal"):
-		return "Decimal"
-	case pgType == "jsonb" || pgType == "json":
-		return "Json"
-	case pgType == "bytea":
-		return "Bytes"
-	default:
-		return pgType
-	}
-}
 
 // mapMySQLType mapeia tipo MySQL para tipo Prisma
 func mapMySQLType(mysqlType string) string {

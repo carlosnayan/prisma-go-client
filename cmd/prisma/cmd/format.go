@@ -13,7 +13,6 @@ import (
 )
 
 var (
-	formatWriteFlag bool
 	formatCheckFlag bool
 )
 

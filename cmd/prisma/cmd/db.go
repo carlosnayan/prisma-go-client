@@ -18,7 +18,7 @@ var (
 	dbPushAcceptDataLossFlag bool
 	dbPushSkipGenerateFlag   bool
 	dbExecuteFileFlag        string
-	dbExecuteStdinFlag       string
+	dbExecuteStdinFlag       bool
 )
 
 var dbCmd = &cli.Command{
@@ -74,17 +74,34 @@ var dbSeedCmd = &cli.Command{
 
 var dbExecuteCmd = &cli.Command{
 	Name:  "execute",
-	Short: "Execute arbitrary SQL on the database",
-	Long:  `Executes a SQL command on the database. Useful for administrative commands.`,
+	Short: "Execute native commands to your database",
+	Long: `📝 Execute native commands to your database
+
+This command takes as input a datasource defined in your config and a script,
+using --stdin or --file. The script input parameters are mutually exclusive,
+only 1 must be provided.
+
+The output of the command is connector-specific, and is not meant for returning
+data, but only to report success or failure.
+
+On SQL databases, this command takes as input a SQL script. The whole script
+will be sent as a single command to the database.
+
+Examples:
+  Execute SQL from file
+  $ prisma db execute --file ./script.sql
+
+  Execute SQL from stdin
+  $ echo 'TRUNCATE TABLE dev;' | prisma db execute --stdin`,
 	Flags: []*cli.Flag{
 		{
 			Name:  "file",
-			Usage: "SQL file to execute",
+			Usage: "Path to a file. The content will be sent as the script",
 			Value: &dbExecuteFileFlag,
 		},
 		{
 			Name:  "stdin",
-			Usage: "Read SQL from stdin",
+			Usage: "Use the terminal standard input as the script",
 			Value: &dbExecuteStdinFlag,
 		},
 	},
@@ -347,33 +364,6 @@ func runDbPull(args []string) error {
 	return nil
 }
 
-// formatSchemaFile formats a schema file in place
-func formatSchemaFile(schemaPath string) error {
-	// Parse schema
-	schema, errors, err := parser.ParseFile(schemaPath)
-	if err != nil || len(errors) > 0 {
-		return fmt.Errorf("error parsing schema for formatting: %w", err)
-	}
-
-	if schema == nil {
-		return fmt.Errorf("schema is nil after parsing")
-	}
-
-	// Format
-	formatted := formatter.FormatSchema(schema)
-	if formatted == "" {
-		return fmt.Errorf("formatting returned empty string")
-	}
-
-	// Write back - no need to re-parse and re-format
-	// The formatted output is already correct
-	if err := os.WriteFile(schemaPath, []byte(formatted), 0644); err != nil {
-		return fmt.Errorf("error writing formatted file: %w", err)
-	}
-
-	return nil
-}
-
 func runDbSeed(args []string) error {
 	if err := checkProjectRoot(); err != nil {
 		return err
@@ -398,6 +388,17 @@ func runDbSeed(args []string) error {
 }
 
 func runDbExecute(args []string) error {
+	// Validate flags first (before any other checks)
+	// This matches Node.js Prisma behavior
+	if dbExecuteFileFlag != "" && dbExecuteStdinFlag {
+		return fmt.Errorf("--stdin and --file cannot be used at the same time. Only 1 must be provided.\nSee `prisma db execute -h`")
+	}
+
+	// At least one flag must be provided
+	if dbExecuteFileFlag == "" && !dbExecuteStdinFlag {
+		return fmt.Errorf("Either --stdin or --file must be provided.\nSee `prisma db execute -h`")
+	}
+
 	if err := checkProjectRoot(); err != nil {
 		return err
 	}
@@ -407,21 +408,29 @@ func runDbExecute(args []string) error {
 		return err
 	}
 
-	fileFlag := dbExecuteFileFlag
-	stdinFlag := dbExecuteStdinFlag
-
 	var sql string
 
-	if fileFlag != "" {
+	if dbExecuteFileFlag != "" {
 		// Read from file
-		data, err := os.ReadFile(fileFlag)
+		data, err := os.ReadFile(dbExecuteFileFlag)
 		if err != nil {
-			return fmt.Errorf("error reading file: %w", err)
+			if os.IsNotExist(err) {
+				return fmt.Errorf("Provided --file at %s doesn't exist.", dbExecuteFileFlag)
+			}
+			return fmt.Errorf("An error occurred while reading the provided --file at %s: %w", dbExecuteFileFlag, err)
 		}
 		sql = string(data)
-	} else if stdinFlag != "" {
+	} else if dbExecuteStdinFlag {
 		// Read from stdin
-		sql = stdinFlag
+		scanner := bufio.NewScanner(os.Stdin)
+		var lines []string
+		for scanner.Scan() {
+			lines = append(lines, scanner.Text())
+		}
+		if err := scanner.Err(); err != nil {
+			return fmt.Errorf("error reading from stdin: %w", err)
+		}
+		sql = strings.Join(lines, "\n")
 	} else if len(args) > 0 {
 		// SQL as argument
 		sql = strings.Join(args, " ")
@@ -475,7 +484,7 @@ func runDbExecute(args []string) error {
 		}
 	}
 
-	fmt.Println("SQL executed successfully!")
+	fmt.Println("Script executed successfully.")
 	return nil
 }
 

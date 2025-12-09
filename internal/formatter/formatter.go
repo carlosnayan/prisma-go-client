@@ -167,14 +167,6 @@ func formatModelWithSchema(model *parser.Model, schema *parser.Schema) string {
 	return result.String()
 }
 
-func formatModelField(field *parser.ModelField) string {
-	return formatModelFieldWithSchema(field, nil)
-}
-
-func formatModelFieldWithSchema(field *parser.ModelField, schema *parser.Schema) string {
-	return formatModelFieldWithSchemaAligned(field, schema, 0, 0)
-}
-
 func formatModelFieldWithSchemaAligned(field *parser.ModelField, schema *parser.Schema, maxNameLen, maxTypeLen int) string {
 	var result strings.Builder
 	result.WriteString("  ")
@@ -242,14 +234,6 @@ func formatModelFieldWithSchemaAligned(field *parser.ModelField, schema *parser.
 
 	result.WriteString("\n")
 	return result.String()
-}
-
-func formatFieldAttribute(attr *parser.Attribute) string {
-	return formatFieldAttributeWithType(attr, nil)
-}
-
-func formatFieldAttributeWithType(attr *parser.Attribute, fieldType *parser.FieldType) string {
-	return formatFieldAttributeWithTypeAndSchema(attr, fieldType, nil)
 }
 
 func formatFieldAttributeWithTypeAndSchema(attr *parser.Attribute, fieldType *parser.FieldType, schema *parser.Schema) string {
@@ -569,10 +553,7 @@ func formatValueWithDepth(v interface{}, depth int, visited map[interface{}]bool
 	case bool:
 		return fmt.Sprintf("%t", val)
 	case []string:
-		parts := make([]string, 0, len(val))
-		for _, item := range val {
-			parts = append(parts, item)
-		}
+		parts := append([]string{}, val...)
 		return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
 	case []interface{}:
 		// Special handling for JSON default values that were parsed as slices
@@ -786,15 +767,6 @@ func formatEnum(enum *parser.Enum) string {
 
 	result.WriteString("}\n")
 	return result.String()
-}
-
-func hasAttribute(attrs []*parser.Attribute, name string) bool {
-	for _, attr := range attrs {
-		if attr.Name == name {
-			return true
-		}
-	}
-	return false
 }
 
 func isHashable(v interface{}) bool {

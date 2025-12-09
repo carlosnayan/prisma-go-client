@@ -73,11 +73,11 @@ func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider str
 		for _, field := range model.Fields {
 			cleanTypeName := strings.TrimSuffix(strings.TrimSuffix(field.Type.Name, "[]"), "?")
 			isRelationField := strings.HasSuffix(field.Type.Name, "[]") || (!isBuiltInType(cleanTypeName) && isModel(schema, cleanTypeName))
-			
+
 			if isRelationField {
 				continue
 			}
-			
+
 			columnName := getColumnNameFromField(field)
 			col := ColumnDefinition{
 				Name:       columnName,

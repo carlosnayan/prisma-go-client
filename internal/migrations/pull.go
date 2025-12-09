@@ -252,7 +252,6 @@ func mapDatabaseTypeToPrisma(dbType, udtName string, provider string, enumMap ma
 
 func convertDefaultValue(defaultVal, dbType string, provider string, udtName string, enumMap map[string]*EnumInfo) *parser.Attribute {
 	defaultVal = strings.TrimSpace(defaultVal)
-	dbType = strings.ToLower(dbType)
 
 	if strings.Contains(defaultVal, "nextval") || strings.Contains(defaultVal, "gen_random_uuid") {
 		if strings.Contains(defaultVal, "gen_random_uuid") {
@@ -565,24 +564,6 @@ func convertToDbAttribute(colInfo *ColumnInfo, provider string) *parser.Attribut
 }
 
 func extractSizeFromDataType(dbType string) string {
-	start := strings.Index(dbType, "(")
-	end := strings.Index(dbType, ")")
-	if start != -1 && end != -1 && end > start {
-		return dbType[start+1 : end]
-	}
-	return ""
-}
-
-func extractSize(dbType string) string {
-	start := strings.Index(dbType, "(")
-	end := strings.Index(dbType, ")")
-	if start != -1 && end != -1 && end > start {
-		return dbType[start+1 : end]
-	}
-	return ""
-}
-
-func extractPrecision(dbType string) string {
 	start := strings.Index(dbType, "(")
 	end := strings.Index(dbType, ")")
 	if start != -1 && end != -1 && end > start {

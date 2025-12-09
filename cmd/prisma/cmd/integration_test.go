@@ -62,7 +62,6 @@ func TestIntegration_InitGenerateFormat(t *testing.T) {
 	}
 
 	// Step 3: Format schema
-	formatWriteFlag = true
 	formatCheckFlag = false
 	err = runFormat([]string{})
 	if err != nil {
@@ -121,7 +120,6 @@ func TestIntegration_FullWorkflow(t *testing.T) {
 	}
 
 	// 4. Format schema
-	formatWriteFlag = true
 	err = runFormat([]string{})
 	if err != nil {
 		t.Fatalf("Format failed: %v", err)
