@@ -1,6 +1,7 @@
 package migrations
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/carlosnayan/prisma-go-client/internal/parser"
@@ -266,6 +267,61 @@ func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider str
 		}
 	}
 
+	// Calculate Indexes to Drop
+	expectedIndexes := make(map[string]map[string]bool)
+	for _, model := range schema.Models {
+		tableName := getTableNameFromModel(model)
+		expectedIndexes[tableName] = make(map[string]bool)
+
+		// Field level @unique
+		for _, field := range model.Fields {
+			colName := getColumnNameFromField(field)
+			for _, attr := range field.Attributes {
+				if attr.Name == "unique" {
+					indexName := fmt.Sprintf("%s_%s_key", tableName, colName)
+					expectedIndexes[tableName][indexName] = true
+				}
+			}
+		}
+
+		// Model level @@unique and @@index
+		for _, attr := range model.Attributes {
+			if attr.Name == "unique" {
+				if idx := extractUniqueIndex(tableName, attr); idx != nil {
+					expectedIndexes[tableName][idx.Name] = true
+				}
+			} else if attr.Name == "index" {
+				if idx := extractIndex(tableName, attr); idx != nil {
+					expectedIndexes[tableName][idx.Name] = true
+				}
+			}
+		}
+	}
+
+	for tableName, dbTable := range dbSchema.Tables {
+		// Skip if table is being dropped
+		if _, exists := prismaTables[tableName]; !exists {
+			continue
+		}
+
+		for _, dbIdx := range dbTable.Indexes {
+			// Check if index is expected (case-insensitive)
+			expected := false
+			if expectedMap, ok := expectedIndexes[tableName]; ok {
+				for expectedName := range expectedMap {
+					if strings.EqualFold(expectedName, dbIdx.Name) {
+						expected = true
+						break
+					}
+				}
+			}
+
+			if !expected {
+				diff.IndexesToDrop = append(diff.IndexesToDrop, dbIdx.Name)
+			}
+		}
+	}
+
 	processRelationsAndUnique(schema, diff, dbSchema)
 
 	return diff, nil
@@ -297,7 +353,20 @@ func processRelationsAndUnique(schema *parser.Schema, diff *SchemaDiff, dbSchema
 		}
 
 		for _, field := range model.Fields {
+			columnName := getColumnNameFromField(field)
 			for _, attr := range field.Attributes {
+				if attr.Name == "unique" {
+					// Field-level unique attribute
+					indexName := fmt.Sprintf("%s_%s_key", tableName, columnName)
+					if !indexExists(dbSchema, tableName, indexName, []string{columnName}) {
+						diff.IndexesToCreate = append(diff.IndexesToCreate, IndexDefinition{
+							Name:      indexName,
+							TableName: tableName,
+							Columns:   []string{columnName},
+							IsUnique:  true,
+						})
+					}
+				}
 				if attr.Name == "relation" {
 					fkDef := extractForeignKey(tableName, field, attr, modelMap)
 					if fkDef != nil {

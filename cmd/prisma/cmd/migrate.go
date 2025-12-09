@@ -650,7 +650,7 @@ func runMigrateReset(args []string) error {
 		fmt.Println()
 		fmt.Println("migrations/")
 		for _, migration := range local {
-			fmt.Printf("  └─ %s/\n", MigrationName(migration.Name+"/"))
+			fmt.Printf("  └─ %s/\n", MigrationName(migration.Name))
 			fmt.Printf("    └─ migration.sql\n")
 		}
 		fmt.Println()

@@ -479,7 +479,7 @@ func (p *Parser) parseValue() interface{} {
 			p.nextToken()
 		}
 		return values
-	case TokenIdent:
+	case TokenIdent, TokenTypeKeyword:
 		// Pode ser uma função (env, autoincrement, now, etc.)
 		ident := p.curToken.Literal
 		p.nextToken()

@@ -77,9 +77,9 @@ func (d *PostgreSQLDialect) MapDefaultValue(value string) string {
 	case value == "now()" || value == "now":
 		return "NOW()"
 	case strings.HasPrefix(value, "uuid()") || strings.HasPrefix(value, "uuid"):
-		return "gen_random_uuid()"
+		return "" // Default to empty (client-side generation)
 	case strings.HasPrefix(value, "cuid()") || strings.HasPrefix(value, "cuid"):
-		return "gen_random_uuid()" // Fallback para UUID
+		return "" // Default to empty
 	default:
 		return value
 	}

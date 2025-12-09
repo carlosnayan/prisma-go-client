@@ -94,165 +94,206 @@ func needsUUIDExtension(diff *SchemaDiff) bool {
 
 // GenerateMigrationSQL generates migration SQL based on differences
 func GenerateMigrationSQL(diff *SchemaDiff, provider string) (string, error) {
-	var sql strings.Builder
+	var steps []string
 	d := dialect.GetDialect(provider)
 
 	// If PostgreSQL and needs gen_random_uuid(), create extension
 	if provider == "postgresql" && needsUUIDExtension(diff) {
+		var sql strings.Builder
 		sql.WriteString("-- Enable pgcrypto extension for gen_random_uuid()\n")
-		sql.WriteString("CREATE EXTENSION IF NOT EXISTS \"pgcrypto\";\n\n")
+		sql.WriteString("CREATE EXTENSION IF NOT EXISTS \"pgcrypto\";\n")
+		steps = append(steps, sql.String())
 	}
 
 	// Create tables
-	for _, table := range diff.TablesToCreate {
-		sql.WriteString(fmt.Sprintf("CREATE TABLE %s (\n", d.QuoteIdentifier(table.Name)))
+	if len(diff.TablesToCreate) > 0 {
+		var sql strings.Builder
+		sql.WriteString("-- CreateTable\n")
+		for _, table := range diff.TablesToCreate {
+			sql.WriteString(fmt.Sprintf("CREATE TABLE %s (\n", d.QuoteIdentifier(table.Name)))
 
-		var columns []string
-		var primaryKeys []string
+			var columns []string
+			var primaryKeys []string
 
-		for _, col := range table.Columns {
-			colDef := fmt.Sprintf("  %s %s", d.QuoteIdentifier(col.Name), d.MapType(col.Type, col.IsNullable))
+			for _, col := range table.Columns {
+				colDef := fmt.Sprintf("  %s %s", d.QuoteIdentifier(col.Name), d.MapType(col.Type, col.IsNullable))
 
-			if !col.IsNullable {
-				colDef += " NOT NULL"
+				if !col.IsNullable {
+					colDef += " NOT NULL"
+				}
+
+				if col.DefaultValue != "" {
+					colDef += " DEFAULT " + col.DefaultValue
+				}
+
+				if col.IsPrimaryKey {
+					primaryKeys = append(primaryKeys, col.Name)
+				}
+
+				columns = append(columns, colDef)
 			}
 
-			if col.DefaultValue != "" {
-				colDef += " DEFAULT " + col.DefaultValue
+			sql.WriteString(strings.Join(columns, ",\n"))
+
+			// Handle composite primary key from @@id
+			if len(table.CompositePK) > 0 {
+				quotedPKs := make([]string, len(table.CompositePK))
+				for i, pk := range table.CompositePK {
+					quotedPKs[i] = d.QuoteIdentifier(pk)
+				}
+				if provider == "mysql" {
+					sql.WriteString(fmt.Sprintf(",\n  PRIMARY KEY (%s)", strings.Join(quotedPKs, ", ")))
+				} else {
+					sql.WriteString(fmt.Sprintf(",\n  CONSTRAINT %s PRIMARY KEY (%s)",
+						d.QuoteIdentifier(table.Name+"_pkey"),
+						strings.Join(quotedPKs, ", ")))
+				}
+			} else if len(primaryKeys) > 0 {
+				quotedPKs := make([]string, len(primaryKeys))
+				for i, pk := range primaryKeys {
+					quotedPKs[i] = d.QuoteIdentifier(pk)
+				}
+				if provider == "mysql" {
+					sql.WriteString(fmt.Sprintf(",\n  PRIMARY KEY (%s)", strings.Join(quotedPKs, ", ")))
+				} else {
+					sql.WriteString(fmt.Sprintf(",\n  CONSTRAINT %s PRIMARY KEY (%s)",
+						d.QuoteIdentifier(table.Name+"_pkey"),
+						strings.Join(quotedPKs, ", ")))
+				}
 			}
 
-			if col.IsPrimaryKey {
-				primaryKeys = append(primaryKeys, col.Name)
-			}
-
-			if col.IsUnique && !col.IsPrimaryKey {
-				colDef += " UNIQUE"
-			}
-
-			columns = append(columns, colDef)
+			sql.WriteString("\n);\n")
 		}
-
-		sql.WriteString(strings.Join(columns, ",\n"))
-
-		// Handle composite primary key from @@id
-		if len(table.CompositePK) > 0 {
-			quotedPKs := make([]string, len(table.CompositePK))
-			for i, pk := range table.CompositePK {
-				quotedPKs[i] = d.QuoteIdentifier(pk)
-			}
-			if provider == "mysql" {
-				sql.WriteString(fmt.Sprintf(",\n  PRIMARY KEY (%s)", strings.Join(quotedPKs, ", ")))
-			} else {
-				sql.WriteString(fmt.Sprintf(",\n  CONSTRAINT %s PRIMARY KEY (%s)",
-					d.QuoteIdentifier(table.Name+"_pkey"),
-					strings.Join(quotedPKs, ", ")))
-			}
-		} else if len(primaryKeys) > 0 {
-			// Single column primary key
-			quotedPKs := make([]string, len(primaryKeys))
-			for i, pk := range primaryKeys {
-				quotedPKs[i] = d.QuoteIdentifier(pk)
-			}
-			// Generate PRIMARY KEY as named CONSTRAINT (PostgreSQL/SQLite style)
-			// MySQL doesn't support named constraints for PRIMARY KEY in CREATE TABLE
-			if provider == "mysql" {
-				sql.WriteString(fmt.Sprintf(",\n  PRIMARY KEY (%s)", strings.Join(quotedPKs, ", ")))
-			} else {
-				sql.WriteString(fmt.Sprintf(",\n  CONSTRAINT %s PRIMARY KEY (%s)",
-					d.QuoteIdentifier(table.Name+"_pkey"),
-					strings.Join(quotedPKs, ", ")))
-			}
-		}
-
-		sql.WriteString("\n);\n\n")
+		steps = append(steps, sql.String())
 	}
 
-	// Alterar tabelas
+	// Alter tables (Drop columns)
 	for _, alter := range diff.TablesToAlter {
-		// Adicionar colunas
-		for _, col := range alter.AddColumns {
-			colDef := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s",
-				d.QuoteIdentifier(alter.TableName),
-				d.QuoteIdentifier(col.Name),
-				d.MapType(col.Type, col.IsNullable))
-
-			if !col.IsNullable {
-				colDef += " NOT NULL"
+		if len(alter.DropColumns) > 0 {
+			var sql strings.Builder
+			sql.WriteString("-- AlterTable\n")
+			for _, colName := range alter.DropColumns {
+				sql.WriteString(fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s;\n",
+					d.QuoteIdentifier(alter.TableName),
+					d.QuoteIdentifier(colName)))
 			}
+			steps = append(steps, sql.String())
+		}
+	}
 
-			if col.DefaultValue != "" {
-				colDef += " DEFAULT " + col.DefaultValue
+	// Alter tables (Add columns)
+	for _, alter := range diff.TablesToAlter {
+		if len(alter.AddColumns) > 0 {
+			var sql strings.Builder
+			// Only add header if we haven't already processed drop columns for this table in the previous block
+			// But since we split drops and adds into different steps blocks for clarity
+			// We can just add -- AlterTable here too if needed, or rely on the previous block.
+			// However, typically all alters for a table are grouped.
+			// For simplicity and matching standard output, we group drops then adds.
+			// If we just had drops, we already added -- AlterTable.
+			// If we have adds, we might want another header or just continue?
+			// Standard Prisma CLI groups them.
+			// Let's stick to the user request: spacing between operations.
+
+			sql.WriteString("-- AlterTable\n")
+			for _, col := range alter.AddColumns {
+				colDef := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s",
+					d.QuoteIdentifier(alter.TableName),
+					d.QuoteIdentifier(col.Name),
+					d.MapType(col.Type, col.IsNullable))
+
+				if !col.IsNullable {
+					colDef += " NOT NULL"
+				}
+
+				if col.DefaultValue != "" {
+					colDef += " DEFAULT " + col.DefaultValue
+				}
+
+				sql.WriteString(colDef + ";\n")
 			}
-
-			sql.WriteString(colDef + ";\n")
+			steps = append(steps, sql.String())
 		}
+	}
 
-		// Remover colunas
-		for _, colName := range alter.DropColumns {
-			sql.WriteString(fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s;\n",
-				d.QuoteIdentifier(alter.TableName),
-				d.QuoteIdentifier(colName)))
+	// Drop indexes
+	if len(diff.IndexesToDrop) > 0 {
+		var sql strings.Builder
+		sql.WriteString("-- DropIndex\n")
+		for _, idxName := range diff.IndexesToDrop {
+			sql.WriteString(fmt.Sprintf("DROP INDEX %s;\n", d.QuoteIdentifier(idxName)))
 		}
+		steps = append(steps, sql.String())
+	}
 
-		sql.WriteString("\n")
+	// Drop tables
+	if len(diff.TablesToDrop) > 0 {
+		var sql strings.Builder
+		sql.WriteString("-- DropTable\n")
+		for _, tableName := range diff.TablesToDrop {
+			sql.WriteString(fmt.Sprintf("DROP TABLE %s;\n", d.QuoteIdentifier(tableName)))
+		}
+		steps = append(steps, sql.String())
 	}
 
 	// Create indexes
-	for _, idx := range diff.IndexesToCreate {
-		unique := ""
-		if idx.IsUnique {
-			unique = "UNIQUE "
+	if len(diff.IndexesToCreate) > 0 {
+		var sql strings.Builder
+		sql.WriteString("-- CreateIndex\n")
+		for _, idx := range diff.IndexesToCreate {
+			unique := ""
+			if idx.IsUnique {
+				unique = "UNIQUE "
+			}
+			quotedCols := make([]string, len(idx.Columns))
+			for i, col := range idx.Columns {
+				quotedCols[i] = d.QuoteIdentifier(col)
+			}
+			sql.WriteString(fmt.Sprintf("CREATE %sINDEX %s ON %s (%s);\n",
+				unique,
+				d.QuoteIdentifier(idx.Name),
+				d.QuoteIdentifier(idx.TableName),
+				strings.Join(quotedCols, ", ")))
 		}
-		quotedCols := make([]string, len(idx.Columns))
-		for i, col := range idx.Columns {
-			quotedCols[i] = d.QuoteIdentifier(col)
-		}
-		sql.WriteString(fmt.Sprintf("CREATE %sINDEX %s ON %s (%s);\n",
-			unique,
-			d.QuoteIdentifier(idx.Name),
-			d.QuoteIdentifier(idx.TableName),
-			strings.Join(quotedCols, ", ")))
+		steps = append(steps, sql.String())
 	}
 
-	// Remove indexes
-	for _, idxName := range diff.IndexesToDrop {
-		sql.WriteString(fmt.Sprintf("DROP INDEX %s;\n", quoteIdentifier(idxName, provider)))
+	// Add foreign keys
+	if len(diff.ForeignKeysToCreate) > 0 {
+		var sql strings.Builder
+		sql.WriteString("-- AddForeignKey\n")
+		for _, fk := range diff.ForeignKeysToCreate {
+			quotedCols := make([]string, len(fk.Columns))
+			for i, col := range fk.Columns {
+				quotedCols[i] = d.QuoteIdentifier(col)
+			}
+			quotedRefCols := make([]string, len(fk.ReferencedColumns))
+			for i, col := range fk.ReferencedColumns {
+				quotedRefCols[i] = d.QuoteIdentifier(col)
+			}
+
+			onDelete := fk.OnDelete
+			if onDelete == "" {
+				onDelete = "CASCADE"
+			}
+			onUpdate := fk.OnUpdate
+			if onUpdate == "" {
+				onUpdate = "CASCADE"
+			}
+
+			sql.WriteString(fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s) ON DELETE %s ON UPDATE %s;\n",
+				d.QuoteIdentifier(fk.TableName),
+				d.QuoteIdentifier(fk.Name),
+				strings.Join(quotedCols, ", "),
+				d.QuoteIdentifier(fk.ReferencedTable),
+				strings.Join(quotedRefCols, ", "),
+				onDelete,
+				onUpdate))
+		}
+		steps = append(steps, sql.String())
 	}
 
-	// Add foreign keys (after tables and indexes are created)
-	for _, fk := range diff.ForeignKeysToCreate {
-		quotedCols := make([]string, len(fk.Columns))
-		for i, col := range fk.Columns {
-			quotedCols[i] = d.QuoteIdentifier(col)
-		}
-		quotedRefCols := make([]string, len(fk.ReferencedColumns))
-		for i, col := range fk.ReferencedColumns {
-			quotedRefCols[i] = d.QuoteIdentifier(col)
-		}
-
-		onDelete := fk.OnDelete
-		if onDelete == "" {
-			onDelete = "CASCADE" // Default
-		}
-		onUpdate := fk.OnUpdate
-		if onUpdate == "" {
-			onUpdate = "CASCADE" // Default
-		}
-
-		// Generate foreign key constraint
-		sql.WriteString(fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s) ON DELETE %s ON UPDATE %s",
-			d.QuoteIdentifier(fk.TableName),
-			d.QuoteIdentifier(fk.Name),
-			strings.Join(quotedCols, ", "),
-			d.QuoteIdentifier(fk.ReferencedTable),
-			strings.Join(quotedRefCols, ", "),
-			onDelete,
-			onUpdate))
-
-		sql.WriteString(";\n")
-	}
-
-	return sql.String(), nil
+	return strings.Join(steps, "\n"), nil
 }
 
 // SchemaToSQL converts a Prisma schema to SQL (creates everything from scratch)
@@ -278,29 +319,14 @@ func SchemaToSQL(schema *parser.Schema, provider string) (*SchemaDiff, error) {
 		}
 
 		for _, field := range model.Fields {
-			// Skip relation fields that have @relation with fields/references
-			// These are the foreign key columns, not the relation fields themselves
-			isRelationField := false
-			for _, attr := range field.Attributes {
-				if attr.Name == "relation" {
-					// Check if this relation has fields/references (it's a foreign key)
-					hasFields := false
-					for _, arg := range attr.Arguments {
-						if arg.Name == "fields" {
-							hasFields = true
-							break
-						}
-					}
-					// If it doesn't have fields, it's the "other side" of the relation (array field)
-					if !hasFields {
-						isRelationField = true
-						break
-					}
-				}
+			// Check if field type is a known model (relation field)
+			if _, isModel := modelMap[field.Type.Name]; isModel {
+				continue // Skip relation fields (they don't create columns)
 			}
 
-			if isRelationField {
-				continue // Skip relation fields (they don't create columns)
+			// Also skip array fields (already handled implicitly above if model, but good for safety)
+			if field.Type.IsArray {
+				continue
 			}
 
 			// Use @map if present, otherwise use field name
@@ -319,6 +345,14 @@ func SchemaToSQL(schema *parser.Schema, provider string) (*SchemaDiff, error) {
 					col.IsNullable = false
 				case "unique":
 					col.IsUnique = true
+					// Add explicit unique index
+					indexName := fmt.Sprintf("%s_%s_key", tableName, columnName)
+					diff.IndexesToCreate = append(diff.IndexesToCreate, IndexDefinition{
+						Name:      indexName,
+						TableName: tableName,
+						Columns:   []string{columnName},
+						IsUnique:  true,
+					})
 				case "default":
 					if len(attr.Arguments) > 0 {
 						// Extract default value
@@ -612,7 +646,7 @@ func extractUniqueIndex(tableName string, attr *parser.Attribute) *IndexDefiniti
 			if name, ok := arg.Value.(string); ok {
 				indexName = strings.Trim(name, `"`)
 			}
-		} else if arg.Name == "" {
+		} else if arg.Name == "" || arg.Name == "fields" {
 			// First unnamed argument should be the array of fields
 			if fields, ok := arg.Value.([]interface{}); ok {
 				for _, field := range fields {
@@ -672,7 +706,7 @@ func extractIndex(tableName string, attr *parser.Attribute) *IndexDefinition {
 			if name, ok := arg.Value.(string); ok {
 				indexName = strings.Trim(name, `"`)
 			}
-		} else if arg.Name == "" {
+		} else if arg.Name == "" || arg.Name == "fields" {
 			// First unnamed argument should be the array of fields
 			if fields, ok := arg.Value.([]interface{}); ok {
 				for _, field := range fields {
@@ -852,7 +886,7 @@ func extractDefaultValue(arg *parser.AttributeArgument) string {
 				}
 				return ""
 			case "uuid":
-				return "gen_random_uuid()"
+				return "" // Client-side generation preferred (no Default in DB)
 			}
 		}
 	}
@@ -952,19 +986,5 @@ func mapTypeToSQLite(prismaType string) string {
 		return "BLOB"
 	default:
 		return "TEXT"
-	}
-}
-
-// quoteIdentifier coloca aspas em identificadores SQL
-func quoteIdentifier(name string, provider string) string {
-	switch provider {
-	case "postgresql":
-		return fmt.Sprintf(`"%s"`, name)
-	case "mysql":
-		return fmt.Sprintf("`%s`", name)
-	case "sqlite":
-		return fmt.Sprintf(`"%s"`, name)
-	default:
-		return fmt.Sprintf(`"%s"`, name)
 	}
 }

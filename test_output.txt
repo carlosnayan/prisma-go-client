@@ -1,0 +1,50 @@
+=== RUN   TestEdgeCases_Robust
+=== RUN   TestEdgeCases_Robust/Drops
+    edge_cases_test.go:32: Generated SQL:
+        -- DropTable
+        DROP TABLE "reviews";
+=== RUN   TestEdgeCases_Robust/Alter_Drops
+    edge_cases_test.go:32: Generated SQL:
+        ALTER TABLE "reviews" DROP COLUMN "comment";
+        ALTER TABLE "reviews" DROP COLUMN "rating";
+        
+        DROP INDEX "idx_reviews_rating";
+=== RUN   TestEdgeCases_Robust/Complex_Schema
+    edge_cases_test.go:32: Generated SQL:
+        -- CreateTable
+        CREATE TABLE "genres" (
+          "id" TEXT NOT NULL,
+          "name" TEXT NOT NULL,
+          CONSTRAINT "genres_pkey" PRIMARY KEY ("id")
+        );
+        CREATE TABLE "book_genres" (
+          "book_id" TEXT NOT NULL,
+          "genre_id" TEXT NOT NULL,
+          CONSTRAINT "book_genres_pkey" PRIMARY KEY ("book_id", "genre_id")
+        );
+        -- CreateIndex
+        CREATE UNIQUE INDEX "genres_name_key" ON "genres" ("name");
+=== RUN   TestEdgeCases_Robust/Reproduction:_Full_Schema_Regression
+    edge_cases_test.go:32: Generated SQL:
+        -- CreateTable
+        CREATE TABLE "contracted_plan" (
+          "id_contracted_plan" TEXT NOT NULL,
+          "id_tenant" UUID NOT NULL,
+          CONSTRAINT "contracted_plan_pkey" PRIMARY KEY ("id_contracted_plan")
+        );
+        -- CreateIndex
+        CREATE UNIQUE INDEX "contracted_plan_id_tenant_key" ON "contracted_plan" ("id_tenant");
+        DROP INDEX "idx_external_apps_tenant_type_unique";
+        DROP INDEX "idx_external_apps_id_tenant";
+        DROP INDEX "idx_external_apps_type";
+        -- AddForeignKey
+        ALTER TABLE "external_apps" ADD CONSTRAINT "external_apps_id_tenant_fkey" FOREIGN KEY ("id_tenant") REFERENCES "tenants" ("id_tenant") ON DELETE CASCADE ON UPDATE CASCADE;
+    edge_cases_test.go:42: SQL contains unexpected content: DROP INDEX "idx_external_apps_type"
+--- FAIL: TestEdgeCases_Robust (0.00s)
+    --- PASS: TestEdgeCases_Robust/Drops (0.00s)
+    --- PASS: TestEdgeCases_Robust/Alter_Drops (0.00s)
+    --- PASS: TestEdgeCases_Robust/Complex_Schema (0.00s)
+    --- FAIL: TestEdgeCases_Robust/Reproduction:_Full_Schema_Regression (0.00s)
+FAIL
+FAIL	github.com/carlosnayan/prisma-go-client/internal/migrations	0.398s
+FAIL
