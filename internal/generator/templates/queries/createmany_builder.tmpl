@@ -1,0 +1,64 @@
+// CreateMany returns a builder for creating multiple {{.PascalName}} records (Prisma-style)
+// Example: result, err := q.CreateMany().Data([]inputs.{{.PascalName}}CreateInput{...}).Exec(ctx)
+func (q *{{.PascalName}}Query) CreateMany() *{{.PascalName}}CreateManyBuilder {
+	return &{{.PascalName}}CreateManyBuilder{query: q}
+}
+
+// {{.PascalName}}CreateManyBuilder is a builder for creating multiple {{.PascalName}} records
+type {{.PascalName}}CreateManyBuilder struct {
+	query          *{{.PascalName}}Query
+	data           []inputs.{{.PascalName}}CreateInput
+	skipDuplicates bool
+}
+
+// Data sets the data for creating multiple records
+func (b *{{.PascalName}}CreateManyBuilder) Data(data []inputs.{{.PascalName}}CreateInput) *{{.PascalName}}CreateManyBuilder {
+	b.data = data
+	return b
+}
+
+// SkipDuplicates sets whether to skip duplicate records (ON CONFLICT DO NOTHING for PostgreSQL, ON DUPLICATE KEY UPDATE for MySQL)
+func (b *{{.PascalName}}CreateManyBuilder) SkipDuplicates(skip bool) *{{.PascalName}}CreateManyBuilder {
+	b.skipDuplicates = skip
+	return b
+}
+
+// Exec executes the createMany operation using the stored context (if set via WithContext)
+// or context.Background() as fallback.
+// Example: result, err := builder.CreateMany().Data(...).Exec()
+func (b *{{.PascalName}}CreateManyBuilder) Exec() (*builder.BatchPayload, error) {
+	return b.ExecWithContext(b.query.Query.GetContext())
+}
+
+// ExecWithContext executes the createMany operation with an explicit context.
+// If a context was set via WithContext(), the explicit context takes priority.
+// Example: result, err := builder.CreateMany().Data(...).ExecWithContext(ctx)
+func (b *{{.PascalName}}CreateManyBuilder) ExecWithContext(ctx context.Context) (*builder.BatchPayload, error) {
+	if b.data == nil || len(b.data) == 0 {
+		return &builder.BatchPayload{Count: 0}, nil
+	}
+
+	// Convert CreateInput slice to model slice
+	modelSlice := make([]interface{}, 0, len(b.data))
+	for _, input := range b.data {
+		result := models.{{.PascalName}}{}
+{{range .CreateFields}}{{if .IsOptional}}		if input.{{.FieldName}} != nil {
+			{{- if .IsNonPointerOptional}}
+			result.{{.FieldName}} = *input.{{.FieldName}}
+			{{- else}}
+			result.{{.FieldName}} = input.{{.FieldName}}
+			{{- end}}
+		}
+{{else}}		result.{{.FieldName}} = input.{{.FieldName}}
+{{end}}{{end}}		modelSlice = append(modelSlice, result)
+	}
+
+	// Use TableQueryBuilder to perform batch insert
+	columns := []string{ {{- range $i, $col := .Columns}}{{if $i}}, {{end}}{{printf "%q" $col}}{{end}} }
+	tableBuilder := builder.NewTableQueryBuilder(b.query.Query.GetDB(), {{printf "%q" .TableName}}, columns)
+{{if .PrimaryKey}}	tableBuilder.SetPrimaryKey({{printf "%q" .PrimaryKey}})
+{{end}}	tableBuilder.SetDialect(b.query.Query.GetDialect())
+	tableBuilder.SetModelType(reflect.TypeOf(models.{{.PascalName}}{}))
+
+	return tableBuilder.CreateMany(ctx, modelSlice, b.skipDuplicates)
+}

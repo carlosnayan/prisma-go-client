@@ -1,0 +1,61 @@
+// UpdateMany returns a builder for updating multiple {{.PascalName}} records (Prisma-style)
+// Example: result, err := q.UpdateMany().Where(inputs.{{.PascalName}}WhereInput{...}).Data(inputs.{{.PascalName}}UpdateInput{...}).Exec(ctx)
+func (q *{{.PascalName}}Query) UpdateMany() *{{.PascalName}}UpdateManyBuilder {
+	return &{{.PascalName}}UpdateManyBuilder{query: q}
+}
+
+// {{.PascalName}}UpdateManyBuilder is a builder for updating multiple {{.PascalName}} records
+type {{.PascalName}}UpdateManyBuilder struct {
+	query      *{{.PascalName}}Query
+	whereInput *inputs.{{.PascalName}}WhereInput
+	data       *inputs.{{.PascalName}}UpdateInput
+}
+
+// Where sets the where conditions
+func (b *{{.PascalName}}UpdateManyBuilder) Where(where inputs.{{.PascalName}}WhereInput) *{{.PascalName}}UpdateManyBuilder {
+	b.whereInput = &where
+	return b
+}
+
+// Data sets the data for updating
+func (b *{{.PascalName}}UpdateManyBuilder) Data(data inputs.{{.PascalName}}UpdateInput) *{{.PascalName}}UpdateManyBuilder {
+	b.data = &data
+	return b
+}
+
+// Exec executes the updateMany operation using the stored context (if set via WithContext)
+// or context.Background() as fallback.
+// Example: result, err := builder.UpdateMany().Where(...).Data(...).Exec()
+func (b *{{.PascalName}}UpdateManyBuilder) Exec() (*builder.BatchPayload, error) {
+	return b.ExecWithContext(b.query.Query.GetContext())
+}
+
+// ExecWithContext executes the updateMany operation with an explicit context.
+// If a context was set via WithContext(), the explicit context takes priority.
+// Example: result, err := builder.UpdateMany().Where(...).Data(...).ExecWithContext(ctx)
+func (b *{{.PascalName}}UpdateManyBuilder) ExecWithContext(ctx context.Context) (*builder.BatchPayload, error) {
+	// Reset query state to prevent accumulation of conditions from previous operations
+	b.query.Query.Reset()
+	if b.whereInput == nil {
+		return nil, fmt.Errorf("where condition is required for updateMany")
+	}
+	if b.data == nil {
+		return nil, fmt.Errorf("data is required for updateMany")
+	}
+
+	whereMap := Convert{{.PascalName}}WhereInputToWhere(*b.whereInput)
+	
+	// Convert UpdateInput to model for UpdateMany
+	result := models.{{.PascalName}}{}
+{{range .UpdateFields}}	if b.data.{{.FieldName}} != nil {
+		result.{{.FieldName}} = *b.data.{{.FieldName}}
+	}
+{{end}}	// Use TableQueryBuilder to perform batch update
+	columns := []string{ {{- range $i, $col := .Columns}}{{if $i}}, {{end}}{{printf "%q" $col}}{{end}} }
+	tableBuilder := builder.NewTableQueryBuilder(b.query.Query.GetDB(), {{printf "%q" .TableName}}, columns)
+{{if .PrimaryKey}}	tableBuilder.SetPrimaryKey({{printf "%q" .PrimaryKey}})
+{{end}}	tableBuilder.SetDialect(b.query.Query.GetDialect())
+	tableBuilder.SetModelType(reflect.TypeOf(models.{{.PascalName}}{}))
+
+	return tableBuilder.UpdateMany(ctx, whereMap, result)
+}

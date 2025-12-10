@@ -208,7 +208,9 @@ func generateQueryFile(filePath string, model *parser.Model, schema *parser.Sche
 		"count_builder.tmpl",
 		"delete_builder.tmpl",
 		"update_builder.tmpl",
+		"updatemany_builder.tmpl",
 		"create_builder.tmpl",
+		"createmany_builder.tmpl",
 	}
 
 	// Generate query file using templates

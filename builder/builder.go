@@ -380,6 +380,268 @@ func (b *TableQueryBuilder) Delete(ctx context.Context, id interface{}) error {
 	return err
 }
 
+// CreateMany inserts multiple records and returns the number of records created
+func (b *TableQueryBuilder) CreateMany(ctx context.Context, data []interface{}, skipDuplicates bool) (*BatchPayload, error) {
+	ctx, cancel := contextutil.WithQueryTimeout(ctx)
+	defer cancel()
+
+	if len(data) == 0 {
+		return &BatchPayload{Count: 0}, nil
+	}
+
+	// Process first record to determine columns
+	firstVal := reflect.ValueOf(data[0])
+	if firstVal.Kind() == reflect.Ptr {
+		firstVal = firstVal.Elem()
+	}
+	if firstVal.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("data must be a slice of structs")
+	}
+
+	// Determine columns from first record
+	var insertColumns []string
+	typ := firstVal.Type()
+	columnMap := make(map[string]bool)
+	var primaryKeyCol string
+	var primaryKeyType reflect.Kind
+
+	// First, identify primary key field
+	if b.primaryKey != "" {
+		for i := 0; i < firstVal.NumField(); i++ {
+			field := typ.Field(i)
+			dbTag := field.Tag.Get("db")
+			fieldName := dbTag
+			if fieldName == "" {
+				fieldName = toSnakeCase(field.Name)
+			}
+			if fieldName == b.primaryKey {
+				primaryKeyCol = fieldName
+				primaryKeyType = firstVal.Field(i).Kind()
+				break
+			}
+		}
+	}
+
+	// Collect all non-primary key columns that are not zero
+	for i := 0; i < firstVal.NumField(); i++ {
+		field := typ.Field(i)
+		dbTag := field.Tag.Get("db")
+		fieldName := dbTag
+		if fieldName == "" {
+			fieldName = toSnakeCase(field.Name)
+		}
+		if fieldName != b.primaryKey && !firstVal.Field(i).IsZero() {
+			insertColumns = append(insertColumns, fieldName)
+			columnMap[fieldName] = true
+		}
+	}
+
+	// Add primary key if it's set or if it's a string type (for UUID generation)
+	if primaryKeyCol != "" {
+		primaryKeySet := false
+		for i := 0; i < firstVal.NumField(); i++ {
+			field := typ.Field(i)
+			dbTag := field.Tag.Get("db")
+			fieldName := dbTag
+			if fieldName == "" {
+				fieldName = toSnakeCase(field.Name)
+			}
+			if fieldName == primaryKeyCol {
+				if !firstVal.Field(i).IsZero() {
+					insertColumns = append(insertColumns, fieldName)
+					primaryKeySet = true
+				}
+				break
+			}
+		}
+		// If primary key is string type and not set, we'll generate UUID for each record
+		if !primaryKeySet && primaryKeyType == reflect.String {
+			insertColumns = append(insertColumns, primaryKeyCol)
+		}
+	}
+
+	quotedTable := b.dialect.QuoteIdentifier(b.table)
+	quotedInsertCols := make([]string, len(insertColumns))
+	for i, col := range insertColumns {
+		quotedInsertCols[i] = b.dialect.QuoteIdentifier(col)
+	}
+
+	// Batch size for large inserts
+	batchSize := 1000
+	totalCount := 0
+
+	for batchStart := 0; batchStart < len(data); batchStart += batchSize {
+		batchEnd := batchStart + batchSize
+		if batchEnd > len(data) {
+			batchEnd = len(data)
+		}
+		batch := data[batchStart:batchEnd]
+
+		var valuesParts []string
+		var allArgs []interface{}
+		argIndex := 1
+
+		for _, item := range batch {
+			val := reflect.ValueOf(item)
+			if val.Kind() == reflect.Ptr {
+				val = val.Elem()
+			}
+			itemTyp := val.Type()
+
+			var rowValues []string
+			var rowArgs []interface{}
+
+			for _, col := range insertColumns {
+				if col == primaryKeyCol && primaryKeyType == reflect.String {
+					// Check if primary key is set for this item
+					found := false
+					for i := 0; i < val.NumField(); i++ {
+						field := itemTyp.Field(i)
+						dbTag := field.Tag.Get("db")
+						fieldName := dbTag
+						if fieldName == "" {
+							fieldName = toSnakeCase(field.Name)
+						}
+						if fieldName == col {
+							fieldVal := val.Field(i)
+							if !fieldVal.IsZero() {
+								rowArgs = append(rowArgs, fieldVal.Interface())
+								found = true
+								break
+							}
+						}
+					}
+					if !found {
+						rowArgs = append(rowArgs, uuid.GenerateUUID())
+					}
+				} else {
+					// Find field by column name
+					found := false
+					for i := 0; i < val.NumField(); i++ {
+						field := itemTyp.Field(i)
+						dbTag := field.Tag.Get("db")
+						fieldName := dbTag
+						if fieldName == "" {
+							fieldName = toSnakeCase(field.Name)
+						}
+						if fieldName == col {
+							fieldVal := val.Field(i)
+							rowArgs = append(rowArgs, fieldVal.Interface())
+							found = true
+							break
+						}
+					}
+					if !found {
+						rowArgs = append(rowArgs, nil)
+					}
+				}
+				rowValues = append(rowValues, b.dialect.GetPlaceholder(argIndex))
+				argIndex++
+			}
+			valuesParts = append(valuesParts, "("+strings.Join(rowValues, ", ")+")")
+			allArgs = append(allArgs, rowArgs...)
+		}
+
+		onConflict := ""
+		if skipDuplicates && b.dialect.Name() == "postgresql" {
+			onConflict = " ON CONFLICT DO NOTHING"
+		} else if skipDuplicates && b.dialect.Name() == "mysql" {
+			onConflict = " ON DUPLICATE KEY UPDATE " + quotedInsertCols[0] + " = " + quotedInsertCols[0]
+		}
+
+		query := fmt.Sprintf(
+			"INSERT INTO %s (%s) VALUES %s%s",
+			quotedTable,
+			strings.Join(quotedInsertCols, ", "),
+			strings.Join(valuesParts, ", "),
+			onConflict,
+		)
+
+		result, err := b.db.Exec(ctx, query, allArgs...)
+		if err != nil {
+			return &BatchPayload{Count: totalCount}, err
+		}
+
+		rowsAffected := result.RowsAffected()
+		totalCount += int(rowsAffected)
+	}
+
+	return &BatchPayload{Count: totalCount}, nil
+}
+
+// UpdateMany updates multiple records matching the where conditions and returns the number of records updated
+func (b *TableQueryBuilder) UpdateMany(ctx context.Context, where Where, data interface{}) (*BatchPayload, error) {
+	ctx, cancel := contextutil.WithQueryTimeout(ctx)
+	defer cancel()
+
+	if len(where) == 0 {
+		return nil, fmt.Errorf("where condition is required for UpdateMany (empty where would update all records)")
+	}
+
+	val := reflect.ValueOf(data)
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+	if val.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("data must be a struct")
+	}
+
+	var updateColumns []string
+	var args []interface{}
+	argIndex := 1
+
+	typ := val.Type()
+	for i := 0; i < val.NumField(); i++ {
+		field := typ.Field(i)
+		fieldVal := val.Field(i)
+
+		dbTag := field.Tag.Get("db")
+		fieldName := dbTag
+		if fieldName == "" {
+			fieldName = toSnakeCase(field.Name)
+		}
+		quotedFieldName := b.dialect.QuoteIdentifier(fieldName)
+
+		if fieldName == b.primaryKey {
+			continue
+		}
+
+		if fieldVal.IsZero() {
+			continue
+		}
+
+		updateColumns = append(updateColumns, fmt.Sprintf("%s = %s", quotedFieldName, b.dialect.GetPlaceholder(argIndex)))
+		args = append(args, fieldVal.Interface())
+		argIndex++
+	}
+
+	if len(updateColumns) == 0 {
+		return nil, errors.ErrNoFieldsToUpdate
+	}
+
+	whereClause, whereArgs := b.buildWhereFromMap(where, &argIndex)
+	if whereClause == "" {
+		return nil, fmt.Errorf("where condition is required for UpdateMany")
+	}
+	args = append(args, whereArgs...)
+
+	quotedTable := b.dialect.QuoteIdentifier(b.table)
+	query := fmt.Sprintf(
+		"UPDATE %s SET %s WHERE %s",
+		quotedTable,
+		strings.Join(updateColumns, ", "),
+		whereClause,
+	)
+
+	result, err := b.db.Exec(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	rowsAffected := result.RowsAffected()
+	return &BatchPayload{Count: int(rowsAffected)}, nil
+}
+
 // buildQuery constructs the SQL query
 func (b *TableQueryBuilder) buildQuery(where Where, opts *QueryOptions, single bool) (string, []interface{}) {
 	var parts []string

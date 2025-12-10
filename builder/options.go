@@ -28,3 +28,9 @@ type OrderBy struct {
 func Ptr(i int) *int {
 	return &i
 }
+
+// BatchPayload represents the result of batch operations (CreateMany, UpdateMany, DeleteMany)
+type BatchPayload struct {
+	// Count is the number of records affected
+	Count int
+}
