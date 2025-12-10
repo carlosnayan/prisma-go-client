@@ -43,7 +43,7 @@ func generateQueryResultFile(filePath string, userModule, outputDir string) erro
 	// Calculate local import path for builder
 	builderPath, _, err := calculateLocalImportPath(userModule, outputDir)
 	if err != nil {
-		builderPath = "github.com/carlosnayan/prisma-go-client/db/builder"
+		builderPath = "github.com/carlosnayan/prisma-go-client/generated/builder"
 	}
 
 	// Prepare template data
@@ -75,13 +75,13 @@ func generateQueryFile(filePath string, model *parser.Model, schema *parser.Sche
 	// Calculate import paths
 	modelsPath, _, inputsPath, err := calculateImportPath(userModule, outputDir)
 	if err != nil {
-		modelsPath = "github.com/carlosnayan/prisma-go-client/db/models"
-		inputsPath = "github.com/carlosnayan/prisma-go-client/db/inputs"
+		modelsPath = "github.com/carlosnayan/prisma-go-client/generated/models"
+		inputsPath = "github.com/carlosnayan/prisma-go-client/generated/inputs"
 	}
 
 	builderPath, _, err := calculateLocalImportPath(userModule, outputDir)
 	if err != nil {
-		builderPath = "github.com/carlosnayan/prisma-go-client/db/builder"
+		builderPath = "github.com/carlosnayan/prisma-go-client/generated/builder"
 	}
 
 	// Prepare fields for filter conversion
@@ -231,15 +231,15 @@ func determineQueryImports(userModule, outputDir string) []string {
 	modelsPath, _, inputsPath, err := calculateImportPath(userModule, outputDir)
 	if err != nil {
 		// Fallback to old paths if detection fails
-		modelsPath = "github.com/carlosnayan/prisma-go-client/db/models"
-		inputsPath = "github.com/carlosnayan/prisma-go-client/db/inputs"
+		modelsPath = "github.com/carlosnayan/prisma-go-client/generated/models"
+		inputsPath = "github.com/carlosnayan/prisma-go-client/generated/inputs"
 	}
 
 	// Calculate local import path for builder (standalone package)
 	builderPath, _, err := calculateLocalImportPath(userModule, outputDir)
 	if err != nil {
 		// Fallback to old path if detection fails
-		builderPath = "github.com/carlosnayan/prisma-go-client/db/builder"
+		builderPath = "github.com/carlosnayan/prisma-go-client/generated/builder"
 	}
 
 	// context is always needed for all query methods

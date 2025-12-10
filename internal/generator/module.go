@@ -61,7 +61,7 @@ func findModuleRoot(outputDir string) (string, error) {
 }
 
 // calculateImportPath calculates the import path for generated packages
-// Returns the full import path like "userModule/db/models"
+// Returns the full import path like "userModule/generated/models"
 func calculateImportPath(userModule, outputDir string) (modelsPath, queriesPath, inputsPath string, err error) {
 	moduleRoot, err := findModuleRoot(outputDir)
 	if err != nil {
@@ -95,7 +95,7 @@ func calculateImportPath(userModule, outputDir string) (modelsPath, queriesPath,
 }
 
 // calculateLocalImportPath calculates the import path for local packages (builder, raw)
-// Returns the full import path like "userModule/db/builder" and "userModule/db/raw"
+// Returns the full import path like "userModule/generated/builder" and "userModule/generated/raw"
 func calculateLocalImportPath(userModule, outputDir string) (builderPath, rawPath string, err error) {
 	moduleRoot, err := findModuleRoot(outputDir)
 	if err != nil {
@@ -127,7 +127,7 @@ func calculateLocalImportPath(userModule, outputDir string) (builderPath, rawPat
 }
 
 // calculateUtilsImportPath calculates the import path for utils package
-// Returns the full import path like "userModule/db/utils"
+// Returns the full import path like "userModule/generated/utils"
 func calculateUtilsImportPath(userModule, outputDir string) (string, error) {
 	moduleRoot, err := findModuleRoot(outputDir)
 	if err != nil {

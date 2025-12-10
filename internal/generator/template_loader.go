@@ -319,7 +319,7 @@ func executeModelTemplate(filePath, packageName, templateDir, templateName strin
 
 // executeHelpersTemplates executes multiple templates for helpers.go
 func executeHelpersTemplates(filePath string, templateNames []string, data HelpersTemplateData) error {
-	file, err := createGeneratedFile(filePath, "db")
+	file, err := createGeneratedFile(filePath, "generated")
 	if err != nil {
 		return err
 	}

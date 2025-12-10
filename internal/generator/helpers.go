@@ -7,7 +7,7 @@ import (
 	"github.com/carlosnayan/prisma-go-client/internal/parser"
 )
 
-// GenerateHelpers generates type-safe helper functions in the db package
+// GenerateHelpers generates type-safe helper functions in the generated package
 func GenerateHelpers(schema *parser.Schema, outputDir string) error {
 	// Detect user module
 	userModule, err := detectUserModule(outputDir)
@@ -25,7 +25,7 @@ func generateHelpersFile(filePath string, userModule, outputDir string, schema *
 	_, _, inputsPath, err := calculateImportPath(userModule, outputDir)
 	if err != nil {
 		// Fallback
-		inputsPath = "github.com/carlosnayan/prisma-go-client/db/inputs"
+		inputsPath = "github.com/carlosnayan/prisma-go-client/generated/inputs"
 	}
 
 	// Determine which filter types are needed based on schema
