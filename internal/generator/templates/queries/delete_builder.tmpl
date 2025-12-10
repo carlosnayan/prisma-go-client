@@ -18,6 +18,8 @@ func (b *{{.PascalName}}DeleteBuilder) Where(where inputs.{{.PascalName}}WhereIn
 
 // Exec executes the delete operation
 func (b *{{.PascalName}}DeleteBuilder) Exec(ctx context.Context) error {
+	// Reset query state to prevent accumulation of conditions from previous operations
+	b.query.Query.Reset()
 	if b.whereInput == nil {
 		return fmt.Errorf("where condition is required for delete")
 	}

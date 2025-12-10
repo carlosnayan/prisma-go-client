@@ -292,7 +292,7 @@ func (b *TableQueryBuilder) Create(ctx context.Context, data interface{}) (inter
 		}
 
 
-		if primaryKeyCol != "" {
+		if primaryKeyCol != "" && primaryKeyValue != nil {
 			selectQuery := fmt.Sprintf(
 				"SELECT %s FROM %s WHERE %s = %s",
 				strings.Join(quotedReturnCols, ", "),

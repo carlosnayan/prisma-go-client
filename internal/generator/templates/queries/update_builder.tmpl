@@ -25,6 +25,8 @@ func (b *{{.PascalName}}UpdateBuilder) Data(data inputs.{{.PascalName}}UpdateInp
 
 // Exec executes the update operation
 func (b *{{.PascalName}}UpdateBuilder) Exec(ctx context.Context) error {
+	// Reset query state to prevent accumulation of conditions from previous operations
+	b.query.Query.Reset()
 	if b.whereInput == nil {
 		return fmt.Errorf("where condition is required for update")
 	}

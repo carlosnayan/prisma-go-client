@@ -417,18 +417,23 @@ func (b *TableQueryBuilder) buildQuery(where Where, opts *QueryOptions, single b
 	}
 
 	if !single {
-		if opts != nil && (opts.Take != nil || opts.Skip != nil) {
+		if opts != nil {
 			limit := 0
 			offset := 0
+			hasLimit := false
 			if opts.Take != nil {
 				limit = *opts.Take
+				hasLimit = true
 			}
 			if opts.Skip != nil {
 				offset = *opts.Skip
+				hasLimit = true
 			}
-			limitOffset := b.dialect.GetLimitOffsetSyntax(limit, offset)
-			if limitOffset != "" {
-				parts = append(parts, limitOffset)
+			if hasLimit {
+				limitOffset := b.dialect.GetLimitOffsetSyntax(limit, offset)
+				if limitOffset != "" {
+					parts = append(parts, limitOffset)
+				}
 			}
 			// Note: GetLimitOffsetSyntax already includes the values in the SQL string,
 			// so we don't need to add them to args

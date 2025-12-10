@@ -138,6 +138,21 @@ func (q *Query) getLogger() *logger.Logger {
 	return q.logger
 }
 
+// Reset clears all mutable state from the Query (whereConditions, orderBy, take, skip, etc.)
+// This should be called at the beginning of each operation to prevent state accumulation
+// between operations, especially in transactions where the same Query instance is reused.
+func (q *Query) Reset() *Query {
+	q.whereConditions = []whereCondition{}
+	q.orderBy = []OrderBy{}
+	q.take = nil
+	q.skip = nil
+	q.selectFields = []string{}
+	q.groupBy = []string{}
+	q.having = []whereCondition{}
+	q.joins = []join{}
+	return q
+}
+
 // Where adds a WHERE condition
 // Supports two syntaxes:
 //  1. Direct SQL: q.Where("name = ?", "jinzhu")
