@@ -151,22 +151,27 @@ func runGenerateOnce(schemaPath string) error {
 		}
 	}
 
-	// Ensure path is absolute or relative to current working directory
+	// Ensure path is absolute or relative to schema directory
+	// If output starts with ./, it means relative to the schema directory
+	// This ensures that ./db in prisma/schema.prisma generates to prisma/db
 	absoluteOutputDir := outputDir
 	if !filepath.IsAbs(outputDir) {
-		// Remove leading ./ if present
-		cleanOutputDir := strings.TrimPrefix(outputDir, "./")
+		schemaDir := filepath.Dir(schemaPath)
 
-		// If output starts with .., resolve relative to schema directory
-		// Otherwise, resolve relative to current working directory
-		if strings.HasPrefix(cleanOutputDir, "..") {
-			schemaDir := filepath.Dir(schemaPath)
+		// If output starts with ./, resolve relative to schema directory
+		if strings.HasPrefix(outputDir, "./") {
+			cleanOutputDir := strings.TrimPrefix(outputDir, "./")
 			absoluteOutputDir = filepath.Join(schemaDir, cleanOutputDir)
-			// Clean the path to resolve .. properly
+			absoluteOutputDir, _ = filepath.Abs(absoluteOutputDir)
+		} else if strings.HasPrefix(outputDir, "..") {
+			// If output starts with .., resolve relative to schema directory
+			absoluteOutputDir = filepath.Join(schemaDir, outputDir)
 			absoluteOutputDir, _ = filepath.Abs(absoluteOutputDir)
 		} else {
-			wd, _ := filepath.Abs(".")
-			absoluteOutputDir = filepath.Join(wd, cleanOutputDir)
+			// For other relative paths, resolve relative to schema directory
+			// This ensures consistency: all relative paths are relative to schema location
+			absoluteOutputDir = filepath.Join(schemaDir, outputDir)
+			absoluteOutputDir, _ = filepath.Abs(absoluteOutputDir)
 		}
 	}
 

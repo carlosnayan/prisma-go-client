@@ -76,9 +76,9 @@ func TestInit_CreatesDebugSection(t *testing.T) {
 		t.Error("Config should contain [debug] section")
 	}
 
-	// Check for default log levels
-	if !contains(configContent, `log = ["warn","error"]`) {
-		t.Errorf("Config should contain default log levels ['warn','error'], got: %s", configContent)
+	// Check for default log levels (should be ["warn"] as per specification)
+	if !contains(configContent, `log = ["warn"]`) {
+		t.Errorf("Config should contain default log levels ['warn'], got: %s", configContent)
 	}
 }
 

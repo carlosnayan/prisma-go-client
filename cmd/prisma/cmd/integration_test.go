@@ -32,7 +32,8 @@ func TestIntegration_InitGenerateValidate(t *testing.T) {
 	}
 
 	// Verify generated files
-	if !fileExists("./generated/client.go") {
+	// When schema is in prisma/schema.prisma and output is ./generated, files are created in prisma/generated
+	if !fileExists("prisma/generated/client.go") {
 		t.Error("client.go should exist after generate")
 	}
 

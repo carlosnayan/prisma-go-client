@@ -22,17 +22,18 @@ func TestGenerate_CreatesOutputFiles(t *testing.T) {
 	}
 
 	// Check that output directory exists
-	outputDir := "./db"
+	// When schema is in prisma/schema.prisma and output is ./db, files are created in prisma/db
+	outputDir := "prisma/db"
 	if !fileExists(outputDir) {
 		t.Error("Output directory was not created")
 	}
 
 	// Check for generated files
 	expectedFiles := []string{
-		"./db/client.go",
-		"./db/models",
-		"./db/queries",
-		"./db/inputs",
+		"prisma/db/client.go",
+		"prisma/db/models",
+		"prisma/db/queries",
+		"prisma/db/inputs",
 	}
 
 	for _, file := range expectedFiles {
@@ -57,7 +58,8 @@ func TestGenerate_CreatesModelFiles(t *testing.T) {
 	}
 
 	// Check for model file
-	modelFile := "./db/models/users.go"
+	// When schema is in prisma/schema.prisma and output is ./db, files are created in prisma/db
+	modelFile := "prisma/db/models/users.go"
 	if !fileExists(modelFile) {
 		t.Error("Model file was not created")
 	}
@@ -83,7 +85,8 @@ func TestGenerate_CreatesQueryFiles(t *testing.T) {
 	}
 
 	// Check for query file
-	queryFile := "./db/queries/users_query.go"
+	// When schema is in prisma/schema.prisma and output is ./db, files are created in prisma/db
+	queryFile := "prisma/db/queries/users_query.go"
 	if !fileExists(queryFile) {
 		t.Error("Query file was not created")
 	}
@@ -109,7 +112,8 @@ func TestGenerate_CreatesClientFile(t *testing.T) {
 	}
 
 	// Check for client file
-	clientFile := "./db/client.go"
+	// When schema is in prisma/schema.prisma and output is ./db, files are created in prisma/db
+	clientFile := "prisma/db/client.go"
 	if !fileExists(clientFile) {
 		t.Error("Client file was not created")
 	}
@@ -138,7 +142,8 @@ func TestGenerate_CreatesInputFiles(t *testing.T) {
 	}
 
 	// Check for input file
-	inputFile := "./db/inputs/users_input.go"
+	// When schema is in prisma/schema.prisma and output is ./db, files are created in prisma/db
+	inputFile := "prisma/db/inputs/users_input.go"
 	if !fileExists(inputFile) {
 		t.Error("Input file was not created")
 	}
@@ -221,7 +226,9 @@ model users {
 	}
 
 	// Check that custom output directory was used
-	if !fileExists(customOutput) {
+	// When schema is in prisma/schema.prisma and output is ./custom_output, files are created in prisma/custom_output
+	expectedOutput := "prisma/custom_output"
+	if !fileExists(expectedOutput) {
 		t.Error("Custom output directory was not created")
 	}
 }
@@ -241,7 +248,8 @@ func TestGenerate_NoUnusedImports(t *testing.T) {
 	}
 
 	// Check client.go doesn't have unused context import
-	clientFile := "./db/client.go"
+	// When schema is in prisma/schema.prisma and output is ./db, files are created in prisma/db
+	clientFile := "prisma/db/client.go"
 	content := readFile(t, clientFile)
 
 	// Should not import context if not used
@@ -301,7 +309,8 @@ func TestGenerate_WithNoHintsFlag(t *testing.T) {
 	}
 
 	// With no-hints, we should still generate files but with less output
-	if !fileExists("./db/client.go") {
+	// When schema is in prisma/schema.prisma and output is ./db, files are created in prisma/db
+	if !fileExists("prisma/db/client.go") {
 		t.Error("Client file should still be created with --no-hints")
 	}
 }
@@ -368,7 +377,8 @@ func TestGenerate_ProgressIndicators(t *testing.T) {
 
 	// Progress indicators should show during generation
 	// We can't easily test the output, but we can verify files were created
-	if !fileExists("./db/client.go") {
+	// When schema is in prisma/schema.prisma and output is ./db, files are created in prisma/db
+	if !fileExists("prisma/db/client.go") {
 		t.Error("Client file should be created")
 	}
 }

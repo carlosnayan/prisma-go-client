@@ -189,8 +189,14 @@ path = "prisma/migrations"
 [datasource]
 url = %q
 
+# Pool configuration (only supported for PostgreSQL and MySQL)
+# [datasource.pool]
+# connection_limit = 10
+# pool_timeout = 10
+# connect_timeout = 5
+
 [debug]
-log = ["warn","error"]
+log = ["warn"]
 `, urlEscaped)
 }
 

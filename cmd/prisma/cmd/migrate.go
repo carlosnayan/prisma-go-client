@@ -414,7 +414,7 @@ func runMigrateDev(args []string) error {
 		SQL:  sql,
 	}
 
-	// Apply the newly created migration
+	// Apply the newly created migration (always apply when migration is created successfully)
 	fmt.Println("Applying migration...")
 	if err := manager.ApplyMigration(migration); err != nil {
 		return fmt.Errorf("error applying migration: %w", err)
@@ -631,13 +631,21 @@ func runMigrateReset(args []string) error {
 		}
 	}
 
-	// Execute seed if configured
+	// Execute seed if configured (automatically when uncommented in prisma.conf)
 	if cfg.Migrations != nil && cfg.Migrations.Seed != "" {
 		fmt.Println()
 		fmt.Println("Running seed...")
 		if err := migrations.ExecuteSeed(cfg.Migrations.Seed); err != nil {
 			return fmt.Errorf("error running seed: %w", err)
 		}
+		fmt.Println(Success("Seed completed successfully"))
+	}
+
+	// Run generate automatically after reset
+	fmt.Println()
+	fmt.Println("Generating code...")
+	if err := runGenerate([]string{}); err != nil {
+		return fmt.Errorf("error generating code: %w", err)
 	}
 
 	// Show success message and migrations tree
