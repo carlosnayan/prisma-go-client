@@ -16,6 +16,8 @@ type SchemaDiff struct {
 	IndexesToCreate     []IndexDefinition
 	IndexesToDrop       []string
 	ForeignKeysToCreate []ForeignKeyDefinition
+	ForeignKeysToAlter  []ForeignKeyDefinition // FKs that need to be altered (drop + recreate)
+	ForeignKeysToDrop   []ForeignKeyDefinition // FKs that need to be removed
 }
 
 // ForeignKeyDefinition represents a foreign key constraint
@@ -258,11 +260,70 @@ func GenerateMigrationSQL(diff *SchemaDiff, provider string) (string, error) {
 		steps = append(steps, sql.String())
 	}
 
-	// Add foreign keys
+	// Drop foreign keys that need to be removed
+	if len(diff.ForeignKeysToDrop) > 0 {
+		var sql strings.Builder
+		sql.WriteString("-- DropForeignKey\n")
+		for _, fk := range diff.ForeignKeysToDrop {
+			sql.WriteString(fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s;\n",
+				d.QuoteIdentifier(fk.TableName),
+				d.QuoteIdentifier(fk.Name)))
+		}
+		steps = append(steps, sql.String())
+	}
+
+	// Drop foreign keys that need to be altered (before recreating)
+	if len(diff.ForeignKeysToAlter) > 0 {
+		var sql strings.Builder
+		sql.WriteString("-- AlterForeignKey (drop old)\n")
+		for _, fk := range diff.ForeignKeysToAlter {
+			sql.WriteString(fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s;\n",
+				d.QuoteIdentifier(fk.TableName),
+				d.QuoteIdentifier(fk.Name)))
+		}
+		steps = append(steps, sql.String())
+	}
+
+	// Add foreign keys (new ones)
 	if len(diff.ForeignKeysToCreate) > 0 {
 		var sql strings.Builder
 		sql.WriteString("-- AddForeignKey\n")
 		for _, fk := range diff.ForeignKeysToCreate {
+			quotedCols := make([]string, len(fk.Columns))
+			for i, col := range fk.Columns {
+				quotedCols[i] = d.QuoteIdentifier(col)
+			}
+			quotedRefCols := make([]string, len(fk.ReferencedColumns))
+			for i, col := range fk.ReferencedColumns {
+				quotedRefCols[i] = d.QuoteIdentifier(col)
+			}
+
+			onDelete := fk.OnDelete
+			if onDelete == "" {
+				onDelete = "CASCADE"
+			}
+			onUpdate := fk.OnUpdate
+			if onUpdate == "" {
+				onUpdate = "CASCADE"
+			}
+
+			sql.WriteString(fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s) ON DELETE %s ON UPDATE %s;\n",
+				d.QuoteIdentifier(fk.TableName),
+				d.QuoteIdentifier(fk.Name),
+				strings.Join(quotedCols, ", "),
+				d.QuoteIdentifier(fk.ReferencedTable),
+				strings.Join(quotedRefCols, ", "),
+				onDelete,
+				onUpdate))
+		}
+		steps = append(steps, sql.String())
+	}
+
+	// Recreate foreign keys that were altered
+	if len(diff.ForeignKeysToAlter) > 0 {
+		var sql strings.Builder
+		sql.WriteString("-- AlterForeignKey (recreate with new attributes)\n")
+		for _, fk := range diff.ForeignKeysToAlter {
 			quotedCols := make([]string, len(fk.Columns))
 			for i, col := range fk.Columns {
 				quotedCols[i] = d.QuoteIdentifier(col)
@@ -812,8 +873,22 @@ func extractForeignKey(tableName string, field *parser.ModelField, attr *parser.
 	}
 
 	// Determine referenced table from field type
+	// If field type is not a model (e.g., String), we need to find the related field
+	// that has the model type (e.g., tenant field with Type: "tenants")
 	if field.Type != nil {
 		referencedTable = field.Type.Name
+		// If field type is not a model, try to find the related field
+		if _, isModel := modelMap[referencedTable]; !isModel {
+			// Find the related field in the same model that has the model type
+			// This happens when we have: id_tenant String @relation(fields: [id_tenant], references: [id_tenant])
+			// and tenant tenants @relation(fields: [id_tenant], references: [id_tenant])
+			// We need to find the "tenant" field to get the referenced table
+			// We'll need to get the model from the context, but we don't have it here
+			// So we'll return nil and let the caller handle it
+			// Actually, we can look for a field in the same model that has a relation attribute
+			// with the same fields/references but with a model type
+			return nil // Will be handled by finding the related field in processRelationsAndUnique
+		}
 	} else {
 		return nil
 	}

@@ -28,6 +28,8 @@ func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider str
 		IndexesToCreate:     []IndexDefinition{},
 		IndexesToDrop:       []string{},
 		ForeignKeysToCreate: []ForeignKeyDefinition{},
+		ForeignKeysToAlter:  []ForeignKeyDefinition{},
+		ForeignKeysToDrop:   []ForeignKeyDefinition{},
 	}
 
 	prismaTables := make(map[string]*TableDefinition)
@@ -324,7 +326,95 @@ func CompareSchema(schema *parser.Schema, dbSchema *DatabaseSchema, provider str
 
 	processRelationsAndUnique(schema, diff, dbSchema)
 
+	// Detect FKs that exist in database but not in schema (need to be dropped)
+	detectOrphanedForeignKeys(schema, diff, dbSchema)
+
 	return diff, nil
+}
+
+// detectOrphanedForeignKeys finds foreign keys that exist in the database but not in the schema
+func detectOrphanedForeignKeys(schema *parser.Schema, diff *SchemaDiff, dbSchema *DatabaseSchema) {
+	modelMap := make(map[string]*parser.Model)
+	for _, model := range schema.Models {
+		modelMap[model.Name] = model
+	}
+
+	// Build a set of expected FKs from schema (by structure: table, columns, referenced table/columns)
+	expectedFKs := make(map[string]bool)
+	for _, model := range schema.Models {
+		tableName := getTableNameFromModel(model)
+		for _, field := range model.Fields {
+			for _, attr := range field.Attributes {
+				if attr.Name == "relation" {
+					fkDef := extractForeignKey(tableName, field, attr, modelMap)
+					if fkDef != nil {
+						fkDef.Columns = mapColumnNames(model, fkDef.Columns)
+						if refModel, exists := modelMap[fkDef.ReferencedTable]; exists {
+							fkDef.ReferencedTable = getTableNameFromModel(refModel)
+							fkDef.ReferencedColumns = mapColumnNames(refModel, fkDef.ReferencedColumns)
+						}
+						// Create a unique key based on structure (not name, as name might differ)
+						fkKey := createFKStructureKey(fkDef.TableName, fkDef.Columns, fkDef.ReferencedTable, fkDef.ReferencedColumns)
+						expectedFKs[fkKey] = true
+					}
+				}
+			}
+		}
+	}
+
+	// Check all FKs in database
+	for tableName, dbTable := range dbSchema.Tables {
+		// Skip if table is being dropped
+		tableBeingDropped := false
+		for _, dropTable := range diff.TablesToDrop {
+			if dropTable == tableName {
+				tableBeingDropped = true
+				break
+			}
+		}
+		if tableBeingDropped {
+			continue
+		}
+
+		for _, dbFK := range dbTable.ForeignKeys {
+			// Create structure key for this FK
+			fkKey := createFKStructureKey(tableName, dbFK.Columns, dbFK.ReferencedTable, dbFK.ReferencedColumns)
+
+			// Check if this FK structure is expected in schema
+			if !expectedFKs[fkKey] {
+				// Also check if it's in ForeignKeysToAlter (might be same structure but different attributes)
+				isBeingAltered := false
+				for _, alterFK := range diff.ForeignKeysToAlter {
+					alterKey := createFKStructureKey(alterFK.TableName, alterFK.Columns, alterFK.ReferencedTable, alterFK.ReferencedColumns)
+					if alterKey == fkKey {
+						isBeingAltered = true
+						break
+					}
+				}
+
+				// If not expected and not being altered, mark for removal
+				if !isBeingAltered {
+					diff.ForeignKeysToDrop = append(diff.ForeignKeysToDrop, ForeignKeyDefinition{
+						Name:              dbFK.Name,
+						TableName:         tableName,
+						Columns:           dbFK.Columns,
+						ReferencedTable:   dbFK.ReferencedTable,
+						ReferencedColumns: dbFK.ReferencedColumns,
+						OnDelete:          dbFK.OnDelete,
+						OnUpdate:          dbFK.OnUpdate,
+					})
+				}
+			}
+		}
+	}
+}
+
+// createFKStructureKey creates a unique key for FK based on its structure
+func createFKStructureKey(tableName string, columns []string, referencedTable string, referencedColumns []string) string {
+	// Normalize column names for comparison
+	colsKey := strings.Join(columns, ",")
+	refColsKey := strings.Join(referencedColumns, ",")
+	return fmt.Sprintf("%s|%s|%s|%s", strings.ToLower(tableName), strings.ToLower(colsKey), strings.ToLower(referencedTable), strings.ToLower(refColsKey))
 }
 
 func processRelationsAndUnique(schema *parser.Schema, diff *SchemaDiff, dbSchema *DatabaseSchema) {
@@ -369,15 +459,139 @@ func processRelationsAndUnique(schema *parser.Schema, diff *SchemaDiff, dbSchema
 				}
 				if attr.Name == "relation" {
 					fkDef := extractForeignKey(tableName, field, attr, modelMap)
+					// If extractForeignKey returned nil because field type is not a model,
+					// try to find the related field that has the model type
+					if fkDef == nil {
+						// Look for a related field in the same model that has the model type
+						// and shares the same relation (same fields/references)
+						var relationFields []string
+						var relationReferences []string
+						for _, arg := range attr.Arguments {
+							if arg.Name == "fields" {
+								if fieldList, ok := arg.Value.([]interface{}); ok {
+									for _, f := range fieldList {
+										if fStr, ok := f.(string); ok {
+											relationFields = append(relationFields, strings.Trim(fStr, `"`))
+										}
+									}
+								}
+							}
+							if arg.Name == "references" {
+								if refList, ok := arg.Value.([]interface{}); ok {
+									for _, r := range refList {
+										if rStr, ok := r.(string); ok {
+											relationReferences = append(relationReferences, strings.Trim(rStr, `"`))
+										}
+									}
+								}
+							}
+						}
+
+						// Find the related field that has a model type and the same relation
+						for _, relatedField := range model.Fields {
+							if relatedField.Name == field.Name {
+								continue // Skip the same field
+							}
+							// Check if this field has a model type
+							if relatedField.Type != nil {
+								cleanTypeName := strings.TrimSuffix(strings.TrimSuffix(relatedField.Type.Name, "[]"), "?")
+								if _, isModel := modelMap[cleanTypeName]; isModel {
+									// Check if this field has the same relation
+									for _, relatedAttr := range relatedField.Attributes {
+										if relatedAttr.Name == "relation" {
+											var relatedFields []string
+											var relatedReferences []string
+											for _, arg := range relatedAttr.Arguments {
+												if arg.Name == "fields" {
+													if fieldList, ok := arg.Value.([]interface{}); ok {
+														for _, f := range fieldList {
+															if fStr, ok := f.(string); ok {
+																relatedFields = append(relatedFields, strings.Trim(fStr, `"`))
+															}
+														}
+													}
+												}
+												if arg.Name == "references" {
+													if refList, ok := arg.Value.([]interface{}); ok {
+														for _, r := range refList {
+															if rStr, ok := r.(string); ok {
+																relatedReferences = append(relatedReferences, strings.Trim(rStr, `"`))
+															}
+														}
+													}
+												}
+											}
+											// Check if fields and references match
+											if len(relatedFields) == len(relationFields) && len(relatedReferences) == len(relationReferences) {
+												match := true
+												for i := range relationFields {
+													if relationFields[i] != relatedFields[i] {
+														match = false
+														break
+													}
+												}
+												if match {
+													for i := range relationReferences {
+														if relationReferences[i] != relatedReferences[i] {
+															match = false
+															break
+														}
+													}
+												}
+												if match {
+													// Found the related field, extract FK using it
+													fkDef = extractForeignKey(tableName, relatedField, relatedAttr, modelMap)
+													if fkDef != nil {
+														// Update fields/references from the original field's relation
+														fkDef.Columns = relationFields
+														fkDef.ReferencedColumns = relationReferences
+													}
+													break
+												}
+											}
+										}
+									}
+									if fkDef != nil {
+										break
+									}
+								}
+							}
+						}
+					}
+
 					if fkDef != nil {
 						fkDef.Columns = mapColumnNames(model, fkDef.Columns)
 						if refModel, exists := modelMap[fkDef.ReferencedTable]; exists {
 							fkDef.ReferencedTable = getTableNameFromModel(refModel)
 							fkDef.ReferencedColumns = mapColumnNames(refModel, fkDef.ReferencedColumns)
 						}
-						if !foreignKeyExists(dbSchema, fkDef.TableName, fkDef.Name, fkDef.Columns, fkDef.ReferencedTable, fkDef.ReferencedColumns) {
-							diff.ForeignKeysToCreate = append(diff.ForeignKeysToCreate, *fkDef)
+
+						// Extract onDelete/onUpdate from the original field's relation attribute
+						for _, arg := range attr.Arguments {
+							if arg.Name == "onDelete" {
+								if delStr, ok := arg.Value.(string); ok {
+									fkDef.OnDelete = normalizeCascadeAction(strings.Trim(delStr, `"`))
+								}
+							}
+							if arg.Name == "onUpdate" {
+								if updStr, ok := arg.Value.(string); ok {
+									fkDef.OnUpdate = normalizeCascadeAction(strings.Trim(updStr, `"`))
+								}
+							}
 						}
+
+						// Check if FK exists and if it needs alteration
+						// Note: fkDef.Name might not match database FK name, so we rely on structure matching
+						exists, needsAlter := foreignKeyMatches(dbSchema, fkDef.TableName, fkDef.Name, fkDef.Columns, fkDef.ReferencedTable, fkDef.ReferencedColumns, fkDef.OnDelete, fkDef.OnUpdate)
+
+						if !exists {
+							// FK doesn't exist, needs to be created
+							diff.ForeignKeysToCreate = append(diff.ForeignKeysToCreate, *fkDef)
+						} else if needsAlter {
+							// FK exists but OnDelete/OnUpdate don't match, needs alteration
+							diff.ForeignKeysToAlter = append(diff.ForeignKeysToAlter, *fkDef)
+						}
+						// If exists and doesn't need alter, do nothing
 					}
 				}
 			}
@@ -410,25 +624,85 @@ func isModel(schema *parser.Schema, typeName string) bool {
 	return false
 }
 
+// foreignKeyExists checks if a foreign key exists (backward compatibility)
+// This function is kept for backward compatibility with existing code that may call it.
+// It's a wrapper around foreignKeyMatches that only checks existence, not attributes.
+// nolint:unused // Kept for backward compatibility
 func foreignKeyExists(dbSchema *DatabaseSchema, tableName, fkName string, columns []string, referencedTable string, referencedColumns []string) bool {
+	exists, _ := foreignKeyMatches(dbSchema, tableName, fkName, columns, referencedTable, referencedColumns, "", "")
+	return exists
+}
+
+// foreignKeyMatches verifies if a foreign key exists and if its attributes (onDelete, onUpdate) match
+// Returns: (exists, needsAlter)
+// exists: true if FK exists in database
+// needsAlter: true if FK exists but OnDelete/OnUpdate don't match
+func foreignKeyMatches(dbSchema *DatabaseSchema, tableName, fkName string, columns []string, referencedTable string, referencedColumns []string, onDelete, onUpdate string) (bool, bool) {
 	dbTable, exists := dbSchema.Tables[tableName]
 	if !exists {
-		return false
+		return false, false
+	}
+
+	// If table has no FKs, return false
+	if len(dbTable.ForeignKeys) == 0 {
+		return false, false
+	}
+
+	// Normalize expected values
+	normalizedOnDelete := normalizeCascadeActionForComparison(onDelete)
+	normalizedOnUpdate := normalizeCascadeActionForComparison(onUpdate)
+
+	// Default values if not specified
+	if normalizedOnDelete == "" {
+		normalizedOnDelete = "CASCADE"
+	}
+	if normalizedOnUpdate == "" {
+		normalizedOnUpdate = "CASCADE"
 	}
 
 	for _, dbFK := range dbTable.ForeignKeys {
-		if strings.EqualFold(dbFK.Name, fkName) {
-			return true
-		}
-		if strings.EqualFold(dbFK.ReferencedTable, referencedTable) &&
+		// Try matching by name first (most reliable)
+		nameMatch := strings.EqualFold(dbFK.Name, fkName)
+
+		// Try matching by structure
+		structureMatch := strings.EqualFold(dbFK.ReferencedTable, referencedTable) &&
 			len(dbFK.Columns) == len(columns) &&
 			len(dbFK.ReferencedColumns) == len(referencedColumns) &&
 			columnsMatch(dbFK.Columns, columns) &&
-			columnsMatch(dbFK.ReferencedColumns, referencedColumns) {
-			return true
+			columnsMatch(dbFK.ReferencedColumns, referencedColumns)
+
+		if nameMatch || structureMatch {
+			// Normalize database values
+			dbOnDelete := normalizeCascadeActionForComparison(dbFK.OnDelete)
+			dbOnUpdate := normalizeCascadeActionForComparison(dbFK.OnUpdate)
+
+			// Default values for database if empty
+			if dbOnDelete == "" {
+				dbOnDelete = "CASCADE"
+			}
+			if dbOnUpdate == "" {
+				dbOnUpdate = "CASCADE"
+			}
+
+			// Check if attributes match
+			if dbOnDelete != normalizedOnDelete || dbOnUpdate != normalizedOnUpdate {
+				return true, true // Exists but needs alteration
+			}
+			return true, false // Exists and matches
 		}
 	}
-	return false
+	return false, false // Doesn't exist
+}
+
+// normalizeCascadeActionForComparison normalizes cascade action values for comparison
+// Handles various formats from database and schema
+// Returns normalized value that matches the format used by normalizeCascadeAction
+func normalizeCascadeActionForComparison(action string) string {
+	if action == "" {
+		return ""
+	}
+	// Use the same normalization as normalizeCascadeAction
+	return normalizeCascadeAction(action)
 }
 
 func indexExists(dbSchema *DatabaseSchema, tableName, indexName string, columns []string) bool {
