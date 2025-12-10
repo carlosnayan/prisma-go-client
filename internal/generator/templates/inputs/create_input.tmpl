@@ -1,0 +1,5 @@
+// {{.PascalName}}CreateInput represents data to create a new {{.ModelName}}
+type {{.PascalName}}CreateInput struct {
+{{range .CreateFields}}	{{.FieldName}} {{.GoType}} `json:"{{.JSONTag}},omitempty"`
+{{end}}}
+

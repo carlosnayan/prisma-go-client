@@ -1,0 +1,639 @@
+// scanRowIntoModel scans a row into a model
+
+func (q *Query) scanRowIntoModel(row interface{}, dest interface{}) error {
+
+	if driverRow, ok := row.(Row); ok {
+
+		destVal := reflect.ValueOf(dest)
+
+		if destVal.Kind() != reflect.Ptr {
+
+			return SanitizeError(fmt.Errorf("dest must be a pointer"))
+
+		}
+
+		destVal = destVal.Elem()
+
+		if q.modelType == nil {
+
+			return SanitizeError(fmt.Errorf("modelType not defined"))
+
+		}
+
+		modelValue := reflect.New(q.modelType).Elem()
+
+		columnsToScan := q.columns
+
+		if len(q.selectFields) > 0 {
+
+			columnsToScan = q.selectFields
+
+		}
+
+		// Build column-to-field map filtering only fields that correspond to actual columns
+
+		columnToField := buildColumnToFieldMapForScan(q.modelType, columnsToScan)
+
+		fields := make([]interface{}, len(columnsToScan))
+
+		for i, colName := range columnsToScan {
+
+			if fieldIdx, ok := columnToField[colName]; ok {
+
+				field := modelValue.Field(fieldIdx)
+
+				fields[i] = field.Addr().Interface()
+
+			} else {
+
+				var dummy interface{}
+
+				fields[i] = &dummy
+
+			}
+
+		}
+
+		if err := driverRow.Scan(fields...); err != nil {
+
+			if logger := q.getLogger(); logger != nil {
+
+				logger.Error("Scan failed: %v (scanning %d fields: %v)", err, len(columnsToScan), columnsToScan)
+
+			}
+
+			return err
+
+		}
+
+		destVal.Set(modelValue)
+
+		return nil
+
+	}
+
+	return SanitizeError(fmt.Errorf("unsupported row type"))
+
+}
+
+// scanRowsIntoModel scans rows into a slice of models
+
+func (q *Query) scanRowsIntoModel(rows interface{}, dest interface{}) error {
+
+	if driverRows, ok := rows.(Rows); ok {
+
+		defer driverRows.Close()
+
+		destVal := reflect.ValueOf(dest)
+
+		if destVal.Kind() != reflect.Ptr {
+
+			return SanitizeError(fmt.Errorf("dest must be a pointer to slice"))
+
+		}
+
+		sliceVal := destVal.Elem()
+
+		if sliceVal.Kind() != reflect.Slice {
+
+			return SanitizeError(fmt.Errorf("dest must be a pointer to slice"))
+
+		}
+
+		if q.modelType == nil {
+
+			return SanitizeError(fmt.Errorf("modelType not defined"))
+
+		}
+
+		sliceType := sliceVal.Type().Elem()
+
+		if sliceType.Kind() == reflect.Ptr {
+
+			sliceType = sliceType.Elem()
+
+		}
+
+		rowCount := 0
+
+		for driverRows.Next() {
+
+			if rowCount >= MaxScanRows {
+
+				return fmt.Errorf("result set too large: maximum %d rows allowed", MaxScanRows)
+
+			}
+
+			modelValue := reflect.New(sliceType).Elem()
+
+			columnsToScan := q.columns
+
+			if len(q.selectFields) > 0 {
+
+				columnsToScan = q.selectFields
+
+			}
+
+			// Build column-to-field map filtering only fields that correspond to actual columns
+
+			columnToField := buildColumnToFieldMapForScan(sliceType, columnsToScan)
+
+			fields := make([]interface{}, len(columnsToScan))
+
+			for i, colName := range columnsToScan {
+
+				if fieldIdx, ok := columnToField[colName]; ok {
+
+					field := modelValue.Field(fieldIdx)
+
+					fields[i] = field.Addr().Interface()
+
+				} else {
+
+					var dummy interface{}
+
+					fields[i] = &dummy
+
+				}
+
+			}
+
+			if err := driverRows.Scan(fields...); err != nil {
+
+				if logger := q.getLogger(); logger != nil {
+
+					logger.Error("Scan failed: %v (scanning %d fields: %v)", err, len(columnsToScan), columnsToScan)
+
+				}
+
+				return err
+
+			}
+
+			rowCount++
+
+			if destVal.Elem().Type().Elem().Kind() == reflect.Ptr {
+
+				sliceVal.Set(reflect.Append(sliceVal, modelValue.Addr()))
+
+			} else {
+
+				sliceVal.Set(reflect.Append(sliceVal, modelValue))
+
+			}
+
+		}
+
+		return driverRows.Err()
+
+	}
+
+	return SanitizeError(fmt.Errorf("unsupported rows type"))
+
+}
+
+// scanRowsDirect performs direct scan
+
+func (q *Query) scanRowsDirect(rows interface{}, dest interface{}) error {
+
+	return q.scanRowsIntoModel(rows, dest)
+
+}
+
+// buildColumnToFieldMapForScan creates a map of column names to field indices
+
+// Only includes fields that correspond to actual columns being scanned
+
+// Iterates through columns first to ensure all columns are mapped
+
+func buildColumnToFieldMapForScan(modelType reflect.Type, columns []string) map[string]int {
+
+	columnToField := make(map[string]int)
+
+	// Build a reverse map: field identifier -> field index
+
+	// This allows us to quickly find fields by their various identifiers
+
+	fieldMap := make(map[string]int)
+
+	// First, build a map of all possible field identifiers to field indices
+
+	for i := 0; i < modelType.NumField(); i++ {
+
+		field := modelType.Field(i)
+
+		jsonTag := field.Tag.Get("json")
+
+		dbTag := field.Tag.Get("db")
+
+		// Remove options from json tag (e.g., "id,omitempty" -> "id")
+
+		if jsonTag != "" {
+
+			if idx := strings.Index(jsonTag, ","); idx != -1 {
+
+				jsonTag = jsonTag[:idx]
+
+			}
+
+		}
+
+		// Map all possible identifiers to this field index
+
+		// Priority: dbTag > jsonTag > snake_case field name
+
+		if dbTag != "" {
+
+			fieldMap[dbTag] = i
+
+		}
+
+		if jsonTag != "" {
+
+			fieldMap[jsonTag] = i
+
+		}
+
+		// Also map snake_case field name
+
+		fieldName := toSnakeCase(field.Name)
+
+		if fieldName != "" {
+
+			fieldMap[fieldName] = i
+
+		}
+
+	}
+
+	// Now iterate through columns and find matching fields
+
+	// This ensures all columns are checked and mapped
+
+	for _, col := range columns {
+
+		if idx, ok := fieldMap[col]; ok {
+
+			columnToField[col] = idx
+
+		}
+
+		// If column not found in fieldMap, it will not be in columnToField
+
+		// and scanRowIntoModel will use a dummy variable for it
+
+	}
+
+	return columnToField
+
+}
+
+// findFieldByColumn finds a struct field by column name
+
+func findFieldByColumn(modelValue reflect.Value, colName string) reflect.Value {
+
+	typ := modelValue.Type()
+
+	for i := 0; i < typ.NumField(); i++ {
+
+		field := typ.Field(i)
+
+		jsonTag := field.Tag.Get("json")
+
+		dbTag := field.Tag.Get("db")
+
+		// Remove options from json tag (e.g., "id,omitempty" -> "id")
+
+		if jsonTag != "" {
+
+			if idx := strings.Index(jsonTag, ","); idx != -1 {
+
+				jsonTag = jsonTag[:idx]
+
+			}
+
+		}
+
+		if dbTag == colName || jsonTag == colName {
+
+			return modelValue.Field(i)
+
+		}
+
+		fieldName := toSnakeCase(field.Name)
+
+		if fieldName == colName {
+
+			return modelValue.Field(i)
+
+		}
+
+	}
+
+	return reflect.Value{}
+
+}
+
+// ScanFirst scans a single row into a custom type using tags JSON/DB
+
+func (q *Query) ScanFirst(ctx context.Context, dest interface{}, scanType reflect.Type) error {
+
+	ctx, cancel := WithQueryTimeout(ctx)
+
+	defer cancel()
+
+	processStart := time.Now()
+
+	query, args := q.buildSelectQuery(true)
+
+	queryStart := time.Now()
+
+	row := q.db.QueryRow(ctx, query, args...)
+
+	destVal := reflect.ValueOf(dest)
+
+	if destVal.Kind() != reflect.Ptr {
+
+		return SanitizeError(fmt.Errorf("dest must be a pointer"))
+
+	}
+
+	destVal = destVal.Elem()
+
+	// Use selectFields if available (when Select() was called), otherwise use all columns
+
+	columnsToScan := q.columns
+
+	if len(q.selectFields) > 0 {
+
+		columnsToScan = q.selectFields
+
+	}
+
+	// Create instance of scanType
+
+	customValue := reflect.New(scanType).Elem()
+
+	// Track which fields are json.RawMessage for post-processing
+
+	jsonRawMessageFields := make(map[int]bool)
+
+	fields := make([]interface{}, len(columnsToScan))
+
+	for i, colName := range columnsToScan {
+
+		field := findFieldByColumn(customValue, colName)
+
+		if field.IsValid() {
+
+			// Handle json.RawMessage specially - scan to string first, then convert
+
+			if field.Type() == reflect.TypeOf(json.RawMessage{}) {
+
+				var rawMsgStr string
+
+				fields[i] = &rawMsgStr
+
+				jsonRawMessageFields[i] = true
+
+			} else {
+
+				fields[i] = field.Addr().Interface()
+
+			}
+
+		} else {
+
+			var dummy interface{}
+
+			fields[i] = &dummy
+
+		}
+
+	}
+
+	queryEnd := time.Now()
+
+	queryDuration := queryEnd.Sub(queryStart)
+
+	if err := row.Scan(fields...); err != nil {
+
+		q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
+
+		if logger := q.getLogger(); logger != nil {
+
+			logger.Error("Scan failed: %v (scanning %d fields: %v)", err, len(columnsToScan), columnsToScan)
+
+		}
+
+		return err
+
+	}
+
+	// Copy scanned values back to customValue, handling json.RawMessage conversion
+
+	for i, colName := range columnsToScan {
+
+		field := findFieldByColumn(customValue, colName)
+
+		if field.IsValid() {
+
+			if jsonRawMessageFields[i] {
+
+				// Convert string to json.RawMessage
+
+				if strPtr, ok := fields[i].(*string); ok && strPtr != nil {
+
+					field.Set(reflect.ValueOf(json.RawMessage(*strPtr)))
+
+				}
+
+			}
+
+			// For other types, the scan already populated the field directly
+
+		}
+
+	}
+
+	destVal.Set(customValue)
+
+	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
+
+	return nil
+
+}
+
+// ScanFind scans multiple rows into a slice of custom types using tags JSON/DB
+
+func (q *Query) ScanFind(ctx context.Context, dest interface{}, scanType reflect.Type) error {
+
+	ctx, cancel := WithQueryTimeout(ctx)
+
+	defer cancel()
+
+	processStart := time.Now()
+
+	query, args := q.buildSelectQuery(false)
+
+	queryStart := time.Now()
+
+	rows, err := q.db.Query(ctx, query, args...)
+
+	queryEnd := time.Now()
+
+	queryDuration := queryEnd.Sub(queryStart)
+
+	if err != nil {
+
+		q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
+
+		if logger := q.getLogger(); logger != nil {
+
+			logger.Error("SELECT query failed: %v", err)
+
+		}
+
+		return err
+
+	}
+
+	defer rows.Close()
+
+	destVal := reflect.ValueOf(dest)
+
+	if destVal.Kind() != reflect.Ptr {
+
+		return SanitizeError(fmt.Errorf("dest must be a pointer to slice"))
+
+	}
+
+	sliceVal := destVal.Elem()
+
+	if sliceVal.Kind() != reflect.Slice {
+
+		return SanitizeError(fmt.Errorf("dest must be a pointer to slice"))
+
+	}
+
+	// Use selectFields if available (when Select() was called), otherwise use all columns
+
+	columnsToScan := q.columns
+
+	if len(q.selectFields) > 0 {
+
+		columnsToScan = q.selectFields
+
+	}
+
+	rowCount := 0
+
+	for rows.Next() {
+
+		if rowCount >= MaxScanRows {
+
+			return fmt.Errorf("result set too large: maximum %d rows allowed", MaxScanRows)
+
+		}
+
+		customValue := reflect.New(scanType).Elem()
+
+		// Track which fields are json.RawMessage for post-processing
+
+		jsonRawMessageFields := make(map[int]bool)
+
+		fields := make([]interface{}, len(columnsToScan))
+
+		for i, colName := range columnsToScan {
+
+			field := findFieldByColumn(customValue, colName)
+
+			if field.IsValid() {
+
+				// Handle json.RawMessage specially - scan to string first, then convert
+
+				if field.Type() == reflect.TypeOf(json.RawMessage{}) {
+
+					var rawMsgStr string
+
+					fields[i] = &rawMsgStr
+
+					jsonRawMessageFields[i] = true
+
+				} else {
+
+					fields[i] = field.Addr().Interface()
+
+				}
+
+			} else {
+
+				var dummy interface{}
+
+				fields[i] = &dummy
+
+			}
+
+		}
+
+		if err := rows.Scan(fields...); err != nil {
+
+			if logger := q.getLogger(); logger != nil {
+
+				logger.Error("Scan failed: %v (scanning %d fields: %v)", err, len(columnsToScan), columnsToScan)
+
+			}
+
+			return err
+
+		}
+
+		// Copy scanned values back to customValue, handling json.RawMessage conversion
+
+		for i, colName := range columnsToScan {
+
+			field := findFieldByColumn(customValue, colName)
+
+			if field.IsValid() {
+
+				if jsonRawMessageFields[i] {
+
+					// Convert string to json.RawMessage
+
+					if strPtr, ok := fields[i].(*string); ok && strPtr != nil {
+
+						field.Set(reflect.ValueOf(json.RawMessage(*strPtr)))
+
+					}
+
+				}
+
+				// For other types, the scan already populated the field directly
+
+			}
+
+		}
+
+		rowCount++
+
+		sliceVal.Set(reflect.Append(sliceVal, customValue))
+
+	}
+
+	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
+
+	if err := rows.Err(); err != nil {
+
+		if logger := q.getLogger(); logger != nil {
+
+			logger.Error("SELECT query failed during scan: %v", err)
+
+		}
+
+		return err
+
+	}
+
+	return nil
+
+}

@@ -1,0 +1,12 @@
+// DateTimeFilter represents filter conditions for time.Time fields
+type DateTimeFilter struct {
+	Equals    *time.Time  `json:"equals,omitempty"`
+	NotEquals *time.Time  `json:"notEquals,omitempty"`
+	Gt        *time.Time  `json:"gt,omitempty"`
+	Gte       *time.Time  `json:"gte,omitempty"`
+	Lt        *time.Time  `json:"lt,omitempty"`
+	Lte       *time.Time  `json:"lte,omitempty"`
+	IsNull    *bool       `json:"isNull,omitempty"`
+	IsNotNull *bool       `json:"isNotNull,omitempty"`
+}
+

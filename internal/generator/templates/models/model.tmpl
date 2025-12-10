@@ -1,0 +1,15 @@
+{{- if .Imports}}
+import (
+{{- range .Imports}}
+	{{printf "%q" .}}
+{{- end}}
+)
+
+{{- end}}
+// {{.PascalName}} represents the model {{.ModelName}}
+type {{.PascalName}} struct {
+{{- range .Fields}}
+	{{.Name}} {{.GoType}} {{printf "`json:\"%s\" db:\"%s\"`" .JSONTag .DBTag}}
+{{- end}}
+}
+

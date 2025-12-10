@@ -1,0 +1,46 @@
+// hasBuilderDBMethods checks if an object has the required methods (Exec, Query, QueryRow)
+// using reflection. This allows us to detect builder.DBTX implementations
+// regardless of their return types.
+func hasBuilderDBMethods(v interface{}) bool {
+	if v == nil {
+		return false
+	}
+	val := reflect.ValueOf(v)
+	typ := val.Type()
+	
+	// Check for Exec method
+	execMethod, hasExec := typ.MethodByName("Exec")
+	if !hasExec {
+		return false
+	}
+	// Exec should have signature: Exec(context.Context, string, ...interface{}) (Result, error)
+	execType := execMethod.Type
+	if execType.NumIn() < 3 || execType.NumOut() != 2 {
+		return false
+	}
+	
+	// Check for Query method
+	queryMethod, hasQuery := typ.MethodByName("Query")
+	if !hasQuery {
+		return false
+	}
+	// Query should have signature: Query(context.Context, string, ...interface{}) (Rows, error)
+	queryType := queryMethod.Type
+	if queryType.NumIn() < 3 || queryType.NumOut() != 2 {
+		return false
+	}
+	
+	// Check for QueryRow method
+	queryRowMethod, hasQueryRow := typ.MethodByName("QueryRow")
+	if !hasQueryRow {
+		return false
+	}
+	// QueryRow should have signature: QueryRow(context.Context, string, ...interface{}) Row
+	queryRowType := queryRowMethod.Type
+	if queryRowType.NumIn() < 3 || queryRowType.NumOut() != 1 {
+		return false
+	}
+	
+	return true
+}
+

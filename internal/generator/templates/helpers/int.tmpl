@@ -1,0 +1,30 @@
+// Int helper functions for IntFilter
+
+func Int(value int) *inputs.IntFilter {
+	return &inputs.IntFilter{Equals: &value}
+}
+
+func IntGt(value int) *inputs.IntFilter {
+	return &inputs.IntFilter{Gt: &value}
+}
+
+func IntGte(value int) *inputs.IntFilter {
+	return &inputs.IntFilter{Gte: &value}
+}
+
+func IntLt(value int) *inputs.IntFilter {
+	return &inputs.IntFilter{Lt: &value}
+}
+
+func IntLte(value int) *inputs.IntFilter {
+	return &inputs.IntFilter{Lte: &value}
+}
+
+func IntIn(values ...int) *inputs.IntFilter {
+	return &inputs.IntFilter{In: values}
+}
+
+func IntNotIn(values ...int) *inputs.IntFilter {
+	return &inputs.IntFilter{NotIn: values}
+}
+

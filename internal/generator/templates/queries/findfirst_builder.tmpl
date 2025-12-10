@@ -1,0 +1,83 @@
+// FindFirst returns a builder for finding a single {{.PascalName}} record (Prisma-style)
+// Example: tenant, err := q.FindFirst().Where(inputs.{{.PascalName}}WhereInput{...}).Exec(ctx)
+func (q *{{.PascalName}}Query) FindFirst() *{{.PascalName}}FindFirstBuilder {
+	return &{{.PascalName}}FindFirstBuilder{query: q}
+}
+
+// {{.PascalName}}FindFirstBuilder is a builder for finding a single {{.PascalName}} record
+type {{.PascalName}}FindFirstBuilder struct {
+	query     *{{.PascalName}}Query
+	whereInput *inputs.{{.PascalName}}WhereInput
+	selectFields *inputs.{{.PascalName}}Select
+}
+
+// Where sets the where conditions
+func (b *{{.PascalName}}FindFirstBuilder) Where(where inputs.{{.PascalName}}WhereInput) *{{.PascalName}}FindFirstBuilder {
+	b.whereInput = &where
+	return b
+}
+
+// Select sets which fields to return
+func (b *{{.PascalName}}FindFirstBuilder) Select(selectFields inputs.{{.PascalName}}Select) *{{.PascalName}}FindFirstBuilder {
+	b.selectFields = &selectFields
+	return b
+}
+
+// Exec executes the find first operation and returns the default model
+// Returns (*models.{{.PascalName}}, error)
+// For custom types, use ExecTyped[T]() instead
+func (b *{{.PascalName}}FindFirstBuilder) Exec(ctx context.Context) (*models.{{.PascalName}}, error) {
+	if b.whereInput != nil {
+		apply{{.PascalName}}WhereInput(b.query.Query, *b.whereInput)
+	}
+	if b.selectFields != nil {
+		var selectedFields []string
+{{range .SelectFields}}		if b.selectFields.{{.FieldName}} {
+			selectedFields = append(selectedFields, {{printf "%q" .ColumnName}})
+		}
+{{end}}		if len(selectedFields) > 0 {
+			b.query.Select(selectedFields...)
+		}
+	}
+	var result models.{{.PascalName}}
+	err := b.query.First(ctx, &result)
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// ExecTyped executes the find first operation and scans the result into the provided type
+// dest must be a pointer to a struct with json or db tags for field mapping
+// Example: var dto *TenantsDTO; err := builder.ExecTyped(ctx, &dto)
+func (b *{{.PascalName}}FindFirstBuilder) ExecTyped(ctx context.Context, dest interface{}) error {
+	if b.whereInput != nil {
+		whereMap := Convert{{.PascalName}}WhereInputToWhere(*b.whereInput)
+		b.query.Where(whereMap)
+	}
+	if b.selectFields != nil {
+		var selectedFields []string
+{{range .SelectFields}}		if b.selectFields.{{.FieldName}} {
+			selectedFields = append(selectedFields, {{printf "%q" .ColumnName}})
+		}
+{{end}}		if len(selectedFields) > 0 {
+			b.query.Select(selectedFields...)
+		}
+	}
+	// Validate dest is a pointer
+	destVal := reflect.ValueOf(dest)
+	if destVal.Kind() != reflect.Ptr {
+		return fmt.Errorf("ExecTyped: dest must be a pointer (e.g., *TenantsDTO), got %v", destVal.Kind())
+	}
+	elemType := destVal.Elem().Type()
+	if elemType.Kind() != reflect.Struct {
+		return fmt.Errorf("ExecTyped: dest must be a pointer to struct, got %v", elemType.Kind())
+	}
+	// Scan into dest
+	err := b.query.ScanFirst(ctx, dest, elemType)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+

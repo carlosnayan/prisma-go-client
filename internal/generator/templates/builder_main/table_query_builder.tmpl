@@ -1,0 +1,38 @@
+// TableQueryBuilder provides a Prisma-like query builder for database tables
+type TableQueryBuilder struct {
+	db         DBTX
+	table      string
+	columns    []string
+	primaryKey string
+	modelType  reflect.Type
+	dialect    Dialect
+}
+
+// NewTableQueryBuilder creates a new query builder for a table
+func NewTableQueryBuilder(db DBTX, table string, columns []string) *TableQueryBuilder {
+	return &TableQueryBuilder{
+		db:      db,
+		table:   table,
+		columns: columns,
+		dialect: GetDialect("{{.Provider}}"), // Default based on provider
+	}
+}
+
+// SetDialect sets the database dialect
+func (b *TableQueryBuilder) SetDialect(d Dialect) *TableQueryBuilder {
+	b.dialect = d
+	return b
+}
+
+// SetPrimaryKey defines the primary key column name
+func (b *TableQueryBuilder) SetPrimaryKey(pk string) *TableQueryBuilder {
+	b.primaryKey = pk
+	return b
+}
+
+// SetModelType defines the model type for automatic scanning
+func (b *TableQueryBuilder) SetModelType(modelType reflect.Type) *TableQueryBuilder {
+	b.modelType = modelType
+	return b
+}
+

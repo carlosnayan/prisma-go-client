@@ -1,0 +1,60 @@
+var (
+	loggerConfigOnce sync.Once
+)
+
+// configureLoggerFromConfig configures the logger from prisma.conf
+// This function is called automatically when NewClient is created
+func configureLoggerFromConfig() {
+	loggerConfigOnce.Do(func() {
+		// Look for prisma.conf in project root
+		wd, err := os.Getwd()
+		if err != nil {
+			return
+		}
+
+		// Search up directories for prisma.conf
+		dir := wd
+		for {
+			configPath := filepath.Join(dir, "prisma.conf")
+			if _, err := os.Stat(configPath); err == nil {
+				// Load .env if exists
+				configDir := filepath.Dir(configPath)
+				envPath := filepath.Join(configDir, ".env")
+				if _, err := os.Stat(envPath); err == nil {
+					_ = godotenv.Load(envPath)
+				}
+
+				// Read and parse prisma.conf
+				data, err := os.ReadFile(configPath)
+				if err != nil {
+					return
+				}
+
+				// Parse TOML config
+				type Config struct {
+					Debug struct {
+						Log []string `toml:"log,omitempty"`
+					} `toml:"debug,omitempty"`
+				}
+				var cfg Config
+				if _, err := toml.Decode(string(data), &cfg); err != nil {
+					return
+				}
+
+				// Configure logger if log levels are specified in [debug] section
+				if len(cfg.Debug.Log) > 0 {
+					builder.SetLogLevels(cfg.Debug.Log)
+				}
+				return
+			}
+
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				// Reached root, not found
+				return
+			}
+			dir = parent
+		}
+	})
+}
+

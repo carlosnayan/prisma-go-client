@@ -1,0 +1,74 @@
+// getDatabaseURLFromConfig reads DATABASE_URL from prisma.conf
+func getDatabaseURLFromConfig() (string, error) {
+	// Look for prisma.conf in project root
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+
+	// Search up directories for prisma.conf
+	dir := wd
+	for {
+		configPath := filepath.Join(dir, "prisma.conf")
+		if _, err := os.Stat(configPath); err == nil {
+			// Read and parse prisma.conf
+			data, err := os.ReadFile(configPath)
+			if err != nil {
+				return "", err
+			}
+
+			// Parse TOML config
+			type Config struct {
+				Datasource struct {
+					URL string `toml:"url"`
+				} `toml:"datasource"`
+			}
+			var cfg Config
+			if _, err := toml.Decode(string(data), &cfg); err != nil {
+				return "", err
+			}
+
+			// Expand environment variables in URL (support env("DATABASE_URL") or ${DATABASE_URL})
+			url := cfg.Datasource.URL
+			if url == "" {
+				return "", nil
+			}
+
+			// Handle env("VAR") or env('VAR') format
+			if strings.HasPrefix(url, "env(\"") {
+				end := strings.Index(url, "\")")
+				if end > 5 {
+					varName := url[5:end]
+					if value := os.Getenv(varName); value != "" {
+						return value, nil
+					}
+					return "", nil
+				}
+			} else if strings.HasPrefix(url, "env('") {
+				end := strings.Index(url, "')")
+				if end > 5 {
+					varName := url[5:end]
+					if value := os.Getenv(varName); value != "" {
+						return value, nil
+					}
+					return "", nil
+				}
+			}
+
+			// Handle ${VAR} format
+			if strings.Contains(url, "${") {
+				url = os.ExpandEnv(url)
+			}
+
+			return url, nil
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached root, not found
+			return "", nil
+		}
+		dir = parent
+	}
+}
+

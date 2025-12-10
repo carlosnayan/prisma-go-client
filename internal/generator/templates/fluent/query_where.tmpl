@@ -1,0 +1,295 @@
+// Where adds a WHERE condition
+// Supports two syntaxes:
+//  1. Direct SQL: q.Where("name = ?", "jinzhu")
+//  2. Prisma map: q.Where(builder.Where{"name": "jinzhu", "age": builder.Gt(18)})
+func (q *Query) Where(condition interface{}, args ...interface{}) *Query {
+	if queryStr, ok := condition.(string); ok {
+		q.whereConditions = append(q.whereConditions, whereCondition{
+			query: queryStr,
+			args:  args,
+			or:    false,
+		})
+		return q
+	}
+
+	if whereMap, ok := condition.(Where); ok {
+		for field, value := range whereMap {
+			if op, ok := value.(WhereOperator); ok {
+				q.addPrismaWhereCondition(field, op)
+			} else if value == nil {
+				quotedField := q.dialect.QuoteIdentifier(field)
+				q.whereConditions = append(q.whereConditions, whereCondition{
+					query: fmt.Sprintf("%s IS NULL", quotedField),
+					args:  []interface{}{},
+					or:    false,
+				})
+			} else {
+				quotedField := q.dialect.QuoteIdentifier(field)
+				q.whereConditions = append(q.whereConditions, whereCondition{
+					query: fmt.Sprintf("%s = ?", quotedField),
+					args:  []interface{}{value},
+					or:    false,
+				})
+			}
+		}
+		return q
+	}
+
+	return q
+}
+
+// addPrismaWhereCondition adds a WHERE condition using Prisma operator
+func (q *Query) addPrismaWhereCondition(field string, op WhereOperator) {
+	quotedField := q.dialect.QuoteIdentifier(field)
+	switch op.GetOp() {
+	case ">":
+		q.whereConditions = append(q.whereConditions, whereCondition{
+			query: fmt.Sprintf("%s > ?", quotedField),
+			args:  []interface{}{op.GetValue()},
+			or:    false,
+		})
+	case ">=":
+		q.whereConditions = append(q.whereConditions, whereCondition{
+			query: fmt.Sprintf("%s >= ?", quotedField),
+			args:  []interface{}{op.GetValue()},
+			or:    false,
+		})
+	case "<":
+		q.whereConditions = append(q.whereConditions, whereCondition{
+			query: fmt.Sprintf("%s < ?", quotedField),
+			args:  []interface{}{op.GetValue()},
+			or:    false,
+		})
+	case "<=":
+		q.whereConditions = append(q.whereConditions, whereCondition{
+			query: fmt.Sprintf("%s <= ?", quotedField),
+			args:  []interface{}{op.GetValue()},
+			or:    false,
+		})
+	case "IN":
+		if values, ok := op.GetValue().([]interface{}); ok {
+			placeholders := make([]string, len(values))
+			for i := range values {
+				placeholders[i] = "?"
+			}
+			q.whereConditions = append(q.whereConditions, whereCondition{
+				query: fmt.Sprintf("%s IN (%s)", quotedField, strings.Join(placeholders, ", ")),
+				args:  values,
+				or:    false,
+			})
+		}
+	case "NOT IN":
+		if values, ok := op.GetValue().([]interface{}); ok {
+			placeholders := make([]string, len(values))
+			for i := range values {
+				placeholders[i] = "?"
+			}
+			q.whereConditions = append(q.whereConditions, whereCondition{
+				query: fmt.Sprintf("%s NOT IN (%s)", quotedField, strings.Join(placeholders, ", ")),
+				args:  values,
+				or:    false,
+			})
+		}
+	case "LIKE":
+		q.whereConditions = append(q.whereConditions, whereCondition{
+			query: fmt.Sprintf("%s LIKE ?", quotedField),
+			args:  []interface{}{op.GetValue()},
+			or:    false,
+		})
+	case "ILIKE":
+		q.whereConditions = append(q.whereConditions, whereCondition{
+			query: fmt.Sprintf("%s ILIKE ?", quotedField),
+			args:  []interface{}{op.GetValue()},
+			or:    false,
+		})
+	case "IS NULL":
+		q.whereConditions = append(q.whereConditions, whereCondition{
+			query: fmt.Sprintf("%s IS NULL", quotedField),
+			args:  []interface{}{},
+			or:    false,
+		})
+	case "IS NOT NULL":
+		q.whereConditions = append(q.whereConditions, whereCondition{
+			query: fmt.Sprintf("%s IS NOT NULL", quotedField),
+			args:  []interface{}{},
+			or:    false,
+		})
+	case "HAS":
+		if q.dialect.SupportsJSON() {
+			jsonValue := fmt.Sprintf(`["%v"]`, op.GetValue())
+			query := q.dialect.GetJSONContainsQuery(field, jsonValue)
+			q.whereConditions = append(q.whereConditions, whereCondition{
+				query: query,
+				args:  []interface{}{},
+				or:    false,
+			})
+		} else {
+			q.whereConditions = append(q.whereConditions, whereCondition{
+				query: fmt.Sprintf("%s LIKE ?", q.dialect.QuoteIdentifier(field)),
+				args:  []interface{}{fmt.Sprintf("%%%v%%", op.GetValue())},
+				or:    false,
+			})
+		}
+	case "HAS_EVERY":
+		if q.dialect.SupportsJSON() {
+			if values, ok := op.GetValue().([]interface{}); ok {
+				jsonValue := fmt.Sprintf(`[%s]`, strings.Join(func() []string {
+					result := make([]string, len(values))
+					for i, v := range values {
+						result[i] = fmt.Sprintf(`"%v"`, v)
+					}
+					return result
+				}(), ", "))
+				query := q.dialect.GetJSONContainsQuery(field, jsonValue)
+				q.whereConditions = append(q.whereConditions, whereCondition{
+					query: query,
+					args:  []interface{}{},
+					or:    false,
+				})
+			}
+		} else {
+			if values, ok := op.GetValue().([]interface{}); ok {
+				conditions := make([]string, len(values))
+				for i := range values {
+					conditions[i] = fmt.Sprintf("%s LIKE ?", q.dialect.QuoteIdentifier(field))
+				}
+				q.whereConditions = append(q.whereConditions, whereCondition{
+					query: fmt.Sprintf("(%s)", strings.Join(conditions, " AND ")),
+					args: func() []interface{} {
+						result := make([]interface{}, len(values))
+						for i, v := range values {
+							result[i] = fmt.Sprintf("%%%v%%", v)
+						}
+						return result
+					}(),
+					or: false,
+				})
+			}
+		}
+	case "HAS_SOME":
+		if q.dialect.SupportsJSON() {
+			if values, ok := op.GetValue().([]interface{}); ok {
+				if q.dialect.Name() == "postgresql" {
+					placeholders := make([]string, len(values))
+					for i := range values {
+						placeholders[i] = "?"
+					}
+					quotedField := q.dialect.QuoteIdentifier(field)
+					q.whereConditions = append(q.whereConditions, whereCondition{
+						query: fmt.Sprintf("%s ?| array[%s]", quotedField, strings.Join(placeholders, ", ")),
+						args:  values,
+						or:    false,
+					})
+				} else {
+					conditions := make([]string, len(values))
+					for i, v := range values {
+						jsonValue := fmt.Sprintf(`"%v"`, v)
+						conditions[i] = q.dialect.GetJSONContainsQuery(field, jsonValue)
+					}
+					q.whereConditions = append(q.whereConditions, whereCondition{
+						query: fmt.Sprintf("(%s)", strings.Join(conditions, " OR ")),
+						args:  []interface{}{},
+						or:    false,
+					})
+				}
+			}
+		} else {
+			if values, ok := op.GetValue().([]interface{}); ok {
+				conditions := make([]string, len(values))
+				allArgs := make([]interface{}, len(values))
+				for i, v := range values {
+					conditions[i] = fmt.Sprintf("%s LIKE ?", q.dialect.QuoteIdentifier(field))
+					allArgs[i] = fmt.Sprintf("%%%v%%", v)
+				}
+				q.whereConditions = append(q.whereConditions, whereCondition{
+					query: fmt.Sprintf("(%s)", strings.Join(conditions, " OR ")),
+					args:  allArgs,
+					or:    false,
+				})
+			}
+		}
+	case "IS_EMPTY":
+		if q.dialect.SupportsJSON() {
+			quotedField := q.dialect.QuoteIdentifier(field)
+			if q.dialect.Name() == "postgresql" {
+				q.whereConditions = append(q.whereConditions, whereCondition{
+					query: fmt.Sprintf("(jsonb_typeof(%s) = 'array' AND jsonb_array_length(%s) = 0) OR %s = '[]'::jsonb", quotedField, quotedField, quotedField),
+					args:  []interface{}{},
+					or:    false,
+				})
+			} else if q.dialect.Name() == "mysql" {
+				q.whereConditions = append(q.whereConditions, whereCondition{
+					query: fmt.Sprintf("(JSON_TYPE(%s) = 'ARRAY' AND JSON_LENGTH(%s) = 0) OR %s = '[]'", quotedField, quotedField, quotedField),
+					args:  []interface{}{},
+					or:    false,
+				})
+			} else {
+				q.whereConditions = append(q.whereConditions, whereCondition{
+					query: fmt.Sprintf("(json_array_length(%s) = 0 OR %s IS NULL)", quotedField, quotedField),
+					args:  []interface{}{},
+					or:    false,
+				})
+			}
+		} else {
+			quotedField := q.dialect.QuoteIdentifier(field)
+			q.whereConditions = append(q.whereConditions, whereCondition{
+				query: fmt.Sprintf("(%s IS NULL OR %s = '')", quotedField, quotedField),
+				args:  []interface{}{},
+				or:    false,
+			})
+		}
+	case "FULLTEXT_SEARCH":
+		if q.dialect.SupportsFullTextSearch() {
+			if queryStr, ok := op.GetValue().(string); ok {
+				if q.dialect.Name() == "postgresql" {
+					queryStr = NormalizeTSQuery(queryStr)
+				}
+				query := q.dialect.GetFullTextSearchQuery(field, queryStr)
+				args := []interface{}{}
+				if strings.Contains(query, "?") || strings.Contains(query, "$") {
+					args = []interface{}{queryStr}
+				}
+				q.whereConditions = append(q.whereConditions, whereCondition{
+					query: query,
+					args:  args,
+					or:    false,
+				})
+			}
+		} else {
+			if queryStr, ok := op.GetValue().(string); ok {
+				q.whereConditions = append(q.whereConditions, whereCondition{
+					query: fmt.Sprintf("%s LIKE ?", quotedField),
+					args:  []interface{}{fmt.Sprintf("%%%s%%", queryStr)},
+					or:    false,
+				})
+			}
+		}
+	default:
+		q.whereConditions = append(q.whereConditions, whereCondition{
+			query: fmt.Sprintf("%s = ?", quotedField),
+			args:  []interface{}{op.GetValue()},
+			or:    false,
+		})
+	}
+}
+
+// Or adds an OR condition
+func (q *Query) Or(query string, args ...interface{}) *Query {
+	q.whereConditions = append(q.whereConditions, whereCondition{
+		query: query,
+		args:  args,
+		or:    true,
+	})
+	return q
+}
+
+// Not adds a NOT condition
+func (q *Query) Not(query string, args ...interface{}) *Query {
+	q.whereConditions = append(q.whereConditions, whereCondition{
+		query: fmt.Sprintf("NOT (%s)", query),
+		args:  args,
+		or:    false,
+	})
+	return q
+}
+

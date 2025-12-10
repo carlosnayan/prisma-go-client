@@ -1,0 +1,42 @@
+// Update returns a builder for updating {{.PascalName}} records (Prisma-style)
+// Example: err := q.Update().Where(inputs.{{.PascalName}}WhereInput{...}).Data(inputs.{{.PascalName}}UpdateInput{...}).Exec(ctx)
+func (q *{{.PascalName}}Query) Update() *{{.PascalName}}UpdateBuilder {
+	return &{{.PascalName}}UpdateBuilder{query: q}
+}
+
+// {{.PascalName}}UpdateBuilder is a builder for updating {{.PascalName}} records
+type {{.PascalName}}UpdateBuilder struct {
+	query      *{{.PascalName}}Query
+	whereInput *inputs.{{.PascalName}}WhereInput
+	data       *inputs.{{.PascalName}}UpdateInput
+}
+
+// Where sets the where conditions
+func (b *{{.PascalName}}UpdateBuilder) Where(where inputs.{{.PascalName}}WhereInput) *{{.PascalName}}UpdateBuilder {
+	b.whereInput = &where
+	return b
+}
+
+// Data sets the data for updating
+func (b *{{.PascalName}}UpdateBuilder) Data(data inputs.{{.PascalName}}UpdateInput) *{{.PascalName}}UpdateBuilder {
+	b.data = &data
+	return b
+}
+
+// Exec executes the update operation
+func (b *{{.PascalName}}UpdateBuilder) Exec(ctx context.Context) error {
+	if b.whereInput == nil {
+		return fmt.Errorf("where condition is required for update")
+	}
+	if b.data == nil {
+		return fmt.Errorf("data is required for update")
+	}
+	whereMap := Convert{{.PascalName}}WhereInputToWhere(*b.whereInput)
+	b.query.Where(whereMap)
+	updateData := make(map[string]interface{})
+{{range .UpdateFields}}	if b.data.{{.FieldName}} != nil {
+		updateData[{{printf "%q" .DBFieldName}}] = *b.data.{{.FieldName}}
+	}
+{{end}}	return b.query.Updates(ctx, updateData)
+}
+

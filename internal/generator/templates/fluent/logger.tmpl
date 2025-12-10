@@ -1,0 +1,65 @@
+// Logger is a simplified logger for standalone builder
+type Logger struct {
+	levels   map[string]bool
+	queryLog bool
+}
+
+var defaultLogger = &Logger{
+	levels:   make(map[string]bool),
+	queryLog: false,
+}
+
+// GetDefaultLogger returns the default logger
+func GetDefaultLogger() *Logger {
+	return defaultLogger
+}
+
+// Query logs a query SQL
+func (l *Logger) Query(query string, args []interface{}, duration time.Duration) {
+	if !l.queryLog || !l.levels["query"] {
+		return
+	}
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	fmt.Printf("[%s] [QUERY] %s (took %v)\n", timestamp, query, duration)
+}
+
+// Info logs an info message
+func (l *Logger) Info(format string, args ...interface{}) {
+	if !l.levels["info"] {
+		return
+	}
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	fmt.Printf("[%s] [INFO] %s\n", timestamp, fmt.Sprintf(format, args...))
+}
+
+// Warn logs a warning
+func (l *Logger) Warn(format string, args ...interface{}) {
+	if !l.levels["warn"] {
+		return
+	}
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	fmt.Printf("[%s] [WARN] %s\n", timestamp, fmt.Sprintf(format, args...))
+}
+
+// Error logs an error
+func (l *Logger) Error(format string, args ...interface{}) {
+	if !l.levels["error"] {
+		return
+	}
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	fmt.Printf("[%s] [ERROR] %s\n", timestamp, fmt.Sprintf(format, args...))
+}
+
+// SetLogLevels configures log levels
+func SetLogLevels(levels []string) {
+	defaultLogger.levels = make(map[string]bool)
+	defaultLogger.queryLog = false
+	for _, level := range levels {
+		levelLower := strings.ToLower(strings.TrimSpace(level))
+		defaultLogger.levels[levelLower] = true
+		if levelLower == "query" {
+			defaultLogger.queryLog = true
+		}
+	}
+}
+

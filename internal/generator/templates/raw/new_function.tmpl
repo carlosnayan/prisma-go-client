@@ -1,0 +1,16 @@
+// New creates a new raw query executor
+// Accepts both raw.DB and builder.DB (compatible interfaces)
+func New(db interface{}) *Executor {
+	// Try direct cast to raw.DB first
+	if rawDB, ok := db.(DB); ok {
+		return &Executor{db: rawDB}
+	}
+	// Try builder.DB - check if it has the required methods using reflection
+	// builder.DBTX has methods that return specific types (Result, Rows, Row)
+	// We use reflection to detect these methods regardless of return types
+	if hasBuilderDBMethods(db) {
+		return &Executor{db: &builderDBAdapter{db: db}}
+	}
+	panic("db must implement raw.DB or builder.DB")
+}
+

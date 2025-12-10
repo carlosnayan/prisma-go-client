@@ -1,0 +1,114 @@
+// builderDBAdapter adapts builder.DB to raw.DB
+// Stores the original object as interface{} and uses reflection to call methods
+type builderDBAdapter struct {
+	db interface{}
+}
+
+func (a *builderDBAdapter) Exec(ctx context.Context, sql string, args ...interface{}) (Result, error) {
+	// Use reflection to call Exec method on the original object
+	val := reflect.ValueOf(a.db)
+	execMethod := val.MethodByName("Exec")
+	if !execMethod.IsValid() {
+		return nil, fmt.Errorf("Exec method not found")
+	}
+	
+	// Prepare arguments: ctx, sql, args...
+	callArgs := make([]reflect.Value, 0, len(args)+2)
+	callArgs = append(callArgs, reflect.ValueOf(ctx), reflect.ValueOf(sql))
+	for _, arg := range args {
+		callArgs = append(callArgs, reflect.ValueOf(arg))
+	}
+	
+	// Call the method
+	results := execMethod.Call(callArgs)
+	if len(results) != 2 {
+		return nil, fmt.Errorf("Exec method returned unexpected number of values")
+	}
+	
+	// Extract result and error
+	result := results[0].Interface()
+	if !results[1].IsNil() {
+		if err, ok := results[1].Interface().(error); ok {
+			return nil, err
+		}
+		return nil, fmt.Errorf("Exec method returned non-error type")
+	}
+	
+	// Try to cast to raw.Result first (if already compatible)
+	if r, ok := result.(Result); ok {
+		return r, nil
+	}
+	// Wrap in adapter - builder.Result implements RowsAffected() method
+	return &resultAdapter{result: result}, nil
+}
+
+func (a *builderDBAdapter) Query(ctx context.Context, sql string, args ...interface{}) (Rows, error) {
+	// Use reflection to call Query method on the original object
+	val := reflect.ValueOf(a.db)
+	queryMethod := val.MethodByName("Query")
+	if !queryMethod.IsValid() {
+		return nil, fmt.Errorf("Query method not found")
+	}
+	
+	// Prepare arguments: ctx, sql, args...
+	callArgs := make([]reflect.Value, 0, len(args)+2)
+	callArgs = append(callArgs, reflect.ValueOf(ctx), reflect.ValueOf(sql))
+	for _, arg := range args {
+		callArgs = append(callArgs, reflect.ValueOf(arg))
+	}
+	
+	// Call the method
+	results := queryMethod.Call(callArgs)
+	if len(results) != 2 {
+		return nil, fmt.Errorf("Query method returned unexpected number of values")
+	}
+	
+	// Extract rows and error
+	rows := results[0].Interface()
+	if !results[1].IsNil() {
+		if err, ok := results[1].Interface().(error); ok {
+			return nil, err
+		}
+		return nil, fmt.Errorf("Query method returned non-error type")
+	}
+	
+	// Try to cast to raw.Rows first (if already compatible)
+	if r, ok := rows.(Rows); ok {
+		return r, nil
+	}
+	// Wrap in adapter - builder.Rows implements Close(), Err(), Next(), Scan() methods
+	return &rowsAdapter{rows: rows}, nil
+}
+
+func (a *builderDBAdapter) QueryRow(ctx context.Context, sql string, args ...interface{}) Row {
+	// Use reflection to call QueryRow method on the original object
+	val := reflect.ValueOf(a.db)
+	queryRowMethod := val.MethodByName("QueryRow")
+	if !queryRowMethod.IsValid() {
+		return &rowAdapter{row: nil}
+	}
+	
+	// Prepare arguments: ctx, sql, args...
+	callArgs := make([]reflect.Value, 0, len(args)+2)
+	callArgs = append(callArgs, reflect.ValueOf(ctx), reflect.ValueOf(sql))
+	for _, arg := range args {
+		callArgs = append(callArgs, reflect.ValueOf(arg))
+	}
+	
+	// Call the method
+	results := queryRowMethod.Call(callArgs)
+	if len(results) != 1 {
+		return &rowAdapter{row: nil}
+	}
+	
+	// Extract row
+	row := results[0].Interface()
+	
+	// Try to cast to raw.Row first (if already compatible)
+	if r, ok := row.(Row); ok {
+		return r
+	}
+	// Wrap in adapter - builder.Row implements Scan() method
+	return &rowAdapter{row: row}
+}
+

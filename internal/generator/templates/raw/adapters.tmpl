@@ -1,0 +1,54 @@
+// Adapters for result types
+type resultAdapter struct {
+	result interface{}
+}
+
+func (r *resultAdapter) RowsAffected() int64 {
+	if res, ok := r.result.(interface{ RowsAffected() int64 }); ok {
+		return res.RowsAffected()
+	}
+	return 0
+}
+
+type rowsAdapter struct {
+	rows interface{}
+}
+
+func (r *rowsAdapter) Close() {
+	if closer, ok := r.rows.(interface{ Close() }); ok {
+		closer.Close()
+	}
+}
+
+func (r *rowsAdapter) Err() error {
+	if errer, ok := r.rows.(interface{ Err() error }); ok {
+		return errer.Err()
+	}
+	return nil
+}
+
+func (r *rowsAdapter) Next() bool {
+	if next, ok := r.rows.(interface{ Next() bool }); ok {
+		return next.Next()
+	}
+	return false
+}
+
+func (r *rowsAdapter) Scan(dest ...interface{}) error {
+	if scanner, ok := r.rows.(interface{ Scan(...interface{}) error }); ok {
+		return scanner.Scan(dest...)
+	}
+	return fmt.Errorf("rows does not implement Scan")
+}
+
+type rowAdapter struct {
+	row interface{}
+}
+
+func (r *rowAdapter) Scan(dest ...interface{}) error {
+	if scanner, ok := r.row.(interface{ Scan(...interface{}) error }); ok {
+		return scanner.Scan(dest...)
+	}
+	return fmt.Errorf("row does not implement Scan")
+}
+

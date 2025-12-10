@@ -1,0 +1,89 @@
+// MySQLDialect implements the MySQL dialect
+type MySQLDialect struct{}
+
+func (d *MySQLDialect) Name() string { return "mysql" }
+
+func (d *MySQLDialect) QuoteIdentifier(name string) string {
+	return fmt.Sprintf("`%s`", name)
+}
+
+func (d *MySQLDialect) QuoteString(value string) string {
+	escaped := strings.ReplaceAll(value, "\\", "\\\\")
+	escaped = strings.ReplaceAll(escaped, "'", "''")
+	return fmt.Sprintf("'%s'", escaped)
+}
+
+func (d *MySQLDialect) MapType(prismaType string, isNullable bool) string {
+	switch strings.ToLower(prismaType) {
+	case "string":
+		return "VARCHAR(191)"
+	case "int":
+		return "INT"
+	case "bigint":
+		return "BIGINT"
+	case "boolean", "bool":
+		return "TINYINT(1)"
+	case "datetime":
+		return "DATETIME"
+	case "float":
+		return "DOUBLE"
+	case "decimal":
+		return "DECIMAL(65, 30)"
+	case "json":
+		return "JSON"
+	case "bytes":
+		return "BLOB"
+	default:
+		return "VARCHAR(191)"
+	}
+}
+
+func (d *MySQLDialect) MapDefaultValue(value string) string {
+	value = strings.ToLower(value)
+	switch {
+	case value == "autoincrement()" || value == "autoincrement":
+		return ""
+	case value == "now()" || value == "now":
+		return "CURRENT_TIMESTAMP"
+	case strings.HasPrefix(value, "uuid()") || strings.HasPrefix(value, "uuid"):
+		return "UUID()"
+	case strings.HasPrefix(value, "cuid()") || strings.HasPrefix(value, "cuid"):
+		return "UUID()"
+	default:
+		return value
+	}
+}
+
+func (d *MySQLDialect) GetPlaceholder(index int) string { return "?" }
+
+func (d *MySQLDialect) GetAutoIncrementKeyword() string { return "AUTO_INCREMENT" }
+
+func (d *MySQLDialect) GetNowFunction() string { return "NOW()" }
+
+func (d *MySQLDialect) GetDriverName() string { return "mysql" }
+
+func (d *MySQLDialect) SupportsFullTextSearch() bool { return true }
+
+func (d *MySQLDialect) GetFullTextSearchQuery(field string, query string) string {
+	return fmt.Sprintf("MATCH(%s) AGAINST(%s IN BOOLEAN MODE)", d.QuoteIdentifier(field), d.QuoteString(query))
+}
+
+func (d *MySQLDialect) SupportsJSON() bool { return true }
+
+func (d *MySQLDialect) GetJSONContainsQuery(field string, value string) string {
+	return fmt.Sprintf("JSON_CONTAINS(%s, %s)", d.QuoteIdentifier(field), d.QuoteString(value))
+}
+
+func (d *MySQLDialect) GetLimitOffsetSyntax(limit, offset int) string {
+	if limit > 0 && offset > 0 {
+		return fmt.Sprintf("LIMIT %d, %d", offset, limit)
+	} else if limit > 0 {
+		return fmt.Sprintf("LIMIT %d", limit)
+	} else if offset > 0 {
+		return fmt.Sprintf("LIMIT 18446744073709551615 OFFSET %d", offset)
+	}
+	return ""
+}
+
+func (d *MySQLDialect) SupportsReturning() bool { return false }
+

@@ -1,0 +1,104 @@
+// Select specifies which columns to select
+func (q *Query) Select(fields ...string) *Query {
+	remaining := MaxSelectFields - len(q.selectFields)
+	if remaining <= 0 {
+		return q
+	}
+	if len(fields) > remaining {
+		fields = fields[:remaining]
+	}
+	q.selectFields = append(q.selectFields, fields...)
+	return q
+}
+
+// SelectAll clears Select and returns all fields
+func (q *Query) SelectAll() *Query {
+	q.selectFields = []string{}
+	return q
+}
+
+// Order adds ORDER BY
+func (q *Query) Order(order string) *Query {
+	if len(q.orderBy) >= MaxOrderByFields {
+		return q
+	}
+
+	parts := strings.Fields(order)
+	if len(parts) == 2 {
+		q.orderBy = append(q.orderBy, OrderBy{
+			Field: parts[0],
+			Order: strings.ToUpper(parts[1]),
+		})
+	} else if len(parts) == 1 {
+		q.orderBy = append(q.orderBy, OrderBy{
+			Field: parts[0],
+			Order: "ASC",
+		})
+	}
+	return q
+}
+
+// Take sets the LIMIT
+func (q *Query) Take(take int) *Query {
+	q.take = &take
+	return q
+}
+
+// Skip sets the OFFSET
+func (q *Query) Skip(skip int) *Query {
+	q.skip = &skip
+	return q
+}
+
+// Group adds GROUP BY
+func (q *Query) Group(fields ...string) *Query {
+	remaining := MaxGroupByFields - len(q.groupBy)
+	if remaining <= 0 {
+		return q
+	}
+	if len(fields) > remaining {
+		fields = fields[:remaining]
+	}
+	q.groupBy = append(q.groupBy, fields...)
+	return q
+}
+
+// Having adds HAVING
+func (q *Query) Having(query string, args ...interface{}) *Query {
+	q.having = append(q.having, whereCondition{
+		query: query,
+		args:  args,
+		or:    false,
+	})
+	return q
+}
+
+// Join adds a JOIN
+func (q *Query) Join(joinType, table, on string, args ...interface{}) *Query {
+	if len(q.joins) >= MaxJoins {
+		return q
+	}
+	q.joins = append(q.joins, join{
+		joinType: joinType,
+		table:    table,
+		on:       on,
+		args:     args,
+	})
+	return q
+}
+
+// InnerJoin adds an INNER JOIN
+func (q *Query) InnerJoin(table, on string, args ...interface{}) *Query {
+	return q.Join("INNER", table, on, args...)
+}
+
+// LeftJoin adds a LEFT JOIN
+func (q *Query) LeftJoin(table, on string, args ...interface{}) *Query {
+	return q.Join("LEFT", table, on, args...)
+}
+
+// RightJoin adds a RIGHT JOIN
+func (q *Query) RightJoin(table, on string, args ...interface{}) *Query {
+	return q.Join("RIGHT", table, on, args...)
+}
+

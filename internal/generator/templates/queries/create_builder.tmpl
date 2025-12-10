@@ -1,0 +1,51 @@
+// Create returns a builder for creating {{.PascalName}} records (Prisma-style)
+// Example: tenant, err := q.Create().Data(inputs.{{.PascalName}}CreateInput{...}).Exec(ctx)
+func (q *{{.PascalName}}Query) Create() *{{.PascalName}}CreateBuilder {
+	return &{{.PascalName}}CreateBuilder{query: q}
+}
+
+// {{.PascalName}}CreateBuilder is a builder for creating {{.PascalName}} records
+type {{.PascalName}}CreateBuilder struct {
+	query *{{.PascalName}}Query
+	data  *inputs.{{.PascalName}}CreateInput
+}
+
+// Data sets the data for creating
+func (b *{{.PascalName}}CreateBuilder) Data(data inputs.{{.PascalName}}CreateInput) *{{.PascalName}}CreateBuilder {
+	b.data = &data
+	return b
+}
+
+// Exec executes the create operation
+func (b *{{.PascalName}}CreateBuilder) Exec(ctx context.Context) (*models.{{.PascalName}}, error) {
+	if b.data == nil {
+		return nil, fmt.Errorf("data is required for create")
+	}
+	result := &models.{{.PascalName}}{}
+{{range .CreateFields}}{{if .IsOptional}}	if b.data.{{.FieldName}} != nil {
+		{{- if .IsNonPointerOptional}}
+		result.{{.FieldName}} = *b.data.{{.FieldName}}
+		{{- else}}
+		result.{{.FieldName}} = b.data.{{.FieldName}}
+		{{- end}}
+	}
+{{else}}	result.{{.FieldName}} = b.data.{{.FieldName}}
+{{end}}{{end}}	// Use TableQueryBuilder to get the actual result from database
+	columns := []string{ {{- range $i, $col := .Columns}}{{if $i}}, {{end}}{{printf "%q" $col}}{{end}} }
+	tableBuilder := builder.NewTableQueryBuilder(b.query.Query.GetDB(), {{printf "%q" .TableName}}, columns)
+{{if .PrimaryKey}}	tableBuilder.SetPrimaryKey({{printf "%q" .PrimaryKey}})
+{{end}}	tableBuilder.SetDialect(b.query.Query.GetDialect())
+	tableBuilder.SetModelType(reflect.TypeOf(models.{{.PascalName}}{}))
+	created, err := tableBuilder.Create(ctx, result)
+	if err != nil {
+		return nil, err
+	}
+	// Convert the result from interface{} to *models.{{.PascalName}}
+	if createdModel, ok := created.(models.{{.PascalName}}); ok {
+		return &createdModel, nil
+	}
+	// Fallback: if conversion fails, return the result we prepared
+	// This should not happen, but provides a safety net
+	return result, nil
+}
+

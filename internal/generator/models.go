@@ -26,60 +26,51 @@ func GenerateModels(schema *parser.Schema, outputDir string) error {
 	return nil
 }
 
-// generateModelFile generates the Go file for a model
+// generateModelFile generates the Go file for a model using templates
 func generateModelFile(filePath string, model *parser.Model, schema *parser.Schema) error {
-	file, err := createGeneratedFile(filePath, "models")
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
 	// Determine necessary imports
 	imports := determineImports(model, schema)
-	if len(imports) > 0 {
-		fmt.Fprintf(file, "import (\n")
-		for _, imp := range imports {
-			fmt.Fprintf(file, "\t%q\n", imp)
-		}
-		fmt.Fprintf(file, ")\n\n")
-	}
 
-	// Struct
-	pascalModelName := toPascalCase(model.Name)
-	fmt.Fprintf(file, "// %s represents the model %s\n", pascalModelName, model.Name)
-	fmt.Fprintf(file, "type %s struct {\n", pascalModelName)
-
+	// Prepare fields
+	fields := make([]FieldInfo, 0)
 	for _, field := range model.Fields {
 		// Skip relations - only include actual database columns
 		if isRelation(field, schema) {
 			continue
 		}
-		generateField(file, field, model.Name)
-	}
 
-	fmt.Fprintf(file, "}\n")
+		fieldName := toPascalCase(field.Name)
+		goType := fieldTypeToGo(field.Type, field.Attributes)
+		jsonTag := toSnakeCase(field.Name)
+		dbTag := field.Name
 
-	return nil
-}
-
-// generateField generates a struct field
-func generateField(file *os.File, field *parser.ModelField, modelName string) {
-	fieldName := toPascalCase(field.Name)
-	goType := fieldTypeToGo(field.Type, field.Attributes)
-	jsonTag := toSnakeCase(field.Name)
-	dbTag := field.Name
-
-	// Check if it has @map
-	for _, attr := range field.Attributes {
-		if attr.Name == "map" && len(attr.Arguments) > 0 {
-			if val, ok := attr.Arguments[0].Value.(string); ok {
-				dbTag = val
+		// Check if it has @map
+		for _, attr := range field.Attributes {
+			if attr.Name == "map" && len(attr.Arguments) > 0 {
+				if val, ok := attr.Arguments[0].Value.(string); ok {
+					dbTag = val
+				}
 			}
 		}
+
+		fields = append(fields, FieldInfo{
+			Name:    fieldName,
+			GoType:  goType,
+			JSONTag: jsonTag,
+			DBTag:   dbTag,
+		})
 	}
 
-	tags := fmt.Sprintf("`json:\"%s\" db:\"%s\"`", jsonTag, dbTag)
-	fmt.Fprintf(file, "\t%s %s %s\n", fieldName, goType, tags)
+	// Prepare template data
+	data := ModelTemplateData{
+		ModelName:  model.Name,
+		PascalName: toPascalCase(model.Name),
+		Imports:    imports,
+		Fields:     fields,
+	}
+
+	// Generate model file using template
+	return executeModelTemplate(filePath, "models", "models", "model.tmpl", data)
 }
 
 // fieldTypeToGo converts a Prisma FieldType to Go type

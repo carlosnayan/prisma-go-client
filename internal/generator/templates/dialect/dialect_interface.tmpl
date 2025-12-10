@@ -1,0 +1,63 @@
+// Dialect represents a database dialect
+// Abstracts differences between PostgreSQL, MySQL, SQLite, etc.
+type Dialect interface {
+	// Name returns the dialect name (e.g., "postgresql", "mysql", "sqlite")
+	Name() string
+
+	// QuoteIdentifier quotes an identifier (table, column, etc.)
+	// PostgreSQL: "table_name", MySQL: `table_name`, SQLite: "table_name"
+	QuoteIdentifier(name string) string
+
+	// QuoteString quotes a string literal
+	// PostgreSQL: 'value', MySQL: 'value', SQLite: 'value'
+	QuoteString(value string) string
+
+	// MapType maps a Prisma type to SQL database type
+	// Example: "String" -> "VARCHAR(255)" (MySQL) or "TEXT" (PostgreSQL)
+	MapType(prismaType string, isNullable bool) string
+
+	// MapDefaultValue maps a Prisma default value to SQL
+	// Example: "autoincrement()" -> "AUTO_INCREMENT" (MySQL) or "SERIAL" (PostgreSQL)
+	MapDefaultValue(value string) string
+
+	// GetPlaceholder returns the placeholder for parameters
+	// PostgreSQL: $1, $2, MySQL: ?, ?, SQLite: ?, ?
+	GetPlaceholder(index int) string
+
+	// GetAutoIncrementKeyword returns the keyword for auto increment
+	// PostgreSQL: SERIAL/BIGSERIAL, MySQL: AUTO_INCREMENT, SQLite: AUTOINCREMENT
+	GetAutoIncrementKeyword() string
+
+	// GetNowFunction returns the function to get current date/time
+	// PostgreSQL: NOW(), MySQL: NOW(), SQLite: datetime('now')
+	GetNowFunction() string
+
+	// GetDriverName returns the Go driver name for database/sql
+	// PostgreSQL: "pgx", MySQL: "mysql", SQLite: "sqlite3"
+	GetDriverName() string
+
+	// SupportsFullTextSearch indicates if the database supports full-text search
+	SupportsFullTextSearch() bool
+
+	// GetFullTextSearchQuery returns the full-text search query
+	// PostgreSQL: field @@ to_tsquery('query')
+	// MySQL: MATCH(field) AGAINST('query' IN BOOLEAN MODE)
+	GetFullTextSearchQuery(field string, query string) string
+
+	// SupportsJSON indicates if the database supports JSON fields
+	SupportsJSON() bool
+
+	// GetJSONContainsQuery returns query to check if JSON contains value
+	// PostgreSQL: field @> 'value'::jsonb
+	// MySQL: JSON_CONTAINS(field, 'value')
+	GetJSONContainsQuery(field string, value string) string
+
+	// GetLimitOffsetSyntax returns the LIMIT/OFFSET syntax
+	// PostgreSQL: LIMIT n OFFSET m, MySQL: LIMIT m, n (or LIMIT n OFFSET m)
+	GetLimitOffsetSyntax(limit, offset int) string
+
+	// SupportsReturning indicates if the database supports RETURNING in INSERT/UPDATE
+	// PostgreSQL: true, MySQL: false, SQLite: false
+	SupportsReturning() bool
+}
+

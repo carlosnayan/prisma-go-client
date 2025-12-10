@@ -1,0 +1,9 @@
+{{if or (gt (len .StdlibImports) 0) (gt (len .ThirdPartyImports) 0)}}import (
+{{range .StdlibImports}}	{{printf "%q" .}}
+{{end}}{{if and (gt (len .StdlibImports) 0) (gt (len .ThirdPartyImports) 0)}}
+
+{{end}}{{range .ThirdPartyImports}}	{{printf "%q" .}}
+{{end}})
+
+{{end}}
+

@@ -1,0 +1,30 @@
+// Float helper functions for FloatFilter
+
+func Float(value float64) *inputs.FloatFilter {
+	return &inputs.FloatFilter{Equals: &value}
+}
+
+func FloatGt(value float64) *inputs.FloatFilter {
+	return &inputs.FloatFilter{Gt: &value}
+}
+
+func FloatGte(value float64) *inputs.FloatFilter {
+	return &inputs.FloatFilter{Gte: &value}
+}
+
+func FloatLt(value float64) *inputs.FloatFilter {
+	return &inputs.FloatFilter{Lt: &value}
+}
+
+func FloatLte(value float64) *inputs.FloatFilter {
+	return &inputs.FloatFilter{Lte: &value}
+}
+
+func FloatIn(values ...float64) *inputs.FloatFilter {
+	return &inputs.FloatFilter{In: values}
+}
+
+func FloatNotIn(values ...float64) *inputs.FloatFilter {
+	return &inputs.FloatFilter{NotIn: values}
+}
+

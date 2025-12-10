@@ -1,0 +1,5 @@
+// {{.PascalName}}Select represents field selection for {{.ModelName}}
+type {{.PascalName}}Select struct {
+{{range .SelectFields}}	{{.FieldName}} bool `json:"{{.JSONTag}},omitempty"`
+{{end}}}
+

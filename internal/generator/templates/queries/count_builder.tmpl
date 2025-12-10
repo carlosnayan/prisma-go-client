@@ -1,0 +1,27 @@
+// Count returns a builder for counting {{.PascalName}} records (Prisma-style)
+// Example: count, err := q.Count().Where(inputs.{{.PascalName}}WhereInput{...}).Exec(ctx)
+func (q *{{.PascalName}}Query) Count() *{{.PascalName}}CountBuilder {
+	return &{{.PascalName}}CountBuilder{query: q}
+}
+
+// {{.PascalName}}CountBuilder is a builder for counting {{.PascalName}} records
+type {{.PascalName}}CountBuilder struct {
+	query      *{{.PascalName}}Query
+	whereInput *inputs.{{.PascalName}}WhereInput
+}
+
+// Where sets the where conditions
+func (b *{{.PascalName}}CountBuilder) Where(where inputs.{{.PascalName}}WhereInput) *{{.PascalName}}CountBuilder {
+	b.whereInput = &where
+	return b
+}
+
+// Exec executes the count operation
+func (b *{{.PascalName}}CountBuilder) Exec(ctx context.Context) (int64, error) {
+	if b.whereInput != nil {
+		whereMap := Convert{{.PascalName}}WhereInputToWhere(*b.whereInput)
+		b.query.Where(whereMap)
+	}
+	return b.query.Query.Count(ctx)
+}
+

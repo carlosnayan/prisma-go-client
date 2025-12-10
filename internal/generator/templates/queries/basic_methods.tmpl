@@ -1,0 +1,29 @@
+// First finds the first record
+// Examples:
+//   q.Where("email = ?", "user@example.com").First(ctx, &user)
+//   q.Where(builder.Where{"id": id}).First(ctx, &user)
+func (q *{{.PascalName}}Query) First(ctx context.Context, dest *models.{{.PascalName}}) error {
+	return q.Query.First(ctx, dest)
+}
+
+// Find finds all records
+// Examples:
+//   q.Where("active = ?", true).Order("created_at DESC").Take(10).Find(ctx, &users)
+//   q.Where(builder.Where{"active": true}).Find(ctx, &users)
+func (q *{{.PascalName}}Query) Find(ctx context.Context, dest *[]models.{{.PascalName}}) error {
+	return q.Query.Find(ctx, dest)
+}
+
+// Save saves a record (create or update)
+// Example: q.Save(ctx, &user)
+func (q *{{.PascalName}}Query) Save(ctx context.Context, value *models.{{.PascalName}}) error {
+	return q.Query.Save(ctx, value)
+}
+
+// Updates updates multiple columns
+// Example: q.Where("id = ?", 1).Updates(ctx, map[string]interface{}{"name": "New", "age": 30})
+func (q *{{.PascalName}}Query) Updates(ctx context.Context, values map[string]interface{}) error {
+	return q.Query.Updates(ctx, values)
+}
+
+

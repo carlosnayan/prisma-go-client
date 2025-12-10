@@ -1,0 +1,220 @@
+// First executes the query and returns the first result
+func (q *Query) First(ctx context.Context, dest interface{}) error {
+	ctx, cancel := WithQueryTimeout(ctx)
+	defer cancel()
+
+	processStart := time.Now()
+	query, args := q.buildSelectQuery(true)
+
+	queryStart := time.Now()
+	row := q.db.QueryRow(ctx, query, args...)
+
+	var err error
+	if q.modelType != nil {
+		err = q.scanRowIntoModel(row, dest)
+	} else {
+		err = row.Scan(dest)
+	}
+	queryEnd := time.Now()
+	queryDuration := queryEnd.Sub(queryStart)
+
+	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
+
+	if err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("SELECT query failed: %v", err)
+		}
+	}
+
+	return err
+}
+
+// Find executes the query and returns all results
+func (q *Query) Find(ctx context.Context, dest interface{}) error {
+	ctx, cancel := WithQueryTimeout(ctx)
+	defer cancel()
+
+	processStart := time.Now()
+	query, args := q.buildSelectQuery(false)
+
+	queryStart := time.Now()
+	rows, err := q.db.Query(ctx, query, args...)
+	queryEnd := time.Now()
+	queryDuration := queryEnd.Sub(queryStart)
+
+	if err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("SELECT query failed: %v", err)
+		}
+		return err
+	}
+	defer rows.Close()
+
+	if q.modelType != nil {
+		err = q.scanRowsIntoModel(rows, dest)
+	} else {
+		err = q.scanRowsDirect(rows, dest)
+	}
+
+	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
+
+	if err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("SELECT query failed during scan: %v", err)
+		}
+	}
+
+	return err
+}
+
+// FindFirst is an alias for First
+func (q *Query) FindFirst(ctx context.Context, dest interface{}) error {
+	return q.First(ctx, dest)
+}
+
+// FindMany is an alias for Find
+func (q *Query) FindMany(ctx context.Context, dest interface{}) error {
+	return q.Find(ctx, dest)
+}
+
+// Count executes COUNT(*)
+func (q *Query) Count(ctx context.Context) (int64, error) {
+	processStart := time.Now()
+	query, args := q.buildCountQuery()
+
+	queryStart := time.Now()
+	row := q.db.QueryRow(ctx, query, args...)
+	var count int64
+	err := row.Scan(&count)
+	queryEnd := time.Now()
+	queryDuration := queryEnd.Sub(queryStart)
+
+	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
+
+	if err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("COUNT query failed: %v", err)
+		}
+	}
+	return count, err
+}
+
+// Create inserts a new record
+func (q *Query) Create(ctx context.Context, value interface{}) error {
+	ctx, cancel := WithQueryTimeout(ctx)
+	defer cancel()
+
+	processStart := time.Now()
+	query, args := q.buildInsertQuery(value)
+
+	queryStart := time.Now()
+	_, err := q.db.Exec(ctx, query, args...)
+	queryEnd := time.Now()
+	queryDuration := queryEnd.Sub(queryStart)
+
+	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
+
+	if err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("INSERT query failed: %v", err)
+		}
+	}
+	return SanitizeError(err)
+}
+
+// Save updates or creates a record (upsert)
+func (q *Query) Save(ctx context.Context, value interface{}) error {
+	ctx, cancel := WithQueryTimeout(ctx)
+	defer cancel()
+
+	if q.primaryKey == "" {
+		return q.Create(ctx, value)
+	}
+
+	processStart := time.Now()
+	query, args := q.buildUpsertQuery(value)
+
+	queryStart := time.Now()
+	_, err := q.db.Exec(ctx, query, args...)
+	queryEnd := time.Now()
+	queryDuration := queryEnd.Sub(queryStart)
+
+	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
+
+	if err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("UPSERT query failed: %v", err)
+		}
+	}
+	return SanitizeError(err)
+}
+
+// Update updates records
+func (q *Query) Update(ctx context.Context, column string, value interface{}) error {
+	ctx, cancel := WithQueryTimeout(ctx)
+	defer cancel()
+
+	processStart := time.Now()
+	query, args := q.buildUpdateQuery(column, value)
+
+	queryStart := time.Now()
+	_, err := q.db.Exec(ctx, query, args...)
+	queryEnd := time.Now()
+	queryDuration := queryEnd.Sub(queryStart)
+
+	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
+
+	if err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("UPDATE query failed: %v", err)
+		}
+	}
+	return SanitizeError(err)
+}
+
+// Updates updates multiple columns
+func (q *Query) Updates(ctx context.Context, values map[string]interface{}) error {
+	ctx, cancel := WithQueryTimeout(ctx)
+	defer cancel()
+
+	processStart := time.Now()
+	query, args := q.buildUpdatesQuery(values)
+
+	queryStart := time.Now()
+	_, err := q.db.Exec(ctx, query, args...)
+	queryEnd := time.Now()
+	queryDuration := queryEnd.Sub(queryStart)
+
+	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
+
+	if err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("UPDATE query failed: %v", err)
+		}
+	}
+	return SanitizeError(err)
+}
+
+// Delete removes records
+func (q *Query) Delete(ctx context.Context, value interface{}) error {
+	ctx, cancel := WithQueryTimeout(ctx)
+	defer cancel()
+
+	processStart := time.Now()
+	query, args := q.buildDeleteQuery()
+
+	queryStart := time.Now()
+	_, err := q.db.Exec(ctx, query, args...)
+	queryEnd := time.Now()
+	queryDuration := queryEnd.Sub(queryStart)
+
+	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
+
+	if err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("DELETE query failed: %v", err)
+		}
+	}
+	return SanitizeError(err)
+}
+

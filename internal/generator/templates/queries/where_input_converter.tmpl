@@ -1,0 +1,269 @@
+// Convert{{.PascalName}}WhereInputToWhere converts WhereInput to builder.Where
+func Convert{{.PascalName}}WhereInputToWhere(where inputs.{{.PascalName}}WhereInput) builder.Where {
+	result := builder.Where{}
+
+{{range .Fields}}	if where.{{.FieldName}} != nil {
+		filter := where.{{.FieldName}}
+		{{- if eq .FilterType "StringFilter"}}
+		if filter.Contains != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.Contains(*filter.Contains)
+		}
+		if filter.StartsWith != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.StartsWith(*filter.StartsWith)
+		}
+		if filter.EndsWith != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.EndsWith(*filter.EndsWith)
+		}
+		if filter.ContainsInsensitive != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.ContainsInsensitive(*filter.ContainsInsensitive)
+		}
+		if filter.Equals != nil {
+			result[{{printf "%q" .DBFieldName}}] = *filter.Equals
+		}
+		if filter.NotEquals != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.NotEquals(*filter.NotEquals)
+		}
+		if len(filter.In) > 0 {
+			values := make([]interface{}, len(filter.In))
+			for i, v := range filter.In {
+				values[i] = v
+			}
+			result[{{printf "%q" .DBFieldName}}] = builder.In(values...)
+		}
+		if len(filter.NotIn) > 0 {
+			values := make([]interface{}, len(filter.NotIn))
+			for i, v := range filter.NotIn {
+				values[i] = v
+			}
+			result[{{printf "%q" .DBFieldName}}] = builder.NotIn(values...)
+		}
+		if filter.IsNull != nil && *filter.IsNull {
+			result[{{printf "%q" .DBFieldName}}] = builder.IsNull()
+		}
+		if filter.IsNotNull != nil && *filter.IsNotNull {
+			result[{{printf "%q" .DBFieldName}}] = builder.IsNotNull()
+		}
+		{{- else if eq .FilterType "IntFilter"}}
+		if filter.Equals != nil {
+			result[{{printf "%q" .DBFieldName}}] = *filter.Equals
+		}
+		if filter.NotEquals != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.NotEquals(*filter.NotEquals)
+		}
+		if filter.Gt != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.Gt(*filter.Gt)
+		}
+		if filter.Gte != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.Gte(*filter.Gte)
+		}
+		if filter.Lt != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.Lt(*filter.Lt)
+		}
+		if filter.Lte != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.Lte(*filter.Lte)
+		}
+		if len(filter.In) > 0 {
+			values := make([]interface{}, len(filter.In))
+			for i, v := range filter.In {
+				values[i] = v
+			}
+			result[{{printf "%q" .DBFieldName}}] = builder.In(values...)
+		}
+		if len(filter.NotIn) > 0 {
+			values := make([]interface{}, len(filter.NotIn))
+			for i, v := range filter.NotIn {
+				values[i] = v
+			}
+			result[{{printf "%q" .DBFieldName}}] = builder.NotIn(values...)
+		}
+		if filter.IsNull != nil && *filter.IsNull {
+			result[{{printf "%q" .DBFieldName}}] = builder.IsNull()
+		}
+		if filter.IsNotNull != nil && *filter.IsNotNull {
+			result[{{printf "%q" .DBFieldName}}] = builder.IsNotNull()
+		}
+		{{- else if eq .FilterType "Int64Filter"}}
+		if filter.Equals != nil {
+			result[{{printf "%q" .DBFieldName}}] = *filter.Equals
+		}
+		if filter.NotEquals != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.NotEquals(*filter.NotEquals)
+		}
+		if filter.Gt != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.Gt(*filter.Gt)
+		}
+		if filter.Gte != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.Gte(*filter.Gte)
+		}
+		if filter.Lt != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.Lt(*filter.Lt)
+		}
+		if filter.Lte != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.Lte(*filter.Lte)
+		}
+		if len(filter.In) > 0 {
+			values := make([]interface{}, len(filter.In))
+			for i, v := range filter.In {
+				values[i] = v
+			}
+			result[{{printf "%q" .DBFieldName}}] = builder.In(values...)
+		}
+		if len(filter.NotIn) > 0 {
+			values := make([]interface{}, len(filter.NotIn))
+			for i, v := range filter.NotIn {
+				values[i] = v
+			}
+			result[{{printf "%q" .DBFieldName}}] = builder.NotIn(values...)
+		}
+		if filter.IsNull != nil && *filter.IsNull {
+			result[{{printf "%q" .DBFieldName}}] = builder.IsNull()
+		}
+		if filter.IsNotNull != nil && *filter.IsNotNull {
+			result[{{printf "%q" .DBFieldName}}] = builder.IsNotNull()
+		}
+		{{- else if eq .FilterType "FloatFilter"}}
+		if filter.Equals != nil {
+			result[{{printf "%q" .DBFieldName}}] = *filter.Equals
+		}
+		if filter.NotEquals != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.NotEquals(*filter.NotEquals)
+		}
+		if filter.Gt != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.Gt(*filter.Gt)
+		}
+		if filter.Gte != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.Gte(*filter.Gte)
+		}
+		if filter.Lt != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.Lt(*filter.Lt)
+		}
+		if filter.Lte != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.Lte(*filter.Lte)
+		}
+		if len(filter.In) > 0 {
+			values := make([]interface{}, len(filter.In))
+			for i, v := range filter.In {
+				values[i] = v
+			}
+			result[{{printf "%q" .DBFieldName}}] = builder.In(values...)
+		}
+		if len(filter.NotIn) > 0 {
+			values := make([]interface{}, len(filter.NotIn))
+			for i, v := range filter.NotIn {
+				values[i] = v
+			}
+			result[{{printf "%q" .DBFieldName}}] = builder.NotIn(values...)
+		}
+		if filter.IsNull != nil && *filter.IsNull {
+			result[{{printf "%q" .DBFieldName}}] = builder.IsNull()
+		}
+		if filter.IsNotNull != nil && *filter.IsNotNull {
+			result[{{printf "%q" .DBFieldName}}] = builder.IsNotNull()
+		}
+		{{- else if eq .FilterType "BooleanFilter"}}
+		if filter.Equals != nil {
+			result[{{printf "%q" .DBFieldName}}] = *filter.Equals
+		}
+		if filter.NotEquals != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.NotEquals(*filter.NotEquals)
+		}
+		if filter.IsNull != nil && *filter.IsNull {
+			result[{{printf "%q" .DBFieldName}}] = builder.IsNull()
+		}
+		if filter.IsNotNull != nil && *filter.IsNotNull {
+			result[{{printf "%q" .DBFieldName}}] = builder.IsNotNull()
+		}
+		{{- else if eq .FilterType "DateTimeFilter"}}
+		if filter.Equals != nil {
+			result[{{printf "%q" .DBFieldName}}] = *filter.Equals
+		}
+		if filter.NotEquals != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.NotEquals(*filter.NotEquals)
+		}
+		if filter.Gt != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.Gt(*filter.Gt)
+		}
+		if filter.Gte != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.Gte(*filter.Gte)
+		}
+		if filter.Lt != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.Lt(*filter.Lt)
+		}
+		if filter.Lte != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.Lte(*filter.Lte)
+		}
+		if filter.IsNull != nil && *filter.IsNull {
+			result[{{printf "%q" .DBFieldName}}] = builder.IsNull()
+		}
+		if filter.IsNotNull != nil && *filter.IsNotNull {
+			result[{{printf "%q" .DBFieldName}}] = builder.IsNotNull()
+		}
+		{{- else if eq .FilterType "JsonFilter"}}
+		if filter.Equals != nil {
+			result[{{printf "%q" .DBFieldName}}] = *filter.Equals
+		}
+		if filter.NotEquals != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.NotEquals(*filter.NotEquals)
+		}
+		if filter.IsNull != nil && *filter.IsNull {
+			result[{{printf "%q" .DBFieldName}}] = builder.IsNull()
+		}
+		if filter.IsNotNull != nil && *filter.IsNotNull {
+			result[{{printf "%q" .DBFieldName}}] = builder.IsNotNull()
+		}
+		{{- else if eq .FilterType "BytesFilter"}}
+		if filter.Equals != nil {
+			result[{{printf "%q" .DBFieldName}}] = *filter.Equals
+		}
+		if filter.NotEquals != nil {
+			result[{{printf "%q" .DBFieldName}}] = builder.NotEquals(*filter.NotEquals)
+		}
+		if filter.IsNull != nil && *filter.IsNull {
+			result[{{printf "%q" .DBFieldName}}] = builder.IsNull()
+		}
+		if filter.IsNotNull != nil && *filter.IsNotNull {
+			result[{{printf "%q" .DBFieldName}}] = builder.IsNotNull()
+		}
+		{{- else}}
+		if filter.Equals != nil {
+			result[{{printf "%q" .DBFieldName}}] = *filter.Equals
+		}
+		{{- end}}
+	}
+
+{{end}}	// Handle OR conditions
+	if len(where.Or) > 0 {
+		orConditions := []builder.Where{}
+		for _, orWhere := range where.Or {
+			orConditions = append(orConditions, Convert{{.PascalName}}WhereInputToWhere(orWhere))
+		}
+		for _, orCond := range orConditions {
+			for k, v := range orCond {
+				result[k] = v
+			}
+		}
+	}
+
+	// Handle AND conditions
+	if len(where.And) > 0 {
+		for _, andWhere := range where.And {
+			andMap := Convert{{.PascalName}}WhereInputToWhere(andWhere)
+			for k, v := range andMap {
+				result[k] = v
+			}
+		}
+	}
+
+	// Handle NOT condition
+	if where.Not != nil {
+		notMap := Convert{{.PascalName}}WhereInputToWhere(*where.Not)
+		// For now, combine with AND
+		for k, v := range notMap {
+			result[k] = v
+		}
+	}
+
+	return result
+}
+
+

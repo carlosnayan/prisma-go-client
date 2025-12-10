@@ -1,0 +1,17 @@
+// GetDialect returns the appropriate dialect for the provider
+func GetDialect(provider string) Dialect {
+	provider = strings.ToLower(provider)
+
+	switch provider {
+	case "postgresql", "postgres":
+		return &PostgreSQLDialect{}
+	case "mysql", "mariadb":
+		return &MySQLDialect{}
+	case "sqlite":
+		return &SQLiteDialect{}
+	default:
+		// Default to PostgreSQL
+		return &PostgreSQLDialect{}
+	}
+}
+

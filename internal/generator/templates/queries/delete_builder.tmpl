@@ -1,0 +1,28 @@
+// Delete returns a builder for deleting {{.PascalName}} records (Prisma-style)
+// Example: err := q.Delete().Where(inputs.{{.PascalName}}WhereInput{...}).Exec(ctx)
+func (q *{{.PascalName}}Query) Delete() *{{.PascalName}}DeleteBuilder {
+	return &{{.PascalName}}DeleteBuilder{query: q}
+}
+
+// {{.PascalName}}DeleteBuilder is a builder for deleting {{.PascalName}} records
+type {{.PascalName}}DeleteBuilder struct {
+	query      *{{.PascalName}}Query
+	whereInput *inputs.{{.PascalName}}WhereInput
+}
+
+// Where sets the where conditions
+func (b *{{.PascalName}}DeleteBuilder) Where(where inputs.{{.PascalName}}WhereInput) *{{.PascalName}}DeleteBuilder {
+	b.whereInput = &where
+	return b
+}
+
+// Exec executes the delete operation
+func (b *{{.PascalName}}DeleteBuilder) Exec(ctx context.Context) error {
+	if b.whereInput == nil {
+		return fmt.Errorf("where condition is required for delete")
+	}
+	whereMap := Convert{{.PascalName}}WhereInputToWhere(*b.whereInput)
+	b.query.Where(whereMap)
+	return b.query.Query.Delete(ctx, &models.{{.PascalName}}{})
+}
+

@@ -1,0 +1,87 @@
+// FindMany returns a builder for finding multiple {{.PascalName}} records (Prisma-style)
+// Example: tenants, err := q.FindMany().Where(inputs.{{.PascalName}}WhereInput{...}).Exec(ctx)
+func (q *{{.PascalName}}Query) FindMany() *{{.PascalName}}FindManyBuilder {
+	return &{{.PascalName}}FindManyBuilder{query: q}
+}
+
+// {{.PascalName}}FindManyBuilder is a builder for finding multiple {{.PascalName}} records
+type {{.PascalName}}FindManyBuilder struct {
+	query       *{{.PascalName}}Query
+	whereInput  *inputs.{{.PascalName}}WhereInput
+	selectFields *inputs.{{.PascalName}}Select
+}
+
+// Where sets the where conditions
+func (b *{{.PascalName}}FindManyBuilder) Where(where inputs.{{.PascalName}}WhereInput) *{{.PascalName}}FindManyBuilder {
+	b.whereInput = &where
+	return b
+}
+
+// Select sets which fields to return
+func (b *{{.PascalName}}FindManyBuilder) Select(selectFields inputs.{{.PascalName}}Select) *{{.PascalName}}FindManyBuilder {
+	b.selectFields = &selectFields
+	return b
+}
+
+// Exec executes the find many operation and returns the default model
+// Returns ([]models.{{.PascalName}}, error)
+// For custom types, use ExecTyped[T]() instead
+func (b *{{.PascalName}}FindManyBuilder) Exec(ctx context.Context) ([]models.{{.PascalName}}, error) {
+	if b.whereInput != nil {
+		apply{{.PascalName}}WhereInput(b.query.Query, *b.whereInput)
+	}
+	if b.selectFields != nil {
+		var selectedFields []string
+{{range .SelectFields}}		if b.selectFields.{{.FieldName}} {
+			selectedFields = append(selectedFields, {{printf "%q" .ColumnName}})
+		}
+{{end}}		if len(selectedFields) > 0 {
+			b.query.Select(selectedFields...)
+		}
+	}
+	var results []models.{{.PascalName}}
+	err := b.query.Find(ctx, &results)
+	return results, err
+}
+
+// ExecTyped executes the find many operation and scans the results into the provided slice
+// dest must be a pointer to a slice of structs with json or db tags for field mapping
+// Example: var dtos []TenantsDTO; err := builder.ExecTyped(ctx, &dtos)
+func (b *{{.PascalName}}FindManyBuilder) ExecTyped(ctx context.Context, dest interface{}) error {
+	if b.whereInput != nil {
+		whereMap := Convert{{.PascalName}}WhereInputToWhere(*b.whereInput)
+		b.query.Where(whereMap)
+	}
+	if b.selectFields != nil {
+		var selectedFields []string
+{{range .SelectFields}}		if b.selectFields.{{.FieldName}} {
+			selectedFields = append(selectedFields, {{printf "%q" .ColumnName}})
+		}
+{{end}}		if len(selectedFields) > 0 {
+			b.query.Select(selectedFields...)
+		}
+	}
+	// Validate dest is a pointer to slice
+	destVal := reflect.ValueOf(dest)
+	if destVal.Kind() != reflect.Ptr {
+		return fmt.Errorf("ExecTyped: dest must be a pointer to slice (e.g., *[]TenantsDTO), got %v", destVal.Kind())
+	}
+	sliceVal := destVal.Elem()
+	if sliceVal.Kind() != reflect.Slice {
+		return fmt.Errorf("ExecTyped: dest must be a pointer to slice, got %v", sliceVal.Kind())
+	}
+	elemType := sliceVal.Type().Elem()
+	if elemType.Kind() == reflect.Ptr {
+		elemType = elemType.Elem()
+	}
+	if elemType.Kind() != reflect.Struct {
+		return fmt.Errorf("ExecTyped: dest must be a slice of structs, got %v", elemType.Kind())
+	}
+	// Scan into dest
+	err := b.query.ScanFind(ctx, dest, elemType)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+

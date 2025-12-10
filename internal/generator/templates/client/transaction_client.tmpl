@@ -1,0 +1,15 @@
+// TransactionClient is a client that executes operations within a transaction
+// All operations executed through TransactionClient are part of the same transaction
+type TransactionClient struct {
+	tx  *builder.Transaction
+	raw *raw.Executor
+{{- range .Models}}
+	{{.PascalName}} *queries.{{.PascalName}}Query
+{{- end}}
+}
+
+// Raw returns the raw SQL executor for the transaction
+func (tc *TransactionClient) Raw() *raw.Executor {
+	return tc.raw
+}
+

@@ -1,0 +1,36 @@
+// Query represents a query builder with fluent (chainable) API
+type Query struct {
+	db             DB
+	table          string
+	columns        []string
+	primaryKey     string
+	modelType      reflect.Type
+	logger         *Logger
+	dialect        Dialect
+
+	// Query state
+	whereConditions []whereCondition
+	orderBy         []OrderBy
+	take            *int
+	skip            *int
+	selectFields    []string
+	groupBy         []string
+	having          []whereCondition
+	joins           []join
+}
+
+// whereCondition represents a WHERE condition
+type whereCondition struct {
+	query string
+	args  []interface{}
+	or    bool
+}
+
+// join represents a JOIN
+type join struct {
+	joinType string
+	table    string
+	on       string
+	args     []interface{}
+}
+

@@ -1,0 +1,17 @@
+// NormalizeTSQuery normalizes a query for PostgreSQL to_tsquery
+func NormalizeTSQuery(query string) string {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return ""
+	}
+
+	words := strings.Fields(query)
+
+	wordsWithPrefix := make([]string, len(words))
+	for i, word := range words {
+		wordsWithPrefix[i] = word + ":*"
+	}
+
+	return strings.Join(wordsWithPrefix, " & ")
+}
+

@@ -1,0 +1,94 @@
+import (
+	"fmt"
+	"os"
+	"strings"
+)
+
+// ProductionMode indicates if we are in production mode (hides internal details)
+var ProductionMode = os.Getenv("ENV") == "production" || os.Getenv("ENV") == "prod"
+
+// SanitizeError sanitizes an error message to not expose internal information
+func SanitizeError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	if !ProductionMode {
+		// In development, return full error
+		return err
+	}
+
+	errMsg := err.Error()
+
+	// Remove table and column names
+	errMsg = sanitizeTableNames(errMsg)
+	errMsg = sanitizeColumnNames(errMsg)
+	errMsg = sanitizeSQLDetails(errMsg)
+
+	// Return sanitized error
+	return fmt.Errorf("%s", errMsg)
+}
+
+// sanitizeTableNames removes table names from error messages
+func sanitizeTableNames(msg string) string {
+	// Common patterns that may contain table names
+	patterns := []string{
+		"table",
+		"relation",
+		"FROM",
+		"INTO",
+		"UPDATE",
+		"DELETE FROM",
+	}
+
+	for _, pattern := range patterns {
+		if strings.Contains(strings.ToLower(msg), strings.ToLower(pattern)) {
+			return "database operation failed"
+		}
+	}
+
+	return msg
+}
+
+// sanitizeColumnNames removes column names from error messages
+func sanitizeColumnNames(msg string) string {
+	patterns := []string{
+		"column",
+		"field",
+		"SET",
+		"WHERE",
+	}
+
+	for _, pattern := range patterns {
+		if strings.Contains(strings.ToLower(msg), strings.ToLower(pattern)) {
+			return "database operation failed"
+		}
+	}
+
+	return msg
+}
+
+// sanitizeSQLDetails removes SQL details from error messages
+func sanitizeSQLDetails(msg string) string {
+	if strings.Contains(strings.ToLower(msg), "sql") ||
+		strings.Contains(strings.ToLower(msg), "syntax") ||
+		strings.Contains(strings.ToLower(msg), "constraint") {
+		return "database operation failed"
+	}
+
+	return msg
+}
+
+// WrapError wraps an error with a generic message in production
+func WrapError(err error, genericMsg string) error {
+	if err == nil {
+		return nil
+	}
+
+	if ProductionMode {
+		return fmt.Errorf("%s", genericMsg)
+	}
+
+	return fmt.Errorf("%s: %w", genericMsg, err)
+}
+

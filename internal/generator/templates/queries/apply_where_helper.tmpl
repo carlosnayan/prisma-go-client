@@ -1,0 +1,75 @@
+// apply{{.PascalName}}WhereInput applies WhereInput to a query builder, handling OR conditions correctly
+func apply{{.PascalName}}WhereInput(query *builder.Query, where inputs.{{.PascalName}}WhereInput) {
+	// Handle OR conditions first
+	if len(where.Or) > 0 {
+		// Apply first OR condition as regular WHERE
+		firstOrMap := Convert{{.PascalName}}WhereInputToWhere(where.Or[0])
+		query.Where(firstOrMap)
+		// Apply remaining OR conditions using Or()
+		for i := 1; i < len(where.Or); i++ {
+			orMap := Convert{{.PascalName}}WhereInputToWhere(where.Or[i])
+			// Build OR conditions from the map
+			for field, value := range orMap {
+				if op, ok := value.(builder.WhereOperator); ok {
+					quotedField := query.GetDialect().QuoteIdentifier(field)
+					switch op.GetOp() {
+					case ">":
+						query.Or(fmt.Sprintf("%s > ?", quotedField), op.GetValue())
+					case ">=":
+						query.Or(fmt.Sprintf("%s >= ?", quotedField), op.GetValue())
+					case "<":
+						query.Or(fmt.Sprintf("%s < ?", quotedField), op.GetValue())
+					case "<=":
+						query.Or(fmt.Sprintf("%s <= ?", quotedField), op.GetValue())
+					case "=":
+						query.Or(fmt.Sprintf("%s = ?", quotedField), op.GetValue())
+					case "!=":
+						query.Or(fmt.Sprintf("%s != ?", quotedField), op.GetValue())
+					case "LIKE":
+						query.Or(fmt.Sprintf("%s LIKE ?", quotedField), op.GetValue())
+					case "ILIKE":
+						query.Or(fmt.Sprintf("%s ILIKE ?", quotedField), op.GetValue())
+					case "IN":
+						if values, ok := op.GetValue().([]interface{}); ok {
+							placeholders := make([]string, len(values))
+							for j := range placeholders {
+								placeholders[j] = "?"
+							}
+							query.Or(fmt.Sprintf("%s IN (%s)", quotedField, strings.Join(placeholders, ", ")), values...)
+						}
+					case "NOT IN":
+						if values, ok := op.GetValue().([]interface{}); ok {
+							placeholders := make([]string, len(values))
+							for j := range placeholders {
+								placeholders[j] = "?"
+							}
+							query.Or(fmt.Sprintf("%s NOT IN (%s)", quotedField, strings.Join(placeholders, ", ")), values...)
+						}
+					case "IS NULL":
+						query.Or(fmt.Sprintf("%s IS NULL", quotedField))
+					case "IS NOT NULL":
+						query.Or(fmt.Sprintf("%s IS NOT NULL", quotedField))
+					default:
+						query.Or(fmt.Sprintf("%s = ?", quotedField), op.GetValue())
+					}
+				} else if value == nil {
+					quotedField := query.GetDialect().QuoteIdentifier(field)
+					query.Or(fmt.Sprintf("%s IS NULL", quotedField))
+				} else {
+					quotedField := query.GetDialect().QuoteIdentifier(field)
+					query.Or(fmt.Sprintf("%s = ?", quotedField), value)
+				}
+			}
+		}
+	}
+	// Handle regular conditions (non-OR)
+	// Create a copy without Or field to avoid recursion
+	regularWhere := where
+	regularWhere.Or = nil
+	regularMap := Convert{{.PascalName}}WhereInputToWhere(regularWhere)
+	if len(regularMap) > 0 {
+		query.Where(regularMap)
+	}
+}
+
+

@@ -1,0 +1,78 @@
+// NewQuery creates a new query builder with fluent API
+func NewQuery(db DBTX, table string, columns []string) *Query {
+	return &Query{
+		db:              db,
+		table:           table,
+		columns:         columns,
+		dialect:         GetDialect("{{.Provider}}"),
+		logger:          GetDefaultLogger(),
+		whereConditions: []whereCondition{},
+		orderBy:         []OrderBy{},
+		joins:           []join{},
+		selectFields:    []string{},
+		groupBy:         []string{},
+		having:          []whereCondition{},
+	}
+}
+
+// SetDialect sets the database dialect
+func (q *Query) SetDialect(d Dialect) *Query {
+	q.dialect = d
+	return q
+}
+
+// SetDialectFromProvider sets the dialect from provider name
+func (q *Query) SetDialectFromProvider(provider string) *Query {
+	q.dialect = GetDialect(provider)
+	return q
+}
+
+// SetPrimaryKey sets the primary key
+func (q *Query) SetPrimaryKey(pk string) *Query {
+	q.primaryKey = pk
+	return q
+}
+
+// SetModelType sets the model type for automatic scanning
+func (q *Query) SetModelType(modelType reflect.Type) *Query {
+	q.modelType = modelType
+	return q
+}
+
+// GetDB returns the database connection
+func (q *Query) GetDB() DBTX {
+	return q.db
+}
+
+// GetDialect returns the database dialect
+func (q *Query) GetDialect() Dialect {
+	return q.dialect
+}
+
+// GetTable returns the table name
+func (q *Query) GetTable() string {
+	return q.table
+}
+
+// GetColumns returns the column names
+func (q *Query) GetColumns() []string {
+	return q.columns
+}
+
+// GetPrimaryKey returns the primary key column name
+func (q *Query) GetPrimaryKey() string {
+	return q.primaryKey
+}
+
+// getLogger returns the logger, always getting the current default logger
+// This ensures that if the logger is configured after Query creation, it will use the updated logger
+func (q *Query) getLogger() *Logger {
+	// Always get the current default logger to ensure it's up to date
+	currentLogger := GetDefaultLogger()
+	// Update q.logger if it's different (for efficiency, but always use current)
+	if currentLogger != q.logger {
+		q.logger = currentLogger
+	}
+	return q.logger
+}
+

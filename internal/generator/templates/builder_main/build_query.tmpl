@@ -1,0 +1,150 @@
+// buildQuery constructs the SQL query
+
+func (b *TableQueryBuilder) buildQuery(where Where, opts *QueryOptions, single bool) (string, []interface{}) {
+
+	var parts []string
+
+	var args []interface{}
+
+	argIndex := 1
+
+
+	quotedColumns := make([]string, len(b.columns))
+
+	for i, col := range b.columns {
+
+		quotedColumns[i] = b.dialect.QuoteIdentifier(col)
+
+	}
+
+	columns := strings.Join(quotedColumns, ", ")
+	quotedTable := b.dialect.QuoteIdentifier(b.table)
+
+	parts = append(parts, fmt.Sprintf("SELECT %s FROM %s", columns, quotedTable))
+	if len(where) > 0 {
+
+		whereClause, whereArgs := b.buildWhereFromMap(where, &argIndex)
+
+		if whereClause != "" {
+			parts = append(parts, "WHERE "+whereClause)
+			args = append(args, whereArgs...)
+
+			argIndex += len(whereArgs)
+
+		}
+
+	}
+
+
+	if opts != nil && len(opts.OrderBy) > 0 {
+
+		var orderParts []string
+
+		for _, order := range opts.OrderBy {
+
+			quotedField := b.dialect.QuoteIdentifier(order.Field)
+
+			orderDir := strings.ToUpper(strings.TrimSpace(order.Order))
+
+			if orderDir != "ASC" && orderDir != "DESC" {
+				orderDir = "ASC"
+			}
+
+			orderParts = append(orderParts, fmt.Sprintf("%s %s", quotedField, orderDir))
+		}
+
+		parts = append(parts, "ORDER BY "+strings.Join(orderParts, ", "))
+	}
+
+
+	if !single {
+
+		if opts != nil && (opts.Take != nil || opts.Skip != nil) {
+			limit := 0
+			offset := 0
+			if opts.Take != nil {
+				limit = *opts.Take
+			}
+			if opts.Skip != nil {
+				offset = *opts.Skip
+			}
+			limitOffset := b.dialect.GetLimitOffsetSyntax(limit, offset)
+			if limitOffset != "" {
+				parts = append(parts, limitOffset)
+			}
+		}
+
+	} else {
+
+		parts = append(parts, "LIMIT 1")
+	}
+
+
+	return strings.Join(parts, " "), args
+}
+
+
+// buildWhereFromMap constructs the WHERE clause from a Prisma-style map
+
+func (b *TableQueryBuilder) buildWhereFromMap(where Where, argIndex *int) (string, []interface{}) {
+
+	var parts []string
+
+	var args []interface{}
+
+
+	for field, value := range where {
+
+		quotedField := b.dialect.QuoteIdentifier(field)
+
+		if op, ok := value.(WhereOperator); ok {
+
+			switch op.GetOp() {
+
+			case "IS NULL", "IS NOT NULL":
+				parts = append(parts, fmt.Sprintf("%s %s", quotedField, op.GetOp()))
+			case "IN", "NOT IN":
+				if values, ok := op.GetValue().([]interface{}); ok {
+
+					placeholders := make([]string, len(values))
+
+					for i := range values {
+
+						placeholders[i] = b.dialect.GetPlaceholder(*argIndex)
+
+						args = append(args, values[i])
+
+						(*argIndex)++
+
+					}
+
+					parts = append(parts, fmt.Sprintf("%s %s (%s)", quotedField, op.GetOp(), strings.Join(placeholders, ", ")))
+				}
+
+			default:
+
+				parts = append(parts, fmt.Sprintf("%s %s %s", quotedField, op.GetOp(), b.dialect.GetPlaceholder(*argIndex)))
+				args = append(args, op.GetValue())
+
+				(*argIndex)++
+
+			}
+
+		} else if value == nil {
+
+			parts = append(parts, fmt.Sprintf("%s IS NULL", quotedField))
+		} else {
+
+			parts = append(parts, fmt.Sprintf("%s = %s", quotedField, b.dialect.GetPlaceholder(*argIndex)))
+			args = append(args, value)
+
+			(*argIndex)++
+
+		}
+
+	}
+
+
+	return strings.Join(parts, " AND "), args
+}
+

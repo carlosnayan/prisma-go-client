@@ -1,0 +1,18 @@
+import (
+	"context"
+	{{printf "%q" .BuilderPath}}
+)
+
+// QueryResult represents a query that can be executed
+type QueryResult[T any] struct {
+	query *builder.Query
+}
+
+// Exec executes the query and returns results
+func (r *QueryResult[T]) Exec(ctx context.Context) ([]T, error) {
+	var results []T
+	err := r.query.Find(ctx, &results)
+	return results, err
+}
+
+

@@ -1,0 +1,10 @@
+// NewSQLDriver creates a new driver adapter from a *sql.DB
+// This allows you to use database/sql with the Prisma client without
+// importing internal packages.
+{{- if eq .Provider "postgresql"}}
+// Note: For PostgreSQL, prefer NewPgxPoolDriver for better performance.
+{{- end}}
+func NewSQLDriver(db *sql.DB) builder.DBTX {
+	return &SQLDBAdapter{db: db}
+}
+

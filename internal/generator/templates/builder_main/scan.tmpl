@@ -1,0 +1,274 @@
+// scanRow scans a single row into the model type
+
+func (b *TableQueryBuilder) scanRow(row Row) (interface{}, error) {
+
+	if b.modelType == nil {
+
+		err := fmt.Errorf("modelType not defined")
+		return nil, SanitizeError(err)
+
+	}
+
+
+	modelValue := reflect.New(b.modelType).Elem()
+
+
+	// Build a reverse map: field identifier -> field index
+
+	// This allows us to quickly find fields by their various identifiers
+
+	fieldMap := make(map[string]int)
+
+	
+
+	// First, build a map of all possible field identifiers to field indices
+
+	for i := 0; i < b.modelType.NumField(); i++ {
+
+		field := b.modelType.Field(i)
+
+		jsonTag := field.Tag.Get("json")
+		dbTag := field.Tag.Get("db")
+		// Remove options from json tag (e.g., ",omitempty")
+		if jsonTag != "" && jsonTag != "-" {
+			if idx := strings.Index(jsonTag, ","); idx != -1 {
+				jsonTag = jsonTag[:idx]
+
+			}
+
+		}
+
+
+		// Map all possible identifiers to this field index
+
+		// Priority: dbTag > jsonTag > snake_case field name
+
+		if dbTag != "" {
+			fieldMap[dbTag] = i
+
+		}
+
+		if jsonTag != "" && jsonTag != "-" {
+			fieldMap[jsonTag] = i
+
+		}
+
+		// Also map snake_case field name
+
+		fieldName := toSnakeCase(field.Name)
+
+		if fieldName != "" {
+			fieldMap[fieldName] = i
+
+		}
+
+	}
+
+
+	// Now iterate through columns and find matching fields
+
+	// This ensures all columns are checked and mapped
+
+	columnToField := make(map[string]int)
+
+	for _, col := range b.columns {
+
+		if idx, ok := fieldMap[col]; ok {
+
+			columnToField[col] = idx
+
+		}
+
+		// If column not found in fieldMap, it will not be in columnToField
+
+		// and scanRow will use a dummy variable for it
+
+	}
+
+
+	fields := make([]interface{}, len(b.columns))
+
+	for i, colName := range b.columns {
+
+		if fieldIdx, ok := columnToField[colName]; ok {
+
+			field := modelValue.Field(fieldIdx)
+
+			fields[i] = field.Addr().Interface()
+
+		} else {
+
+			var dummy interface{}
+
+			fields[i] = &dummy
+
+		}
+
+	}
+
+
+	err := row.Scan(fields...)
+
+	if err != nil {
+
+		return nil, err
+
+	}
+
+
+	return modelValue.Interface(), nil
+
+}
+
+
+// scanRows scans multiple rows into a slice of models
+
+func (b *TableQueryBuilder) scanRows(rows Rows) (interface{}, error) {
+
+	if b.modelType == nil {
+
+		err := fmt.Errorf("modelType not defined")
+		return nil, SanitizeError(err)
+
+	}
+
+
+	// Build a reverse map: field identifier -> field index
+
+	// This allows us to quickly find fields by their various identifiers
+
+	fieldMap := make(map[string]int)
+
+	
+
+	// First, build a map of all possible field identifiers to field indices
+
+	for i := 0; i < b.modelType.NumField(); i++ {
+
+		field := b.modelType.Field(i)
+
+		jsonTag := field.Tag.Get("json")
+		dbTag := field.Tag.Get("db")
+		// Remove options from json tag (e.g., \
+		if jsonTag != "" && jsonTag != "-" {
+			if idx := strings.Index(jsonTag, ","); idx != -1 {
+				jsonTag = jsonTag[:idx]
+
+			}
+
+		}
+
+
+		// Map all possible identifiers to this field index
+
+		// Priority: dbTag > jsonTag > snake_case field name
+
+		if dbTag != "" {
+			fieldMap[dbTag] = i
+
+		}
+
+		if jsonTag != "" && jsonTag != "-" {
+			fieldMap[jsonTag] = i
+
+		}
+
+		// Also map snake_case field name
+
+		fieldName := toSnakeCase(field.Name)
+
+		if fieldName != "" {
+			fieldMap[fieldName] = i
+
+		}
+
+	}
+
+
+	// Now iterate through columns and find matching fields
+
+	// This ensures all columns are checked and mapped
+
+	columnToField := make(map[string]int)
+
+	for _, col := range b.columns {
+
+		if idx, ok := fieldMap[col]; ok {
+
+			columnToField[col] = idx
+
+		}
+
+		// If column not found in fieldMap, it will not be in columnToField
+
+		// and scanRows will use a dummy variable for it
+
+	}
+
+
+	sliceType := reflect.SliceOf(b.modelType)
+
+	const initialCapacity = 100
+
+	sliceValue := reflect.MakeSlice(sliceType, 0, initialCapacity)
+
+
+	rowCount := 0
+
+	for rows.Next() {
+
+		if rowCount >= MaxScanRows {
+
+			return nil, fmt.Errorf("too many rows: maximum %d rows allowed", MaxScanRows)
+		}
+
+
+		modelValue := reflect.New(b.modelType).Elem()
+
+
+		fields := make([]interface{}, len(b.columns))
+
+		for i, colName := range b.columns {
+
+			if fieldIdx, ok := columnToField[colName]; ok {
+
+				field := modelValue.Field(fieldIdx)
+
+				fields[i] = field.Addr().Interface()
+
+			} else {
+
+				var dummy interface{}
+
+				fields[i] = &dummy
+
+			}
+
+		}
+
+
+		if err := rows.Scan(fields...); err != nil {
+
+			return nil, err
+
+		}
+
+
+		sliceValue = reflect.Append(sliceValue, modelValue)
+
+		rowCount++
+
+	}
+
+
+	if err := rows.Err(); err != nil {
+
+		return nil, err
+
+	}
+
+
+	return sliceValue.Interface(), nil
+
+}
+

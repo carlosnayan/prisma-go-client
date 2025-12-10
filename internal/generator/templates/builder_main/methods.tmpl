@@ -1,0 +1,523 @@
+// FindFirst finds the first record matching the where conditions
+
+func (b *TableQueryBuilder) FindFirst(ctx context.Context, where Where) (interface{}, error) {
+
+	ctx, cancel := WithQueryTimeout(ctx)
+
+	defer cancel()
+
+
+	query, args := b.buildQuery(where, nil, true)
+
+	row := b.db.QueryRow(ctx, query, args...)
+
+
+	if b.modelType == nil {
+
+		return row, nil
+
+	}
+
+
+	return b.scanRow(row)
+
+}
+
+
+// FindMany finds multiple records matching the query options
+
+func (b *TableQueryBuilder) FindMany(ctx context.Context, opts QueryOptions) (interface{}, error) {
+
+	ctx, cancel := WithQueryTimeout(ctx)
+
+	defer cancel()
+
+
+	query, args := b.buildQuery(opts.Where, &opts, false)
+
+	rows, err := b.db.Query(ctx, query, args...)
+
+	if err != nil {
+
+		return nil, err
+
+	}
+
+	defer rows.Close()
+
+
+	if b.modelType == nil {
+
+		return rows, nil
+
+	}
+
+
+	return b.scanRows(rows)
+
+}
+
+
+// Count counts records matching the where conditions
+
+func (b *TableQueryBuilder) Count(ctx context.Context, where Where) (int, error) {
+
+	ctx, cancel := WithQueryTimeout(ctx)
+
+	defer cancel()
+
+
+	var parts []string
+
+	var args []interface{}
+
+	argIndex := 1
+
+
+	quotedTable := b.dialect.QuoteIdentifier(b.table)
+
+	parts = append(parts, fmt.Sprintf("SELECT COUNT(*) FROM %s", quotedTable))
+	if len(where) > 0 {
+
+		whereClause, whereArgs := b.buildWhereFromMap(where, &argIndex)
+
+		if whereClause != "" {
+			parts = append(parts, "WHERE "+whereClause)
+			args = append(args, whereArgs...)
+
+		}
+
+	}
+
+
+	query := strings.Join(parts, " ")
+	var count int
+
+	err := b.db.QueryRow(ctx, query, args...).Scan(&count)
+
+	if err != nil {
+
+		return 0, SanitizeError(err)
+
+	}
+
+	return count, nil
+
+}
+
+
+// Create inserts a new record and returns the created model
+
+func (b *TableQueryBuilder) Create(ctx context.Context, data interface{}) (interface{}, error) {
+
+	ctx, cancel := WithQueryTimeout(ctx)
+
+	defer cancel()
+
+
+	val := reflect.ValueOf(data)
+
+	if val.Kind() == reflect.Ptr {
+
+		val = val.Elem()
+
+	}
+
+	if val.Kind() != reflect.Struct {
+
+		return nil, fmt.Errorf("data must be a struct")
+	}
+
+
+	var insertColumns []string
+
+	var values []string
+
+	var args []interface{}
+
+	argIndex := 1
+
+
+	typ := val.Type()
+
+	var primaryKeyValue interface{}
+
+	var primaryKeyCol string
+
+	var primaryKeyType reflect.Kind
+
+	var primaryKeyIsZero bool
+
+
+	for i := 0; i < val.NumField(); i++ {
+
+		field := typ.Field(i)
+
+		fieldVal := val.Field(i)
+
+		// Use db tag if available, otherwise use snake_case of field name
+
+		dbTag := field.Tag.Get("db")
+		fieldName := dbTag
+
+		if fieldName == "" {
+			fieldName = toSnakeCase(field.Name)
+
+		}
+
+
+		if fieldName == b.primaryKey {
+
+			primaryKeyCol = fieldName
+
+			primaryKeyValue = fieldVal.Interface()
+
+			primaryKeyType = fieldVal.Kind()
+
+			primaryKeyIsZero = fieldVal.IsZero()
+
+			continue
+
+		}
+
+
+		if fieldVal.IsZero() {
+
+			continue
+
+		}
+
+
+		insertColumns = append(insertColumns, fieldName)
+
+		values = append(values, b.dialect.GetPlaceholder(argIndex))
+
+		args = append(args, fieldVal.Interface())
+
+		argIndex++
+
+	}
+
+
+	if primaryKeyCol != "" {
+		if !primaryKeyIsZero {
+
+			insertColumns = append(insertColumns, primaryKeyCol)
+
+			values = append(values, b.dialect.GetPlaceholder(argIndex))
+
+			args = append(args, primaryKeyValue)
+
+			argIndex++
+
+		} else if primaryKeyType == reflect.String {
+
+			generatedUUID := {{.UtilsPackageName}}.GenerateUUID()
+
+			insertColumns = append(insertColumns, primaryKeyCol)
+
+			values = append(values, b.dialect.GetPlaceholder(argIndex))
+
+			args = append(args, generatedUUID)
+
+			argIndex++
+
+		}
+
+	}
+
+
+	// returningColumns must contain ONLY columns from the model
+
+	returningColumns := make([]string, len(b.columns))
+
+	copy(returningColumns, b.columns)
+
+
+	quotedTable := b.dialect.QuoteIdentifier(b.table)
+
+	quotedInsertCols := make([]string, len(insertColumns))
+
+	for i, col := range insertColumns {
+
+		quotedInsertCols[i] = b.dialect.QuoteIdentifier(col)
+
+	}
+
+	quotedReturnCols := make([]string, len(returningColumns))
+
+	for i, col := range returningColumns {
+
+		quotedReturnCols[i] = b.dialect.QuoteIdentifier(col)
+
+	}
+
+	var row interface{}
+
+	if b.dialect.SupportsReturning() {
+
+		query := fmt.Sprintf(
+			"INSERT INTO %s (%s) VALUES (%s) RETURNING %s",
+			quotedTable,
+			strings.Join(quotedInsertCols, ", "),
+			strings.Join(values, ", "),
+			strings.Join(quotedReturnCols, ", "),
+		)
+
+		row = b.db.QueryRow(ctx, query, args...)
+
+	} else {
+
+		query := fmt.Sprintf(
+			"INSERT INTO %s (%s) VALUES (%s)",
+			quotedTable,
+			strings.Join(quotedInsertCols, ", "),
+			strings.Join(values, ", "),
+		)
+
+		result, err := b.db.Exec(ctx, query, args...)
+
+		if err != nil {
+
+			return nil, err
+
+		}
+
+
+		// SQLite não retorna o modelo criado, apenas confirma sucesso
+
+		if b.dialect.Name() == "sqlite" {
+			return nil, nil
+
+		}
+
+
+		if primaryKeyCol != "" {
+			selectQuery := fmt.Sprintf(
+				"SELECT %s FROM %s WHERE %s = %s",
+				strings.Join(quotedReturnCols, ", "),
+				quotedTable,
+				b.dialect.QuoteIdentifier(primaryKeyCol),
+				b.dialect.GetPlaceholder(1),
+			)
+
+			row = b.db.QueryRow(ctx, selectQuery, primaryKeyValue)
+
+		} else if primaryKeyCol != "" {
+			if b.dialect.Name() == "sqlite" {
+				selectQuery := fmt.Sprintf(
+					"SELECT %s FROM %s WHERE %s = ?",
+					strings.Join(quotedReturnCols, ", "),
+					quotedTable,
+					b.dialect.QuoteIdentifier(primaryKeyCol),
+				)
+
+				row = b.db.QueryRow(ctx, selectQuery)
+
+			} else {
+
+				lastInsertID, err := result.LastInsertId()
+
+				if err != nil || lastInsertID == 0 {
+
+					return nil, fmt.Errorf("failed to get last insert ID")
+				}
+
+				selectQuery := fmt.Sprintf(
+					"SELECT %s FROM %s WHERE %s = %s",
+					strings.Join(quotedReturnCols, ", "),
+					quotedTable,
+					b.dialect.QuoteIdentifier(primaryKeyCol),
+					b.dialect.GetPlaceholder(1),
+				)
+
+				row = b.db.QueryRow(ctx, selectQuery, lastInsertID)
+
+			}
+
+		} else {
+
+			return nil, fmt.Errorf("primary key is required for Create operation")
+		}
+
+	}
+
+
+	if b.modelType == nil {
+
+		return row, nil
+
+	}
+
+
+	if rowValue, ok := row.(Row); ok {
+
+		return b.scanRow(rowValue)
+
+	}
+
+	return nil, fmt.Errorf("invalid row type")
+}
+
+
+// Update updates a record by primary key and returns the updated model
+
+func (b *TableQueryBuilder) Update(ctx context.Context, id interface{}, data interface{}) (interface{}, error) {
+
+	ctx, cancel := WithQueryTimeout(ctx)
+
+	defer cancel()
+
+
+	if b.primaryKey == "" {
+		err := fmt.Errorf("primary key is required for Update operation")
+		return nil, SanitizeError(err)
+
+	}
+
+
+	val := reflect.ValueOf(data)
+
+	if val.Kind() == reflect.Ptr {
+
+		val = val.Elem()
+
+	}
+
+	if val.Kind() != reflect.Struct {
+
+		return nil, fmt.Errorf("data must be a struct")
+	}
+
+
+	var updateColumns []string
+
+	var args []interface{}
+
+	argIndex := 1
+
+
+	typ := val.Type()
+
+	for i := 0; i < val.NumField(); i++ {
+
+		field := typ.Field(i)
+
+		fieldVal := val.Field(i)
+
+
+		// Use db tag if available, otherwise use snake_case of field name
+
+		fieldName := toSnakeCase(field.Name)
+		quotedFieldName := b.dialect.QuoteIdentifier(fieldName)
+
+
+		if fieldName == b.primaryKey {
+
+			continue
+
+		}
+
+
+		if fieldVal.IsZero() {
+
+			continue
+
+	}
+
+
+		updateColumns = append(updateColumns, fmt.Sprintf("%s = %s", quotedFieldName, b.dialect.GetPlaceholder(argIndex)))
+		args = append(args, fieldVal.Interface())
+
+		argIndex++
+
+	}
+
+
+	if len(updateColumns) == 0 {
+
+		err := fmt.Errorf("no fields to update")
+		return nil, SanitizeError(err)
+
+	}
+
+
+	quotedPK := b.dialect.QuoteIdentifier(b.primaryKey)
+
+	whereClause := fmt.Sprintf("%s = %s", quotedPK, b.dialect.GetPlaceholder(argIndex))
+	args = append(args, id)
+
+
+	quotedReturnCols := make([]string, len(b.columns))
+
+	for i, col := range b.columns {
+
+		quotedReturnCols[i] = b.dialect.QuoteIdentifier(col)
+
+	}
+
+	returningColumns := quotedReturnCols
+
+
+	quotedTable := b.dialect.QuoteIdentifier(b.table)
+
+	query := fmt.Sprintf(
+		"UPDATE %s SET %s WHERE %s RETURNING %s",
+		quotedTable,
+		strings.Join(updateColumns, ", "),
+		whereClause,
+		strings.Join(returningColumns, ", "),
+	)
+
+
+	row := b.db.QueryRow(ctx, query, args...)
+
+
+	if b.modelType == nil {
+
+		return row, nil
+
+	}
+
+
+	return b.scanRow(row)
+
+}
+
+
+// Delete removes a record (hard delete)
+
+func (b *TableQueryBuilder) Delete(ctx context.Context, id interface{}) error {
+
+	ctx, cancel := WithQueryTimeout(ctx)
+
+	defer cancel()
+
+
+	if b.primaryKey == "" {
+		err := fmt.Errorf("primary key is required for Delete operation")
+		return SanitizeError(err)
+
+	}
+
+
+	quotedTable := b.dialect.QuoteIdentifier(b.table)
+
+	quotedPK := b.dialect.QuoteIdentifier(b.primaryKey)
+
+	query := fmt.Sprintf(
+		"DELETE FROM %s WHERE %s = %s",
+		quotedTable,
+		quotedPK,
+		b.dialect.GetPlaceholder(1),
+	)
+
+	args := []interface{}{id}
+
+
+	_, err := b.db.Exec(ctx, query, args...)
+
+	return err
+
+}
+

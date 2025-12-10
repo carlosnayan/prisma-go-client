@@ -1,0 +1,9 @@
+// Client is the main Prisma client
+type Client struct {
+	db builder.DBTX
+	raw *raw.Executor
+{{- range .Models}}
+	{{.PascalName}} *queries.{{.PascalName}}Query
+{{- end}}
+}
+

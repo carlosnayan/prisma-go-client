@@ -1,0 +1,8 @@
+// NewSQLDriver creates a new driver adapter from a *sql.DB
+// This allows you to use database/sql with the Prisma client without
+// importing internal packages.
+func NewSQLDriver(db *sql.DB) builder.DBTX {
+	return &SQLDBAdapter{db: db}
+}
+
+

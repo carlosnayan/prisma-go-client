@@ -1,0 +1,25 @@
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	{{printf "%q" .BuilderPath}}
+	"github.com/BurntSushi/toml"
+{{- if eq .Provider "postgresql"}}
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+{{- else if eq .Provider "mysql"}}
+	_ "github.com/go-sql-driver/mysql"
+{{- else if eq .Provider "sqlite"}}
+	_ "github.com/mattn/go-sqlite3"
+{{- else}}
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+{{- end}}
+)
+

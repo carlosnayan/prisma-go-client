@@ -1,0 +1,34 @@
+// Transaction executes a function within a database transaction
+// If the function returns an error, the transaction is automatically rolled back
+// Example:
+//   err := client.Transaction(ctx, func(tx *TransactionClient) error {
+//       user, err := tx.User.Create().Data(...).Exec(ctx)
+//       if err != nil { return err }
+//       _, err = tx.Post.Create().Data(...).Exec(ctx)
+//       return err
+//   })
+func (c *Client) Transaction(ctx context.Context, fn func(*TransactionClient) error) error {
+	return builder.ExecuteTransaction(ctx, c.db, func(tx *builder.Transaction) error {
+		// Create adapter for raw executor
+		txAdapter := tx.DB()
+		txClient := &TransactionClient{
+			tx:  tx,
+			raw: raw.New(txAdapter),
+		}
+
+{{- range .Models}}
+		// Initialize {{.PascalName}} query
+		columns_{{.PascalName}} := []string{{"{"}}{{range $i, $col := .Columns}}{{if $i}}, {{end}}{{printf "%q" $col}}{{end}}{{"}"}}
+		query_{{.PascalName}} := txClient.tx.Query({{printf "%q" .TableName}}, columns_{{.PascalName}})
+{{- if .PrimaryKey}}
+		query_{{.PascalName}}.SetPrimaryKey({{printf "%q" .PrimaryKey}})
+{{- end}}
+		modelType_{{.PascalName}} := reflect.TypeOf(models.{{.PascalName}}{})
+		query_{{.PascalName}}.SetModelType(modelType_{{.PascalName}})
+		txClient.{{.PascalName}} = &queries.{{.PascalName}}Query{Query: query_{{.PascalName}}}
+{{- end}}
+
+		return fn(txClient)
+	})
+}
+

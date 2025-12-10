@@ -1,0 +1,41 @@
+// SetupClient creates a new Prisma client from DATABASE_URL
+// The database URL can be provided in two ways:
+// 1. As an optional parameter to SetupClient() (highest priority)
+// 2. In prisma.conf file under [datasource] url
+// Example: client, pool, err := db.SetupClient(ctx)
+// Example with explicit URL: client, pool, err := db.SetupClient(ctx, "postgresql://...")
+func SetupClient(ctx context.Context, databaseURL ...string) (*Client, *pgxpool.Pool, error) {
+	var url string
+	var err error
+
+	// Priority 1: Explicit parameter
+	if len(databaseURL) > 0 && databaseURL[0] != "" {
+		url = databaseURL[0]
+	} else {
+		// Priority 2: Read from prisma.conf
+		url, err = getDatabaseURLFromConfig()
+		if err != nil {
+			return nil, nil, fmt.Errorf("error reading prisma.conf: %w", err)
+		}
+	}
+
+	if url == "" {
+		return nil, nil, fmt.Errorf("DATABASE_URL is not set. Provide it via SetupClient parameter or in prisma.conf [datasource] url")
+	}
+
+	pool, err := NewPgxPoolFromURL(ctx, url)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, nil, fmt.Errorf("error pinging database: %w", err)
+	}
+
+	dbDriver := NewPgxPoolDriver(pool)
+	client := NewClient(dbDriver)
+
+	return client, pool, nil
+}
+

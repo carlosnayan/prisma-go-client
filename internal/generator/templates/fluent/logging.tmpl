@@ -1,0 +1,51 @@
+// detectQueryType detects the type of SQL query (SELECT, INSERT, UPDATE, DELETE)
+func detectQueryType(query string) string {
+	trimmed := strings.TrimSpace(query)
+	upper := strings.ToUpper(trimmed)
+
+	if strings.HasPrefix(upper, "SELECT") {
+		return "SELECT"
+	}
+	if strings.HasPrefix(upper, "INSERT") {
+		return "INSERT"
+	}
+	if strings.HasPrefix(upper, "UPDATE") {
+		return "UPDATE"
+	}
+	if strings.HasPrefix(upper, "DELETE") {
+		return "DELETE"
+	}
+
+	return "UNKNOWN"
+}
+
+// logQueryWithTiming logs query time and process time separately
+func (q *Query) logQueryWithTiming(ctx context.Context, query string, args []interface{}, queryStart, processStart time.Time, queryDuration time.Duration) {
+	logger := q.getLogger()
+	if logger == nil {
+		return
+	}
+
+	processDuration := time.Since(processStart)
+	overheadDuration := processDuration - queryDuration
+
+	// Log QUERY (already existing) - uses query time (real time in database)
+	logger.Query(query, args, queryDuration)
+
+	// Log INFO with query time, overhead and total time
+	queryType := detectQueryType(query)
+	logger.Info("%s query: %v, overhead: %v (total: %v)", queryType, queryDuration, overheadDuration, processDuration)
+
+	// Log WARN if query is slow (> 1000ms)
+	if queryDuration > 1000*time.Millisecond {
+		logger.Warn("Slow query detected: %s took %v", queryType, queryDuration)
+	}
+
+	// Log WARN if ORM overhead is too high (> 2x query time)
+	if overheadDuration > 0 && queryDuration > 0 && overheadDuration > queryDuration*2 {
+		logger.Warn("ORM overhead high: %v (query: %v, overhead: %v, %.1f%% overhead)",
+			processDuration, queryDuration, overheadDuration,
+			float64(overheadDuration)/float64(queryDuration)*100)
+	}
+}
+

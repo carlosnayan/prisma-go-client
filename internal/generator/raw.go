@@ -15,306 +15,71 @@ func GenerateRaw(outputDir string) error {
 	}
 
 	rawFile := filepath.Join(rawDir, "raw.go")
+
+	// Create file and write package declaration
 	file, err := createGeneratedFile(rawFile, "raw")
 	if err != nil {
 		return err
 	}
+	file.Close()
+
+	// Define template order - imports must come first, then interfaces
+	templateNames := []string{
+		"imports.tmpl",
+		"dbtx_alias.tmpl",
+	}
+
+	// Generate imports first
+	if err := executeRawTemplatesAppend(rawFile, templateNames); err != nil {
+		return fmt.Errorf("failed to generate imports: %w", err)
+	}
+
+	// Generate shared interfaces (after imports)
+	file, err = os.OpenFile(rawFile, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open file for appending: %w", err)
+	}
+	if err := generateDBInterfaces(file); err != nil {
+		file.Close()
+		return fmt.Errorf("failed to generate DB interfaces: %w", err)
+	}
+	file.Close()
+
+	// Generate rest of the templates
+	restTemplateNames := []string{
+		"executor_struct.tmpl",
+		"has_builder_db_methods.tmpl",
+		"new_function.tmpl",
+		"builder_db_adapter.tmpl",
+		"adapters.tmpl",
+		"executor_methods.tmpl",
+	}
+
+	return executeRawTemplatesAppend(rawFile, restTemplateNames)
+}
+
+// executeRawTemplatesAppend executes templates and appends to existing file
+func executeRawTemplatesAppend(filePath string, templateNames []string) error {
+	// Open file in append mode
+	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open file for appending: %w", err)
+	}
 	defer file.Close()
 
-	// Imports - only stdlib
-	fmt.Fprintf(file, "import (\n")
-	fmt.Fprintf(file, "\t\"context\"\n")
-	fmt.Fprintf(file, "\t\"fmt\"\n")
-	fmt.Fprintf(file, "\t\"reflect\"\n")
-	fmt.Fprintf(file, ")\n\n")
+	// Get the templates directory
+	_, templatesDir, err := getTemplatesDir("raw")
+	if err != nil {
+		return fmt.Errorf("failed to get templates directory: %w", err)
+	}
 
-	// Generate shared interfaces
-	generateDBInterfaces(file)
-
-	// DBTX alias for backward compatibility
-	fmt.Fprintf(file, "// DBTX is an alias for DB for backward compatibility\n")
-	fmt.Fprintf(file, "type DBTX = DB\n\n")
-
-	// Executor struct and methods
-	fmt.Fprintf(file, "// Executor provides methods for executing raw SQL queries\n")
-	fmt.Fprintf(file, "type Executor struct {\n")
-	fmt.Fprintf(file, "\tdb DB\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	// Helper function to check if object has required methods using reflection
-	fmt.Fprintf(file, "// hasBuilderDBMethods checks if an object has the required methods (Exec, Query, QueryRow)\n")
-	fmt.Fprintf(file, "// using reflection. This allows us to detect builder.DBTX implementations\n")
-	fmt.Fprintf(file, "// regardless of their return types.\n")
-	fmt.Fprintf(file, "func hasBuilderDBMethods(v interface{}) bool {\n")
-	fmt.Fprintf(file, "\tif v == nil {\n")
-	fmt.Fprintf(file, "\t\treturn false\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\tval := reflect.ValueOf(v)\n")
-	fmt.Fprintf(file, "\ttyp := val.Type()\n")
-	fmt.Fprintf(file, "\t\n")
-	fmt.Fprintf(file, "\t// Check for Exec method\n")
-	fmt.Fprintf(file, "\texecMethod, hasExec := typ.MethodByName(\"Exec\")\n")
-	fmt.Fprintf(file, "\tif !hasExec {\n")
-	fmt.Fprintf(file, "\t\treturn false\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\t// Exec should have signature: Exec(context.Context, string, ...interface{}) (Result, error)\n")
-	fmt.Fprintf(file, "\texecType := execMethod.Type\n")
-	fmt.Fprintf(file, "\tif execType.NumIn() < 3 || execType.NumOut() != 2 {\n")
-	fmt.Fprintf(file, "\t\treturn false\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\t\n")
-	fmt.Fprintf(file, "\t// Check for Query method\n")
-	fmt.Fprintf(file, "\tqueryMethod, hasQuery := typ.MethodByName(\"Query\")\n")
-	fmt.Fprintf(file, "\tif !hasQuery {\n")
-	fmt.Fprintf(file, "\t\treturn false\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\t// Query should have signature: Query(context.Context, string, ...interface{}) (Rows, error)\n")
-	fmt.Fprintf(file, "\tqueryType := queryMethod.Type\n")
-	fmt.Fprintf(file, "\tif queryType.NumIn() < 3 || queryType.NumOut() != 2 {\n")
-	fmt.Fprintf(file, "\t\treturn false\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\t\n")
-	fmt.Fprintf(file, "\t// Check for QueryRow method\n")
-	fmt.Fprintf(file, "\tqueryRowMethod, hasQueryRow := typ.MethodByName(\"QueryRow\")\n")
-	fmt.Fprintf(file, "\tif !hasQueryRow {\n")
-	fmt.Fprintf(file, "\t\treturn false\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\t// QueryRow should have signature: QueryRow(context.Context, string, ...interface{}) Row\n")
-	fmt.Fprintf(file, "\tqueryRowType := queryRowMethod.Type\n")
-	fmt.Fprintf(file, "\tif queryRowType.NumIn() < 3 || queryRowType.NumOut() != 1 {\n")
-	fmt.Fprintf(file, "\t\treturn false\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\t\n")
-	fmt.Fprintf(file, "\treturn true\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// New creates a new raw query executor\n")
-	fmt.Fprintf(file, "// Accepts both raw.DB and builder.DB (compatible interfaces)\n")
-	fmt.Fprintf(file, "func New(db interface{}) *Executor {\n")
-	fmt.Fprintf(file, "\t// Try direct cast to raw.DB first\n")
-	fmt.Fprintf(file, "\tif rawDB, ok := db.(DB); ok {\n")
-	fmt.Fprintf(file, "\t\treturn &Executor{db: rawDB}\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\t// Try builder.DB - check if it has the required methods using reflection\n")
-	fmt.Fprintf(file, "\t// builder.DBTX has methods that return specific types (Result, Rows, Row)\n")
-	fmt.Fprintf(file, "\t// We use reflection to detect these methods regardless of return types\n")
-	fmt.Fprintf(file, "\tif hasBuilderDBMethods(db) {\n")
-	fmt.Fprintf(file, "\t\treturn &Executor{db: &builderDBAdapter{db: db}}\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\tpanic(\"db must implement raw.DB or builder.DB\")\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// builderDBAdapter adapts builder.DB to raw.DB\n")
-	fmt.Fprintf(file, "// Stores the original object as interface{} and uses reflection to call methods\n")
-	fmt.Fprintf(file, "type builderDBAdapter struct {\n")
-	fmt.Fprintf(file, "\tdb interface{}\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "func (a *builderDBAdapter) Exec(ctx context.Context, sql string, args ...interface{}) (Result, error) {\n")
-	fmt.Fprintf(file, "\t// Use reflection to call Exec method on the original object\n")
-	fmt.Fprintf(file, "\tval := reflect.ValueOf(a.db)\n")
-	fmt.Fprintf(file, "\texecMethod := val.MethodByName(\"Exec\")\n")
-	fmt.Fprintf(file, "\tif !execMethod.IsValid() {\n")
-	fmt.Fprintf(file, "\t\treturn nil, fmt.Errorf(\"Exec method not found\")\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\t\n")
-	fmt.Fprintf(file, "\t// Prepare arguments: ctx, sql, args...\n")
-	fmt.Fprintf(file, "\tcallArgs := make([]reflect.Value, 0, len(args)+2)\n")
-	fmt.Fprintf(file, "\tcallArgs = append(callArgs, reflect.ValueOf(ctx), reflect.ValueOf(sql))\n")
-	fmt.Fprintf(file, "\tfor _, arg := range args {\n")
-	fmt.Fprintf(file, "\t\tcallArgs = append(callArgs, reflect.ValueOf(arg))\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\t\n")
-	fmt.Fprintf(file, "\t// Call the method\n")
-	fmt.Fprintf(file, "\tresults := execMethod.Call(callArgs)\n")
-	fmt.Fprintf(file, "\tif len(results) != 2 {\n")
-	fmt.Fprintf(file, "\t\treturn nil, fmt.Errorf(\"Exec method returned unexpected number of values\")\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\t\n")
-	fmt.Fprintf(file, "\t// Extract result and error\n")
-	fmt.Fprintf(file, "\tresult := results[0].Interface()\n")
-	fmt.Fprintf(file, "\tif !results[1].IsNil() {\n")
-	fmt.Fprintf(file, "\t\tif err, ok := results[1].Interface().(error); ok {\n")
-	fmt.Fprintf(file, "\t\t\treturn nil, err\n")
-	fmt.Fprintf(file, "\t\t}\n")
-	fmt.Fprintf(file, "\t\treturn nil, fmt.Errorf(\"Exec method returned non-error type\")\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\t\n")
-	fmt.Fprintf(file, "\t// Try to cast to raw.Result first (if already compatible)\n")
-	fmt.Fprintf(file, "\tif r, ok := result.(Result); ok {\n")
-	fmt.Fprintf(file, "\t\treturn r, nil\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\t// Wrap in adapter - builder.Result implements RowsAffected() method\n")
-	fmt.Fprintf(file, "\treturn &resultAdapter{result: result}, nil\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "func (a *builderDBAdapter) Query(ctx context.Context, sql string, args ...interface{}) (Rows, error) {\n")
-	fmt.Fprintf(file, "\t// Use reflection to call Query method on the original object\n")
-	fmt.Fprintf(file, "\tval := reflect.ValueOf(a.db)\n")
-	fmt.Fprintf(file, "\tqueryMethod := val.MethodByName(\"Query\")\n")
-	fmt.Fprintf(file, "\tif !queryMethod.IsValid() {\n")
-	fmt.Fprintf(file, "\t\treturn nil, fmt.Errorf(\"Query method not found\")\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\t\n")
-	fmt.Fprintf(file, "\t// Prepare arguments: ctx, sql, args...\n")
-	fmt.Fprintf(file, "\tcallArgs := make([]reflect.Value, 0, len(args)+2)\n")
-	fmt.Fprintf(file, "\tcallArgs = append(callArgs, reflect.ValueOf(ctx), reflect.ValueOf(sql))\n")
-	fmt.Fprintf(file, "\tfor _, arg := range args {\n")
-	fmt.Fprintf(file, "\t\tcallArgs = append(callArgs, reflect.ValueOf(arg))\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\t\n")
-	fmt.Fprintf(file, "\t// Call the method\n")
-	fmt.Fprintf(file, "\tresults := queryMethod.Call(callArgs)\n")
-	fmt.Fprintf(file, "\tif len(results) != 2 {\n")
-	fmt.Fprintf(file, "\t\treturn nil, fmt.Errorf(\"Query method returned unexpected number of values\")\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\t\n")
-	fmt.Fprintf(file, "\t// Extract rows and error\n")
-	fmt.Fprintf(file, "\trows := results[0].Interface()\n")
-	fmt.Fprintf(file, "\tif !results[1].IsNil() {\n")
-	fmt.Fprintf(file, "\t\tif err, ok := results[1].Interface().(error); ok {\n")
-	fmt.Fprintf(file, "\t\t\treturn nil, err\n")
-	fmt.Fprintf(file, "\t\t}\n")
-	fmt.Fprintf(file, "\t\treturn nil, fmt.Errorf(\"Query method returned non-error type\")\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\t\n")
-	fmt.Fprintf(file, "\t// Try to cast to raw.Rows first (if already compatible)\n")
-	fmt.Fprintf(file, "\tif r, ok := rows.(Rows); ok {\n")
-	fmt.Fprintf(file, "\t\treturn r, nil\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\t// Wrap in adapter - builder.Rows implements Close(), Err(), Next(), Scan() methods\n")
-	fmt.Fprintf(file, "\treturn &rowsAdapter{rows: rows}, nil\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "func (a *builderDBAdapter) QueryRow(ctx context.Context, sql string, args ...interface{}) Row {\n")
-	fmt.Fprintf(file, "\t// Use reflection to call QueryRow method on the original object\n")
-	fmt.Fprintf(file, "\tval := reflect.ValueOf(a.db)\n")
-	fmt.Fprintf(file, "\tqueryRowMethod := val.MethodByName(\"QueryRow\")\n")
-	fmt.Fprintf(file, "\tif !queryRowMethod.IsValid() {\n")
-	fmt.Fprintf(file, "\t\treturn &rowAdapter{row: nil}\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\t\n")
-	fmt.Fprintf(file, "\t// Prepare arguments: ctx, sql, args...\n")
-	fmt.Fprintf(file, "\tcallArgs := make([]reflect.Value, 0, len(args)+2)\n")
-	fmt.Fprintf(file, "\tcallArgs = append(callArgs, reflect.ValueOf(ctx), reflect.ValueOf(sql))\n")
-	fmt.Fprintf(file, "\tfor _, arg := range args {\n")
-	fmt.Fprintf(file, "\t\tcallArgs = append(callArgs, reflect.ValueOf(arg))\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\t\n")
-	fmt.Fprintf(file, "\t// Call the method\n")
-	fmt.Fprintf(file, "\tresults := queryRowMethod.Call(callArgs)\n")
-	fmt.Fprintf(file, "\tif len(results) != 1 {\n")
-	fmt.Fprintf(file, "\t\treturn &rowAdapter{row: nil}\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\t\n")
-	fmt.Fprintf(file, "\t// Extract row\n")
-	fmt.Fprintf(file, "\trow := results[0].Interface()\n")
-	fmt.Fprintf(file, "\t\n")
-	fmt.Fprintf(file, "\t// Try to cast to raw.Row first (if already compatible)\n")
-	fmt.Fprintf(file, "\tif r, ok := row.(Row); ok {\n")
-	fmt.Fprintf(file, "\t\treturn r\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\t// Wrap in adapter - builder.Row implements Scan() method\n")
-	fmt.Fprintf(file, "\treturn &rowAdapter{row: row}\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// Adapters for result types\n")
-	fmt.Fprintf(file, "type resultAdapter struct {\n")
-	fmt.Fprintf(file, "\tresult interface{}\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "func (r *resultAdapter) RowsAffected() int64 {\n")
-	fmt.Fprintf(file, "\tif res, ok := r.result.(interface{ RowsAffected() int64 }); ok {\n")
-	fmt.Fprintf(file, "\t\treturn res.RowsAffected()\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\treturn 0\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "type rowsAdapter struct {\n")
-	fmt.Fprintf(file, "\trows interface{}\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "func (r *rowsAdapter) Close() {\n")
-	fmt.Fprintf(file, "\tif closer, ok := r.rows.(interface{ Close() }); ok {\n")
-	fmt.Fprintf(file, "\t\tcloser.Close()\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "func (r *rowsAdapter) Err() error {\n")
-	fmt.Fprintf(file, "\tif errer, ok := r.rows.(interface{ Err() error }); ok {\n")
-	fmt.Fprintf(file, "\t\treturn errer.Err()\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\treturn nil\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "func (r *rowsAdapter) Next() bool {\n")
-	fmt.Fprintf(file, "\tif next, ok := r.rows.(interface{ Next() bool }); ok {\n")
-	fmt.Fprintf(file, "\t\treturn next.Next()\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\treturn false\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "func (r *rowsAdapter) Scan(dest ...interface{}) error {\n")
-	fmt.Fprintf(file, "\tif scanner, ok := r.rows.(interface{ Scan(...interface{}) error }); ok {\n")
-	fmt.Fprintf(file, "\t\treturn scanner.Scan(dest...)\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\treturn fmt.Errorf(\"rows does not implement Scan\")\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "type rowAdapter struct {\n")
-	fmt.Fprintf(file, "\trow interface{}\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "func (r *rowAdapter) Scan(dest ...interface{}) error {\n")
-	fmt.Fprintf(file, "\tif scanner, ok := r.row.(interface{ Scan(...interface{}) error }); ok {\n")
-	fmt.Fprintf(file, "\t\treturn scanner.Scan(dest...)\n")
-	fmt.Fprintf(file, "\t}\n")
-	fmt.Fprintf(file, "\treturn fmt.Errorf(\"row does not implement Scan\")\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// Query executes a raw SQL query that returns multiple rows\n")
-	fmt.Fprintf(file, "//\n")
-	fmt.Fprintf(file, "// Example:\n")
-	fmt.Fprintf(file, "//\n")
-	fmt.Fprintf(file, "//\trows, err := executor.Query(ctx, `\n")
-	fmt.Fprintf(file, "//\t    SELECT u.*, t.tenant_name\n")
-	fmt.Fprintf(file, "//\t    FROM users u\n")
-	fmt.Fprintf(file, "//\t    JOIN tenants t ON u.id_tenant = t.id_tenant\n")
-	fmt.Fprintf(file, "//\t    WHERE u.deleted_at IS NULL AND t.id_tenant = $1\n")
-	fmt.Fprintf(file, "//\t`, tenantId)\n")
-	fmt.Fprintf(file, "func (e *Executor) Query(ctx context.Context, sql string, args ...interface{}) (Rows, error) {\n")
-	fmt.Fprintf(file, "\treturn e.db.Query(ctx, sql, args...)\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// QueryRow executes a raw SQL query that returns a single row\n")
-	fmt.Fprintf(file, "//\n")
-	fmt.Fprintf(file, "// Example:\n")
-	fmt.Fprintf(file, "//\n")
-	fmt.Fprintf(file, "//\trow := executor.QueryRow(ctx, `\n")
-	fmt.Fprintf(file, "//\t    SELECT COUNT(*) as total,\n")
-	fmt.Fprintf(file, "//\t           COUNT(CASE WHEN enabled = true THEN 1 END) as enabled_count\n")
-	fmt.Fprintf(file, "//\t    FROM users\n")
-	fmt.Fprintf(file, "//\t    WHERE id_tenant = $1\n")
-	fmt.Fprintf(file, "//\t`, tenantId)\n")
-	fmt.Fprintf(file, "//\n")
-	fmt.Fprintf(file, "//\tvar total, enabled int\n")
-	fmt.Fprintf(file, "//\terr := row.Scan(&total, &enabled)\n")
-	fmt.Fprintf(file, "func (e *Executor) QueryRow(ctx context.Context, sql string, args ...interface{}) Row {\n")
-	fmt.Fprintf(file, "\treturn e.db.QueryRow(ctx, sql, args...)\n")
-	fmt.Fprintf(file, "}\n\n")
-
-	fmt.Fprintf(file, "// Exec executes a raw SQL command (INSERT, UPDATE, DELETE)\n")
-	fmt.Fprintf(file, "//\n")
-	fmt.Fprintf(file, "// Example:\n")
-	fmt.Fprintf(file, "//\n")
-	fmt.Fprintf(file, "//\tresult, err := executor.Exec(ctx, `\n")
-	fmt.Fprintf(file, "//\t    UPDATE users\n")
-	fmt.Fprintf(file, "//\t    SET last_login_at = NOW()\n")
-	fmt.Fprintf(file, "//\t    WHERE id_user = $1\n")
-	fmt.Fprintf(file, "//\t`, userId)\n")
-	fmt.Fprintf(file, "func (e *Executor) Exec(ctx context.Context, sql string, args ...interface{}) (Result, error) {\n")
-	fmt.Fprintf(file, "\treturn e.db.Exec(ctx, sql, args...)\n")
-	fmt.Fprintf(file, "}\n")
+	// Execute each template in order
+	for _, tmplName := range templateNames {
+		tmplPath := filepath.Join(templatesDir, tmplName)
+		if err := executeTemplate(file, tmplPath, nil); err != nil {
+			return fmt.Errorf("failed to execute template %s: %w", tmplName, err)
+		}
+	}
 
 	return nil
 }

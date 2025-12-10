@@ -1,0 +1,26 @@
+// NewClient creates a new Prisma client
+// db must be a builder.DBTX implementation (e.g., driver.NewPgxPool, driver.NewSQLDB)
+// The logger is automatically configured from prisma.conf if present
+func NewClient(db builder.DBTX) *Client {
+	// Configure logger from prisma.conf if available (only once)
+	configureLoggerFromConfig()
+	client := &Client{
+		db:  db,
+		raw: raw.New(db),
+	}
+
+{{- range .Models}}
+	// Initialize {{.PascalName}} query
+	columns_{{.PascalName}} := []string{{"{"}}{{range $i, $col := .Columns}}{{if $i}}, {{end}}{{printf "%q" $col}}{{end}}{{"}"}}
+	query_{{.PascalName}} := builder.NewQuery(client.db, {{printf "%q" .TableName}}, columns_{{.PascalName}})
+{{- if .PrimaryKey}}
+	query_{{.PascalName}}.SetPrimaryKey({{printf "%q" .PrimaryKey}})
+{{- end}}
+	modelType_{{.PascalName}} := reflect.TypeOf(models.{{.PascalName}}{})
+	query_{{.PascalName}}.SetModelType(modelType_{{.PascalName}})
+	client.{{.PascalName}} = &queries.{{.PascalName}}Query{Query: query_{{.PascalName}}}
+{{- end}}
+
+	return client
+}
+

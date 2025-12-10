@@ -1,0 +1,6 @@
+{{if or (gt (len .Imports) 0) .InputsPath}}import (
+{{range .Imports}}	{{printf "%q" .}}
+{{end}}{{if .InputsPath}}	inputs {{printf "%q" .InputsPath}}
+{{end}})
+
+{{end}}

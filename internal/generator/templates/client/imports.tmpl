@@ -1,0 +1,24 @@
+{{- if or .StdlibImports .ThirdPartyImports .DriverImports}}
+import (
+{{- range .StdlibImports}}
+	{{printf "%q" .}}
+{{- end}}
+{{- if and .StdlibImports .ThirdPartyImports}}
+
+{{- end}}
+{{- range .ThirdPartyImports}}
+	{{printf "%q" .}}
+{{- end}}
+{{- if and (or .StdlibImports .ThirdPartyImports) .DriverImports}}
+
+{{- end}}
+{{- if .DriverImports}}
+	// Database driver (blank import to register driver)
+{{- range .DriverImports}}
+	{{.}}
+{{- end}}
+{{- end}}
+)
+
+{{- end}}
+
