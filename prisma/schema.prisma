@@ -1,17 +1,543 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
 datasource db {
   provider = "postgresql"
 }
 
 generator client {
   provider = "prisma-client-go"
-  output   = "../db"
+  output   = "./db"
 }
 
-// Example model
-model users {
-  id         String   @id @default(uuid())
-  email      String   @unique
-  name       String?
-  created_at DateTime @default(now())
-  updated_at DateTime @default(now())
+// ============================================
+// ENUMS
+// ============================================
+
+enum BookStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+  OUT_OF_PRINT
+}
+
+enum RatingValue {
+  ONE
+  TWO
+  THREE
+  FOUR
+  FIVE
+}
+
+enum EditionType {
+  HARDCOVER
+  PAPERBACK
+  EBOOK
+  AUDIOBOOK
+  LIMITED_EDITION
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  FLAGGED
+}
+
+enum LanguageCode {
+  EN
+  PT
+  ES
+  FR
+  DE
+  IT
+  JA
+  ZH
+  RU
+  AR
+}
+
+// ============================================
+// TABLES
+// ============================================
+
+model authors {
+  id_author   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  first_name  String    @db.VarChar(100)
+  last_name   String    @db.VarChar(100)
+  bio         String?   @db.Text
+  birth_date  DateTime? @db.Date
+  death_date  DateTime? @db.Date
+  nationality String?   @db.VarChar(100)
+  website     String?   @db.VarChar(255)
+  email       String?   @db.VarChar(255)
+  created_at  DateTime  @default(now()) @db.Timestamp(3)
+  updated_at  DateTime  @default(now()) @updatedAt @db.Timestamp(3)
+  deleted_at  DateTime? @db.Timestamp(3)
+
+  books        book_authors[]
+  translations translations[]
+
+  @@index([last_name, first_name], map: "idx_authors_name")
+  @@index([nationality], map: "idx_authors_nationality")
+}
+
+model books {
+  id_book          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title            String     @db.VarChar(255)
+  subtitle         String?    @db.VarChar(255)
+  isbn             String?    @unique @db.VarChar(20)
+  isbn13           String?    @unique @db.VarChar(20)
+  description      String?    @db.Text
+  page_count       Int?
+  publication_date DateTime?  @db.Date
+  status           BookStatus @default(DRAFT)
+  cover_image_url  String?    @db.VarChar(500)
+  price            Decimal?   @db.Decimal(10, 2)
+  created_at       DateTime   @default(now()) @db.Timestamp(3)
+  updated_at       DateTime   @default(now()) @updatedAt @db.Timestamp(3)
+  deleted_at       DateTime?  @db.Timestamp(3)
+
+  authors      book_authors[]
+  genres       book_genres[]
+  publishers   book_publishers[]
+  reviews      reviews[]
+  ratings      ratings[]
+  editions     editions[]
+  translations translations[]
+  tags         book_tags[]
+  series       book_series[]
+  illustrators book_illustrators[]
+  categories   book_categories[]
+  shelves      book_shelves[]
+  stores       book_stores[]
+  languages    book_languages[]
+  chapters     chapters[]
+
+  @@index([title], map: "idx_books_title")
+  @@index([isbn], map: "idx_books_isbn")
+  @@index([isbn13], map: "idx_books_isbn13")
+  @@index([publication_date], map: "idx_books_publication_date")
+  @@index([status], map: "idx_books_status")
+}
+
+model book_authors {
+  id_book_author String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id_book        String   @db.Uuid
+  id_author      String   @db.Uuid
+  role           String?  @db.VarChar(50) // e.g., "author", "co-author", "editor"
+  order          Int      @default(0)
+  created_at     DateTime @default(now()) @db.Timestamp(3)
+
+  book   books   @relation(fields: [id_book], references: [id_book], onDelete: Cascade, onUpdate: NoAction)
+  author authors @relation(fields: [id_author], references: [id_author], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([id_book, id_author], map: "book_authors_unique")
+  @@index([id_book], map: "idx_book_authors_book")
+  @@index([id_author], map: "idx_book_authors_author")
+}
+
+model genres {
+  id_genre    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String    @unique @db.VarChar(100)
+  description String?   @db.Text
+  parent_id   String?   @db.Uuid
+  created_at  DateTime  @default(now()) @db.Timestamp(3)
+  updated_at  DateTime  @default(now()) @updatedAt @db.Timestamp(3)
+  deleted_at  DateTime? @db.Timestamp(3)
+
+  parent_genre genres?       @relation("GenreHierarchy", fields: [parent_id], references: [id_genre], onDelete: SetNull, onUpdate: NoAction)
+  sub_genres   genres[]      @relation("GenreHierarchy")
+  books        book_genres[]
+
+  @@index([name], map: "idx_genres_name")
+  @@index([parent_id], map: "idx_genres_parent")
+}
+
+model book_genres {
+  id_book_genre String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id_book       String   @db.Uuid
+  id_genre      String   @db.Uuid
+  created_at    DateTime @default(now()) @db.Timestamp(3)
+
+  book  books  @relation(fields: [id_book], references: [id_book], onDelete: Cascade, onUpdate: NoAction)
+  genre genres @relation(fields: [id_genre], references: [id_genre], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([id_book, id_genre], map: "book_genres_unique")
+  @@index([id_book], map: "idx_book_genres_book")
+  @@index([id_genre], map: "idx_book_genres_genre")
+}
+
+model publishers {
+  id_publisher String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String    @unique @db.VarChar(255)
+  website      String?   @db.VarChar(255)
+  email        String?   @db.VarChar(255)
+  address      String?   @db.VarChar(500)
+  city         String?   @db.VarChar(100)
+  country      String?   @db.VarChar(100)
+  founded_year Int?
+  created_at   DateTime  @default(now()) @db.Timestamp(3)
+  updated_at   DateTime  @default(now()) @updatedAt @db.Timestamp(3)
+  deleted_at   DateTime? @db.Timestamp(3)
+
+  books book_publishers[]
+
+  @@index([name], map: "idx_publishers_name")
+  @@index([country], map: "idx_publishers_country")
+}
+
+model book_publishers {
+  id_book_publisher String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id_book           String    @db.Uuid
+  id_publisher      String    @db.Uuid
+  edition_number    Int?      @default(1)
+  published_date    DateTime? @db.Date
+  created_at        DateTime  @default(now()) @db.Timestamp(3)
+
+  book      books      @relation(fields: [id_book], references: [id_book], onDelete: Cascade, onUpdate: NoAction)
+  publisher publishers @relation(fields: [id_publisher], references: [id_publisher], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([id_book, id_publisher, edition_number], map: "book_publishers_unique")
+  @@index([id_book], map: "idx_book_publishers_book")
+  @@index([id_publisher], map: "idx_book_publishers_publisher")
+  @@index([published_date], map: "idx_book_publishers_date")
+}
+
+model reviews {
+  id_review      String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id_book        String       @db.Uuid
+  reviewer_name  String       @db.VarChar(255)
+  reviewer_email String?      @db.VarChar(255)
+  title          String?      @db.VarChar(255)
+  content        String       @db.Text
+  status         ReviewStatus @default(PENDING)
+  helpful_count  Int          @default(0)
+  created_at     DateTime     @default(now()) @db.Timestamp(3)
+  updated_at     DateTime     @default(now()) @updatedAt @db.Timestamp(3)
+  deleted_at     DateTime?    @db.Timestamp(3)
+
+  book    books     @relation(fields: [id_book], references: [id_book], onDelete: Cascade, onUpdate: NoAction)
+  ratings ratings[]
+
+  @@index([id_book], map: "idx_reviews_book")
+  @@index([status], map: "idx_reviews_status")
+  @@index([created_at(sort: Desc)], map: "idx_reviews_created")
+  @@index([helpful_count(sort: Desc)], map: "idx_reviews_helpful")
+}
+
+model ratings {
+  id_rating   String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id_book     String      @db.Uuid
+  id_review   String?     @db.Uuid
+  value       RatingValue
+  rater_name  String?     @db.VarChar(255)
+  rater_email String?     @db.VarChar(255)
+  comment     String?     @db.VarChar(500)
+  created_at  DateTime    @default(now()) @db.Timestamp(3)
+  updated_at  DateTime    @default(now()) @updatedAt @db.Timestamp(3)
+  deleted_at  DateTime?   @db.Timestamp(3)
+
+  book   books    @relation(fields: [id_book], references: [id_book], onDelete: Cascade, onUpdate: NoAction)
+  review reviews? @relation(fields: [id_review], references: [id_review], onDelete: SetNull, onUpdate: NoAction)
+
+  @@unique([id_book, rater_email], map: "ratings_unique_book_email")
+  @@index([id_book], map: "idx_ratings_book")
+  @@index([value], map: "idx_ratings_value")
+  @@index([created_at(sort: Desc)], map: "idx_ratings_created")
+}
+
+model editions {
+  id_edition       String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id_book          String      @db.Uuid
+  edition_type     EditionType
+  edition_number   Int         @default(1)
+  isbn             String?     @unique @db.VarChar(20)
+  isbn13           String?     @unique @db.VarChar(20)
+  publication_date DateTime?   @db.Date
+  page_count       Int?
+  format           String?     @db.VarChar(50)
+  price            Decimal?    @db.Decimal(10, 2)
+  stock_quantity   Int         @default(0)
+  created_at       DateTime    @default(now()) @db.Timestamp(3)
+  updated_at       DateTime    @default(now()) @updatedAt @db.Timestamp(3)
+  deleted_at       DateTime?   @db.Timestamp(3)
+
+  book books @relation(fields: [id_book], references: [id_book], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([id_book], map: "idx_editions_book")
+  @@index([edition_type], map: "idx_editions_type")
+  @@index([isbn], map: "idx_editions_isbn")
+  @@index([publication_date], map: "idx_editions_date")
+}
+
+model translations {
+  id_translation   String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id_book          String       @db.Uuid
+  id_author        String?      @db.Uuid
+  language_code    LanguageCode
+  title            String       @db.VarChar(255)
+  translator_name  String?      @db.VarChar(255)
+  publication_date DateTime?    @db.Date
+  created_at       DateTime     @default(now()) @db.Timestamp(3)
+  updated_at       DateTime     @default(now()) @updatedAt @db.Timestamp(3)
+
+  book   books    @relation(fields: [id_book], references: [id_book], onDelete: Cascade, onUpdate: NoAction)
+  author authors? @relation(fields: [id_author], references: [id_author], onDelete: SetNull, onUpdate: NoAction)
+
+  @@unique([id_book, language_code], map: "translations_unique_book_language")
+  @@index([id_book], map: "idx_translations_book")
+  @@index([language_code], map: "idx_translations_language")
+}
+
+model tags {
+  id_tag     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String    @unique @db.VarChar(100)
+  slug       String    @unique @db.VarChar(100)
+  color      String?   @db.VarChar(7) // hex color
+  created_at DateTime  @default(now()) @db.Timestamp(3)
+  updated_at DateTime  @default(now()) @updatedAt @db.Timestamp(3)
+  deleted_at DateTime? @db.Timestamp(3)
+
+  books book_tags[]
+
+  @@index([name], map: "idx_tags_name")
+  @@index([slug], map: "idx_tags_slug")
+}
+
+model book_tags {
+  id_book_tag String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id_book     String   @db.Uuid
+  id_tag      String   @db.Uuid
+  created_at  DateTime @default(now()) @db.Timestamp(3)
+
+  book books @relation(fields: [id_book], references: [id_book], onDelete: Cascade, onUpdate: NoAction)
+  tag  tags  @relation(fields: [id_tag], references: [id_tag], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([id_book, id_tag], map: "book_tags_unique")
+  @@index([id_book], map: "idx_book_tags_book")
+  @@index([id_tag], map: "idx_book_tags_tag")
+}
+
+model chapters {
+  id_chapter     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id_book        String    @db.Uuid
+  chapter_number Int
+  title          String    @db.VarChar(255)
+  content        String?   @db.Text
+  page_start     Int?
+  page_end       Int?
+  word_count     Int?
+  created_at     DateTime  @default(now()) @db.Timestamp(3)
+  updated_at     DateTime  @default(now()) @updatedAt @db.Timestamp(3)
+  deleted_at     DateTime? @db.Timestamp(3)
+
+  book books @relation(fields: [id_book], references: [id_book], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([id_book, chapter_number], map: "chapters_unique_book_number")
+  @@index([id_book], map: "idx_chapters_book")
+  @@index([chapter_number], map: "idx_chapters_number")
+}
+
+model series {
+  id_series   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String    @unique @db.VarChar(255)
+  description String?   @db.Text
+  total_books Int       @default(0)
+  created_at  DateTime  @default(now()) @db.Timestamp(3)
+  updated_at  DateTime  @default(now()) @updatedAt @db.Timestamp(3)
+  deleted_at  DateTime? @db.Timestamp(3)
+
+  books book_series[]
+
+  @@index([name], map: "idx_series_name")
+}
+
+model book_series {
+  id_book_series String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id_book        String   @db.Uuid
+  id_series      String   @db.Uuid
+  volume_number  Int?
+  order          Int      @default(0)
+  created_at     DateTime @default(now()) @db.Timestamp(3)
+
+  book   books  @relation(fields: [id_book], references: [id_book], onDelete: Cascade, onUpdate: NoAction)
+  series series @relation(fields: [id_series], references: [id_series], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([id_book, id_series], map: "book_series_unique")
+  @@index([id_book], map: "idx_book_series_book")
+  @@index([id_series], map: "idx_book_series_series")
+  @@index([order], map: "idx_book_series_order")
+}
+
+model illustrators {
+  id_illustrator String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  first_name     String    @db.VarChar(100)
+  last_name      String    @db.VarChar(100)
+  bio            String?   @db.Text
+  birth_date     DateTime? @db.Date
+  nationality    String?   @db.VarChar(100)
+  website        String?   @db.VarChar(255)
+  email          String?   @db.VarChar(255)
+  created_at     DateTime  @default(now()) @db.Timestamp(3)
+  updated_at     DateTime  @default(now()) @updatedAt @db.Timestamp(3)
+  deleted_at     DateTime? @db.Timestamp(3)
+
+  books book_illustrators[]
+
+  @@index([last_name, first_name], map: "idx_illustrators_name")
+  @@index([nationality], map: "idx_illustrators_nationality")
+}
+
+model book_illustrators {
+  id_book_illustrator String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id_book             String   @db.Uuid
+  id_illustrator      String   @db.Uuid
+  role                String?  @db.VarChar(50) // e.g., "cover", "interior", "all"
+  created_at          DateTime @default(now()) @db.Timestamp(3)
+
+  book        books        @relation(fields: [id_book], references: [id_book], onDelete: Cascade, onUpdate: NoAction)
+  illustrator illustrators @relation(fields: [id_illustrator], references: [id_illustrator], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([id_book, id_illustrator], map: "book_illustrators_unique")
+  @@index([id_book], map: "idx_book_illustrators_book")
+  @@index([id_illustrator], map: "idx_book_illustrators_illustrator")
+}
+
+model categories {
+  id_category String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String    @unique @db.VarChar(100)
+  description String?   @db.Text
+  parent_id   String?   @db.Uuid
+  sort_order  Int       @default(0)
+  created_at  DateTime  @default(now()) @db.Timestamp(3)
+  updated_at  DateTime  @default(now()) @updatedAt @db.Timestamp(3)
+  deleted_at  DateTime? @db.Timestamp(3)
+
+  parent_category categories?       @relation("CategoryHierarchy", fields: [parent_id], references: [id_category], onDelete: SetNull, onUpdate: NoAction)
+  sub_categories  categories[]      @relation("CategoryHierarchy")
+  books           book_categories[]
+
+  @@index([name], map: "idx_categories_name")
+  @@index([parent_id], map: "idx_categories_parent")
+  @@index([sort_order], map: "idx_categories_sort")
+}
+
+model book_categories {
+  id_book_category String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id_book          String   @db.Uuid
+  id_category      String   @db.Uuid
+  created_at       DateTime @default(now()) @db.Timestamp(3)
+
+  book     books      @relation(fields: [id_book], references: [id_book], onDelete: Cascade, onUpdate: NoAction)
+  category categories @relation(fields: [id_category], references: [id_category], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([id_book, id_category], map: "book_categories_unique")
+  @@index([id_book], map: "idx_book_categories_book")
+  @@index([id_category], map: "idx_book_categories_category")
+}
+
+model bookshelves {
+  id_bookshelf String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String    @unique @db.VarChar(255)
+  description  String?   @db.Text
+  is_public    Boolean   @default(false)
+  created_at   DateTime  @default(now()) @db.Timestamp(3)
+  updated_at   DateTime  @default(now()) @updatedAt @db.Timestamp(3)
+  deleted_at   DateTime? @db.Timestamp(3)
+
+  books book_shelves[]
+
+  @@index([name], map: "idx_bookshelves_name")
+  @@index([is_public], map: "idx_bookshelves_public")
+}
+
+model book_shelves {
+  id_book_shelf String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id_book       String   @db.Uuid
+  id_bookshelf  String   @db.Uuid
+  added_at      DateTime @default(now()) @db.Timestamp(3)
+  read_status   String?  @db.VarChar(50) // e.g., "want_to_read", "reading", "read"
+  rating        Int?     @db.SmallInt
+  notes         String?  @db.Text
+
+  book      books       @relation(fields: [id_book], references: [id_book], onDelete: Cascade, onUpdate: NoAction)
+  bookshelf bookshelves @relation(fields: [id_bookshelf], references: [id_bookshelf], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([id_book, id_bookshelf], map: "book_shelves_unique")
+  @@index([id_book], map: "idx_book_shelves_book")
+  @@index([id_bookshelf], map: "idx_book_shelves_bookshelf")
+  @@index([read_status], map: "idx_book_shelves_status")
+}
+
+model stores {
+  id_store   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String    @unique @db.VarChar(255)
+  website    String?   @db.VarChar(255)
+  email      String?   @db.VarChar(255)
+  phone      String?   @db.VarChar(50)
+  address    String?   @db.VarChar(500)
+  city       String?   @db.VarChar(100)
+  country    String?   @db.VarChar(100)
+  is_active  Boolean   @default(true)
+  created_at DateTime  @default(now()) @db.Timestamp(3)
+  updated_at DateTime  @default(now()) @updatedAt @db.Timestamp(3)
+  deleted_at DateTime? @db.Timestamp(3)
+
+  books book_stores[]
+
+  @@index([name], map: "idx_stores_name")
+  @@index([country], map: "idx_stores_country")
+  @@index([is_active], map: "idx_stores_active")
+}
+
+model book_stores {
+  id_book_store  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id_book        String    @db.Uuid
+  id_store       String    @db.Uuid
+  price          Decimal?  @db.Decimal(10, 2)
+  stock_quantity Int       @default(0)
+  url            String?   @db.VarChar(500)
+  last_checked   DateTime? @db.Timestamp(3)
+  created_at     DateTime  @default(now()) @db.Timestamp(3)
+  updated_at     DateTime  @default(now()) @updatedAt @db.Timestamp(3)
+
+  book  books  @relation(fields: [id_book], references: [id_book], onDelete: Cascade, onUpdate: NoAction)
+  store stores @relation(fields: [id_store], references: [id_store], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([id_book, id_store], map: "book_stores_unique")
+  @@index([id_book], map: "idx_book_stores_book")
+  @@index([id_store], map: "idx_book_stores_store")
+  @@index([price], map: "idx_book_stores_price")
+  @@index([stock_quantity], map: "idx_book_stores_stock")
+}
+
+model languages {
+  id_language String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code        LanguageCode @unique
+  name        String       @unique @db.VarChar(100)
+  native_name String?      @db.VarChar(100)
+  created_at  DateTime     @default(now()) @db.Timestamp(3)
+  updated_at  DateTime     @default(now()) @updatedAt @db.Timestamp(3)
+
+  books book_languages[]
+
+  @@index([code], map: "idx_languages_code")
+  @@index([name], map: "idx_languages_name")
+}
+
+model book_languages {
+  id_book_language String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id_book          String   @db.Uuid
+  id_language      String   @db.Uuid
+  is_original      Boolean  @default(false)
+  created_at       DateTime @default(now()) @db.Timestamp(3)
+
+  book     books     @relation(fields: [id_book], references: [id_book], onDelete: Cascade, onUpdate: NoAction)
+  language languages @relation(fields: [id_language], references: [id_language], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([id_book, id_language], map: "book_languages_unique")
+  @@index([id_book], map: "idx_book_languages_book")
+  @@index([id_language], map: "idx_book_languages_language")
+  @@index([is_original], map: "idx_book_languages_original")
 }
