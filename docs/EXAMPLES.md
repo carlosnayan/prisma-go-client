@@ -4,6 +4,42 @@ Simple, practical examples to help you get started with Prisma for Go.
 
 ## Query Builder Examples
 
+### Context Management
+
+You can set a context once and reuse it for multiple operations:
+
+```go
+import (
+    "context"
+    "my-app/db"
+    "my-app/db/inputs"
+    "github.com/jackc/pgx/v5/pgxpool"
+)
+
+ctx := context.Background()
+pool, _ := db.NewPgxPoolFromURL(ctx, databaseURL)
+dbDriver := db.NewPgxPoolDriver(pool)
+client := db.NewClient(dbDriver)
+
+// Set context once
+query := client.User.WithContext(ctx)
+
+// Use Exec() without passing context explicitly
+user, err := query.Create().
+    Data(inputs.UserCreateInput{
+        Email: "user@example.com",
+        Name:  db.String("John Doe"),
+    }).
+    Exec() // Uses stored context
+
+// Explicit context still works and takes priority
+user, err = query.Create().
+    Data(inputs.UserCreateInput{
+        Email: "user2@example.com",
+    }).
+    ExecWithContext(otherCtx) // Uses otherCtx instead
+```
+
 ### Create a Record
 
 ```go
@@ -19,13 +55,22 @@ pool, _ := db.NewPgxPoolFromURL(ctx, databaseURL)
 dbDriver := db.NewPgxPoolDriver(pool)
 client := db.NewClient(dbDriver)
 
-// Create a user
+// Create a user (with explicit context)
 user, err := client.User.Create().
     Data(inputs.UserCreateInput{
         Email: "user@example.com",
         Name:  db.String("John Doe"),
     }).
-    Exec(ctx)
+    ExecWithContext(ctx)
+
+// Or using WithContext()
+query := client.User.WithContext(ctx)
+user, err = query.Create().
+    Data(inputs.UserCreateInput{
+        Email: "user@example.com",
+        Name:  db.String("John Doe"),
+    }).
+    Exec() // Uses stored context
 ```
 
 ### Find Records
@@ -80,7 +125,7 @@ err := client.User.Delete().
 ### Advanced Queries
 
 ```go
-// With conditions and select
+// With conditions and select (explicit context)
 users, err := client.User.FindMany().
     Select(inputs.UserSelect{
         Email: true,
@@ -90,7 +135,60 @@ users, err := client.User.FindMany().
         Name:  db.Contains("John"),
         Email: db.EndsWith("@example.com"),
     }).
-    Exec(ctx)
+    ExecWithContext(ctx)
+
+// Or using WithContext()
+query := client.User.WithContext(ctx)
+users, err = query.FindMany().
+    Select(inputs.UserSelect{
+        Email: true,
+        Name:  true,
+    }).
+    Where(inputs.UserWhereInput{
+        Name:  db.Contains("John"),
+        Email: db.EndsWith("@example.com"),
+    }).
+    Exec() // Uses stored context
+```
+
+### Custom Types with ExecTyped
+
+You can scan query results into custom DTOs (Data Transfer Objects) instead of the default generated models:
+
+```go
+// Define a custom DTO
+type UserDTO struct {
+	ID    int    `json:"id" db:"id"`
+	Email string `json:"email" db:"email"`
+	Name  string `json:"name" db:"name"`
+}
+
+// Find first with custom DTO (explicit context)
+var userDTO *UserDTO
+err := client.User.FindFirst().
+	Select(inputs.UserSelect{
+		Id:    true,
+		Email: true,
+		Name:  true,
+	}).
+	Where(inputs.UserWhereInput{
+		Email: db.String("user@example.com"),
+	}).
+	ExecTypedWithContext(ctx, &userDTO)
+
+// Find many with custom DTO using WithContext()
+query := client.User.WithContext(ctx)
+var usersDTO []UserDTO
+err = query.FindMany().
+	Select(inputs.UserSelect{
+		Id:    true,
+		Email: true,
+		Name:  true,
+	}).
+	Where(inputs.UserWhereInput{
+		Email: db.Contains("example.com"),
+	}).
+	ExecTyped(&usersDTO) // Uses stored context
 ```
 
 ## Raw SQL Examples

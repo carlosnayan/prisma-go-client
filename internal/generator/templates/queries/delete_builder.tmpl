@@ -16,8 +16,17 @@ func (b *{{.PascalName}}DeleteBuilder) Where(where inputs.{{.PascalName}}WhereIn
 	return b
 }
 
-// Exec executes the delete operation
-func (b *{{.PascalName}}DeleteBuilder) Exec(ctx context.Context) error {
+// Exec executes the delete operation using the stored context (if set via WithContext)
+// or context.Background() as fallback.
+// Example: err := builder.Delete().Where(...).Exec()
+func (b *{{.PascalName}}DeleteBuilder) Exec() error {
+	return b.ExecWithContext(b.query.Query.GetContext())
+}
+
+// ExecWithContext executes the delete operation with an explicit context.
+// If a context was set via WithContext(), the explicit context takes priority.
+// Example: err := builder.Delete().Where(...).ExecWithContext(ctx)
+func (b *{{.PascalName}}DeleteBuilder) ExecWithContext(ctx context.Context) error {
 	// Reset query state to prevent accumulation of conditions from previous operations
 	b.query.Query.Reset()
 	if b.whereInput == nil {

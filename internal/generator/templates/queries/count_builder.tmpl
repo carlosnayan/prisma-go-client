@@ -16,8 +16,17 @@ func (b *{{.PascalName}}CountBuilder) Where(where inputs.{{.PascalName}}WhereInp
 	return b
 }
 
-// Exec executes the count operation
-func (b *{{.PascalName}}CountBuilder) Exec(ctx context.Context) (int64, error) {
+// Exec executes the count operation using the stored context (if set via WithContext)
+// or context.Background() as fallback.
+// Example: count, err := builder.Count().Where(...).Exec()
+func (b *{{.PascalName}}CountBuilder) Exec() (int64, error) {
+	return b.ExecWithContext(b.query.Query.GetContext())
+}
+
+// ExecWithContext executes the count operation with an explicit context.
+// If a context was set via WithContext(), the explicit context takes priority.
+// Example: count, err := builder.Count().Where(...).ExecWithContext(ctx)
+func (b *{{.PascalName}}CountBuilder) ExecWithContext(ctx context.Context) (int64, error) {
 	if b.whereInput != nil {
 		whereMap := Convert{{.PascalName}}WhereInputToWhere(*b.whereInput)
 		b.query.Where(whereMap)

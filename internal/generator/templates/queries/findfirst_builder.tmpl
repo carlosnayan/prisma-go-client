@@ -24,9 +24,19 @@ func (b *{{.PascalName}}FindFirstBuilder) Select(selectFields inputs.{{.PascalNa
 }
 
 // Exec executes the find first operation and returns the default model
+// Uses the stored context (if set via WithContext) or context.Background() as fallback.
 // Returns (*models.{{.PascalName}}, error)
 // For custom types, use ExecTyped[T]() instead
-func (b *{{.PascalName}}FindFirstBuilder) Exec(ctx context.Context) (*models.{{.PascalName}}, error) {
+// Example: user, err := builder.FindFirst().Where(...).Exec()
+func (b *{{.PascalName}}FindFirstBuilder) Exec() (*models.{{.PascalName}}, error) {
+	return b.ExecWithContext(b.query.Query.GetContext())
+}
+
+// ExecWithContext executes the find first operation with an explicit context.
+// If a context was set via WithContext(), the explicit context takes priority.
+// Returns (*models.{{.PascalName}}, error)
+// Example: user, err := builder.FindFirst().Where(...).ExecWithContext(ctx)
+func (b *{{.PascalName}}FindFirstBuilder) ExecWithContext(ctx context.Context) (*models.{{.PascalName}}, error) {
 	// Reset query state to prevent accumulation of conditions from previous operations
 	b.query.Query.Reset()
 	if b.whereInput != nil {
@@ -50,9 +60,19 @@ func (b *{{.PascalName}}FindFirstBuilder) Exec(ctx context.Context) (*models.{{.
 }
 
 // ExecTyped executes the find first operation and scans the result into the provided type
+// Uses the stored context (if set via WithContext) or context.Background() as fallback.
 // dest must be a pointer to a struct with json or db tags for field mapping
-// Example: var dto *TenantsDTO; err := builder.ExecTyped(ctx, &dto)
-func (b *{{.PascalName}}FindFirstBuilder) ExecTyped(ctx context.Context, dest interface{}) error {
+// Example: var dto *TenantsDTO; err := builder.ExecTyped(&dto)
+func (b *{{.PascalName}}FindFirstBuilder) ExecTyped(dest interface{}) error {
+	return b.ExecTypedWithContext(b.query.Query.GetContext(), dest)
+}
+
+// ExecTypedWithContext executes the find first operation with an explicit context
+// and scans the result into the provided type.
+// If a context was set via WithContext(), the explicit context takes priority.
+// dest must be a pointer to a struct with json or db tags for field mapping
+// Example: var dto *TenantsDTO; err := builder.ExecTypedWithContext(ctx, &dto)
+func (b *{{.PascalName}}FindFirstBuilder) ExecTypedWithContext(ctx context.Context, dest interface{}) error {
 	// Reset query state to prevent accumulation of conditions from previous operations
 	b.query.Query.Reset()
 	if b.whereInput != nil {

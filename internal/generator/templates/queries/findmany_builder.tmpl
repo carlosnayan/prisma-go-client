@@ -24,9 +24,19 @@ func (b *{{.PascalName}}FindManyBuilder) Select(selectFields inputs.{{.PascalNam
 }
 
 // Exec executes the find many operation and returns the default model
+// Uses the stored context (if set via WithContext) or context.Background() as fallback.
 // Returns ([]models.{{.PascalName}}, error)
 // For custom types, use ExecTyped[T]() instead
-func (b *{{.PascalName}}FindManyBuilder) Exec(ctx context.Context) ([]models.{{.PascalName}}, error) {
+// Example: users, err := builder.FindMany().Where(...).Exec()
+func (b *{{.PascalName}}FindManyBuilder) Exec() ([]models.{{.PascalName}}, error) {
+	return b.ExecWithContext(b.query.Query.GetContext())
+}
+
+// ExecWithContext executes the find many operation with an explicit context.
+// If a context was set via WithContext(), the explicit context takes priority.
+// Returns ([]models.{{.PascalName}}, error)
+// Example: users, err := builder.FindMany().Where(...).ExecWithContext(ctx)
+func (b *{{.PascalName}}FindManyBuilder) ExecWithContext(ctx context.Context) ([]models.{{.PascalName}}, error) {
 	// Reset query state to prevent accumulation of conditions from previous operations
 	b.query.Query.Reset()
 	if b.whereInput != nil {
@@ -47,9 +57,19 @@ func (b *{{.PascalName}}FindManyBuilder) Exec(ctx context.Context) ([]models.{{.
 }
 
 // ExecTyped executes the find many operation and scans the results into the provided slice
+// Uses the stored context (if set via WithContext) or context.Background() as fallback.
 // dest must be a pointer to a slice of structs with json or db tags for field mapping
-// Example: var dtos []TenantsDTO; err := builder.ExecTyped(ctx, &dtos)
-func (b *{{.PascalName}}FindManyBuilder) ExecTyped(ctx context.Context, dest interface{}) error {
+// Example: var dtos []TenantsDTO; err := builder.ExecTyped(&dtos)
+func (b *{{.PascalName}}FindManyBuilder) ExecTyped(dest interface{}) error {
+	return b.ExecTypedWithContext(b.query.Query.GetContext(), dest)
+}
+
+// ExecTypedWithContext executes the find many operation with an explicit context
+// and scans the results into the provided slice.
+// If a context was set via WithContext(), the explicit context takes priority.
+// dest must be a pointer to a slice of structs with json or db tags for field mapping
+// Example: var dtos []TenantsDTO; err := builder.ExecTypedWithContext(ctx, &dtos)
+func (b *{{.PascalName}}FindManyBuilder) ExecTypedWithContext(ctx context.Context, dest interface{}) error {
 	// Reset query state to prevent accumulation of conditions from previous operations
 	b.query.Query.Reset()
 	if b.whereInput != nil {

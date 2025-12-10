@@ -7,6 +7,7 @@ type Query struct {
 	modelType      reflect.Type
 	logger         *Logger
 	dialect        Dialect
+	ctx            context.Context // Stored context for operations
 
 	// Query state
 	whereConditions []whereCondition

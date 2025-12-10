@@ -23,8 +23,17 @@ func (b *{{.PascalName}}UpdateBuilder) Data(data inputs.{{.PascalName}}UpdateInp
 	return b
 }
 
-// Exec executes the update operation
-func (b *{{.PascalName}}UpdateBuilder) Exec(ctx context.Context) error {
+// Exec executes the update operation using the stored context (if set via WithContext)
+// or context.Background() as fallback.
+// Example: err := builder.Update().Where(...).Data(...).Exec()
+func (b *{{.PascalName}}UpdateBuilder) Exec() error {
+	return b.ExecWithContext(b.query.Query.GetContext())
+}
+
+// ExecWithContext executes the update operation with an explicit context.
+// If a context was set via WithContext(), the explicit context takes priority.
+// Example: err := builder.Update().Where(...).Data(...).ExecWithContext(ctx)
+func (b *{{.PascalName}}UpdateBuilder) ExecWithContext(ctx context.Context) error {
 	// Reset query state to prevent accumulation of conditions from previous operations
 	b.query.Query.Reset()
 	if b.whereInput == nil {

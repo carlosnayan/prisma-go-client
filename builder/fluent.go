@@ -33,6 +33,7 @@ type Query struct {
 	modelType  reflect.Type
 	logger     *logger.Logger  // Logger for queries
 	dialect    dialect.Dialect // Database dialect
+	ctx        context.Context // Stored context for operations
 
 	// Query state
 	whereConditions []whereCondition
@@ -151,6 +152,30 @@ func (q *Query) Reset() *Query {
 	q.having = []whereCondition{}
 	q.joins = []join{}
 	return q
+}
+
+// WithContext sets the context for this query builder.
+// The context will be used automatically when Exec() is called without parameters.
+// If a context is passed explicitly to Exec(ctx), it takes priority over the stored context.
+// Example:
+//
+//	query := client.User.WithContext(ctx)
+//	user, err := query.Create().Data(...).Exec() // Uses stored context
+func (q *Query) WithContext(ctx context.Context) *Query {
+	q.ctx = ctx
+	return q
+}
+
+// GetContext returns the context to use for operations.
+// Priority: explicit context > stored context > context.Background()
+func (q *Query) GetContext(ctx ...context.Context) context.Context {
+	if len(ctx) > 0 && ctx[0] != nil {
+		return ctx[0]
+	}
+	if q.ctx != nil {
+		return q.ctx
+	}
+	return context.Background()
 }
 
 // Where adds a WHERE condition

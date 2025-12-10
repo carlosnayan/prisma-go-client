@@ -364,16 +364,27 @@ Updated user: {ID:1 Email:alice@example.com Name:Alice Updated ...}
 The Query Builder provides a type-safe, fluent API:
 
 ```go
-// Create
-user, err := client.User.Create().
+// You can use WithContext() to set context once and reuse it
+query := client.User.WithContext(ctx)
+
+// Create (using stored context)
+user, err := query.Create().
     Data(inputs.UserCreateInput{
         Email: "test@example.com",
         Name:  db.String("Test"),
     }).
-    Exec(ctx)
+    Exec() // Uses stored context
+
+// Or use explicit context
+user, err = client.User.Create().
+    Data(inputs.UserCreateInput{
+        Email: "test@example.com",
+        Name:  db.String("Test"),
+    }).
+    ExecWithContext(ctx)
 
 // Find First with Select
-user, err := client.User.FindFirst().
+user, err = query.FindFirst().
     Select(inputs.UserSelect{
         Email: true,
         Name:  true,
@@ -381,10 +392,10 @@ user, err := client.User.FindFirst().
     Where(inputs.UserWhereInput{
         Email: db.String("test@example.com"),
     }).
-    Exec(ctx)
+    Exec() // Uses stored context
 
 // Find Many with Select and Where
-users, err := client.User.FindMany().
+users, err = query.FindMany().
     Select(inputs.UserSelect{
         Email: true,
         Name:  true,
@@ -392,24 +403,24 @@ users, err := client.User.FindMany().
     Where(inputs.UserWhereInput{
         Name: db.Contains("Test"),
     }).
-    Exec(ctx)
+    Exec() // Uses stored context
 
 // Update
-err := client.User.Update().
+err = query.Update().
     Where(inputs.UserWhereInput{
         Id: db.Int(user.ID),
     }).
     Data(inputs.UserUpdateInput{
         Name: db.String("Updated Name"),
     }).
-    Exec(ctx)
+    Exec() // Uses stored context
 
 // Delete
-err := client.User.Delete().
+err = query.Delete().
     Where(inputs.UserWhereInput{
         Id: db.Int(user.ID),
     }).
-    Exec(ctx)
+    Exec() // Uses stored context
 ```
 
 ### Raw SQL

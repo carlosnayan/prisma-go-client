@@ -198,31 +198,34 @@ func main() {
     // Setup client (call once at application startup)
     database.SetupPrismaClient()
 
-    // Create a user using fluent API
-    user, err := database.Client.User.Create().
+    // Set context once and reuse it
+    query := database.Client.User.WithContext(ctx)
+
+    // Create a user using fluent API (using stored context)
+    user, err := query.Create().
         Data(inputs.UserCreateInput{
             Email: "test@example.com",
             Name:  db.String("Test User"),
         }).
-        Exec(ctx)
+        Exec() // Uses stored context
     if err != nil {
         log.Fatal(err)
     }
     log.Printf("Created user: %+v\n", user)
 
     // Find users using fluent API with type-safe WhereInput
-    users, err := database.Client.User.FindMany().
+    users, err := query.FindMany().
         Where(inputs.UserWhereInput{
             Email: db.Contains("example.com"),
         }).
-        Exec(ctx)
+        Exec() // Uses stored context
     if err != nil {
         log.Fatal(err)
     }
     log.Printf("Found %d users\n", len(users))
 
     // Find first user with Select
-    foundUser, err := database.Client.User.FindFirst().
+    foundUser, err := query.FindFirst().
         Select(inputs.UserSelect{
             Email: true,
             Name:  true,
@@ -230,7 +233,7 @@ func main() {
         Where(inputs.UserWhereInput{
             Email: db.String("test@example.com"),
         }).
-        Exec(ctx)
+        Exec() // Uses stored context
     if err != nil {
         log.Fatal(err)
     }
@@ -242,7 +245,8 @@ func main() {
         Name  string `json:"name" db:"name"`
     }
 
-    userDTO, err := database.Client.User.FindFirst().
+    var userDTO *UserDTO
+    err = query.FindFirst().
         Select(inputs.UserSelect{
             Email: true,
             Name:  true,
@@ -250,19 +254,20 @@ func main() {
         Where(inputs.UserWhereInput{
             Email: db.String("test@example.com"),
         }).
-        ExecTyped[*UserDTO](ctx)
+        ExecTyped(&userDTO) // Uses stored context
     if err != nil {
         log.Fatal(err)
     }
     log.Printf("Found user DTO: %+v\n", userDTO)
 
     // Find many with custom DTO
-    usersDTO, err := database.Client.User.FindMany().
+    var usersDTO []UserDTO
+    err = query.FindMany().
         Select(inputs.UserSelect{
             Email: true,
             Name:  true,
         }).
-        ExecTyped[[]UserDTO](ctx)
+        ExecTyped(&usersDTO) // Uses stored context
     if err != nil {
         log.Fatal(err)
     }

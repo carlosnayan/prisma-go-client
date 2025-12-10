@@ -16,8 +16,17 @@ func (b *{{.PascalName}}CreateBuilder) Data(data inputs.{{.PascalName}}CreateInp
 	return b
 }
 
-// Exec executes the create operation
-func (b *{{.PascalName}}CreateBuilder) Exec(ctx context.Context) (*models.{{.PascalName}}, error) {
+// Exec executes the create operation using the stored context (if set via WithContext)
+// or context.Background() as fallback.
+// Example: user, err := builder.Create().Data(...).Exec()
+func (b *{{.PascalName}}CreateBuilder) Exec() (*models.{{.PascalName}}, error) {
+	return b.ExecWithContext(b.query.Query.GetContext())
+}
+
+// ExecWithContext executes the create operation with an explicit context.
+// If a context was set via WithContext(), the explicit context takes priority.
+// Example: user, err := builder.Create().Data(...).ExecWithContext(ctx)
+func (b *{{.PascalName}}CreateBuilder) ExecWithContext(ctx context.Context) (*models.{{.PascalName}}, error) {
 	if b.data == nil {
 		return nil, fmt.Errorf("data is required for create")
 	}

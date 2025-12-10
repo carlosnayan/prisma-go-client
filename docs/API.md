@@ -56,6 +56,33 @@ Each model has fluent builders accessible through the client.
 - `client.User.FindFirst()` - Returns a FindFirst builder
 - `client.User.Update()` - Returns an Update builder
 - `client.User.Delete()` - Returns a Delete builder
+- `client.User.WithContext(ctx)` - Sets the context for subsequent operations
+
+### Context Management
+
+You can set a context once and reuse it for multiple operations:
+
+```go
+// Set context once
+query := client.User.WithContext(ctx)
+
+// Use Exec() without passing context explicitly
+user, err := query.Create().
+    Data(inputs.UserCreateInput{
+        Email: "user@example.com",
+        Name:  db.String("John Doe"),
+    }).
+    Exec() // Uses stored context
+
+// Explicit context still works and takes priority
+user, err := query.Create().
+    Data(inputs.UserCreateInput{
+        Email: "user@example.com",
+    }).
+    ExecWithContext(otherCtx) // Uses otherCtx instead
+```
+
+If no context is stored and `Exec()` is called without parameters, `context.Background()` is used as fallback.
 
 ## CRUD Operations
 
@@ -278,14 +305,14 @@ users, err := client.User.FindMany().
 
 ### Custom Types with ExecTyped (Go 1.18+)
 
-The `ExecTyped[T]()` method allows you to scan query results into custom DTOs (Data Transfer Objects) instead of the default generated models. This is useful when you need to return different structures to your API clients.
+The `ExecTyped()` method allows you to scan query results into custom DTOs (Data Transfer Objects) instead of the default generated models. This is useful when you need to return different structures to your API clients.
 
 **Requirements:**
 
 - Go 1.18 or later (for generics support)
 - Custom structs must have `json` or `db` tags for field mapping
 
-**Example:**
+**Example with explicit context:**
 
 ```go
 // Define a custom DTO
@@ -296,7 +323,8 @@ type UserDTO struct {
 }
 
 // Find first with custom DTO
-userDTO, err := client.User.FindFirst().
+var userDTO *UserDTO
+err := client.User.FindFirst().
 	Select(inputs.UserSelect{
 		Id:    true,
 		Email: true,
@@ -305,14 +333,15 @@ userDTO, err := client.User.FindFirst().
 	Where(inputs.UserWhereInput{
 		Email: db.String("user@example.com"),
 	}).
-	ExecTyped[*UserDTO](ctx)
+	ExecTypedWithContext(ctx, &userDTO)
 if err != nil {
 	log.Fatal(err)
 }
 // userDTO is automatically of type *UserDTO, no casting needed!
 
 // Find many with custom DTO
-usersDTO, err := client.User.FindMany().
+var usersDTO []UserDTO
+err = client.User.FindMany().
 	Select(inputs.UserSelect{
 		Id:    true,
 		Email: true,
@@ -321,11 +350,44 @@ usersDTO, err := client.User.FindMany().
 	Where(inputs.UserWhereInput{
 		Email: db.Contains("example.com"),
 	}).
-	ExecTyped[[]UserDTO](ctx)
+	ExecTypedWithContext(ctx, &usersDTO)
 if err != nil {
 	log.Fatal(err)
 }
 // usersDTO is automatically of type []UserDTO, no casting needed!
+```
+
+**Example with WithContext():**
+
+```go
+// Set context once
+query := client.User.WithContext(ctx)
+
+// Find first with custom DTO using stored context
+var userDTO *UserDTO
+err := query.FindFirst().
+	Select(inputs.UserSelect{
+		Id:    true,
+		Email: true,
+		Name:  true,
+	}).
+	Where(inputs.UserWhereInput{
+		Email: db.String("user@example.com"),
+	}).
+	ExecTyped(&userDTO) // Uses stored context
+
+// Find many with custom DTO using stored context
+var usersDTO []UserDTO
+err = query.FindMany().
+	Select(inputs.UserSelect{
+		Id:    true,
+		Email: true,
+		Name:  true,
+	}).
+	Where(inputs.UserWhereInput{
+		Email: db.Contains("example.com"),
+	}).
+	ExecTyped(&usersDTO) // Uses stored context
 ```
 
 **Field Mapping:**
