@@ -120,7 +120,6 @@ func GenerateClient(schema *parser.Schema, outputDir string) error {
 		}
 		columns := getModelColumns(model, schema)
 		primaryKey := getPrimaryKey(model)
-		hasDeleted := hasDeletedAt(model)
 		tableName := getTableName(model)
 		pascalModelName := toPascalCase(modelName)
 
@@ -129,9 +128,6 @@ func GenerateClient(schema *parser.Schema, outputDir string) error {
 		fmt.Fprintf(file, "\tquery_%s := builder.NewQuery(client.db, %q, columns_%s)\n", pascalModelName, tableName, pascalModelName)
 		if primaryKey != "" {
 			fmt.Fprintf(file, "\tquery_%s.SetPrimaryKey(%q)\n", pascalModelName, primaryKey)
-		}
-		if hasDeleted {
-			fmt.Fprintf(file, "\tquery_%s.SetHasDeleted(true)\n", pascalModelName)
 		}
 		fmt.Fprintf(file, "\tmodelType_%s := reflect.TypeOf(models.%s{})\n", pascalModelName, pascalModelName)
 		fmt.Fprintf(file, "\tquery_%s.SetModelType(modelType_%s)\n", pascalModelName, pascalModelName)
@@ -214,25 +210,6 @@ func getPrimaryKey(model *parser.Model) string {
 	}
 
 	return "id"
-}
-
-// hasDeletedAt checks if the model has a deleted_at field
-func hasDeletedAt(model *parser.Model) bool {
-	for _, field := range model.Fields {
-		if field.Name == "deleted_at" || field.Name == "deletedAt" {
-			return true
-		}
-		for _, attr := range field.Attributes {
-			if attr.Name == "map" && len(attr.Arguments) > 0 {
-				if val, ok := attr.Arguments[0].Value.(string); ok {
-					if val == "deleted_at" {
-						return true
-					}
-				}
-			}
-		}
-	}
-	return false
 }
 
 // getTableName returns the table name for a model
@@ -502,7 +479,6 @@ func generateTransactionMethod(file *os.File, schema *parser.Schema) {
 		}
 		columns := getModelColumns(model, schema)
 		primaryKey := getPrimaryKey(model)
-		hasDeleted := hasDeletedAt(model)
 		tableName := getTableName(model)
 		pascalModelName := toPascalCase(modelName)
 
@@ -511,9 +487,6 @@ func generateTransactionMethod(file *os.File, schema *parser.Schema) {
 		fmt.Fprintf(file, "\t\tquery_%s := txClient.tx.Query(%q, columns_%s)\n", pascalModelName, tableName, pascalModelName)
 		if primaryKey != "" {
 			fmt.Fprintf(file, "\t\tquery_%s.SetPrimaryKey(%q)\n", pascalModelName, primaryKey)
-		}
-		if hasDeleted {
-			fmt.Fprintf(file, "\t\tquery_%s.SetHasDeleted(true)\n", pascalModelName)
 		}
 		fmt.Fprintf(file, "\t\tmodelType_%s := reflect.TypeOf(models.%s{})\n", pascalModelName, pascalModelName)
 		fmt.Fprintf(file, "\t\tquery_%s.SetModelType(modelType_%s)\n", pascalModelName, pascalModelName)

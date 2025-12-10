@@ -11,6 +11,7 @@ import (
 	"github.com/carlosnayan/prisma-go-client/internal/driver"
 	"github.com/carlosnayan/prisma-go-client/internal/errors"
 	"github.com/carlosnayan/prisma-go-client/internal/limits"
+	"github.com/carlosnayan/prisma-go-client/internal/uuid"
 )
 
 // DBTX is an alias for driver.DB for backward compatibility
@@ -34,7 +35,6 @@ type TableQueryBuilder struct {
 	table      string
 	columns    []string
 	primaryKey string
-	hasDeleted bool
 	modelType  reflect.Type
 	dialect    dialect.Dialect
 }
@@ -58,12 +58,6 @@ func (b *TableQueryBuilder) SetDialect(d dialect.Dialect) *TableQueryBuilder {
 // SetPrimaryKey defines the primary key column name
 func (b *TableQueryBuilder) SetPrimaryKey(pk string) *TableQueryBuilder {
 	b.primaryKey = pk
-	return b
-}
-
-// SetHasDeleted indicates if the table has a deleted_at column for soft deletes
-func (b *TableQueryBuilder) SetHasDeleted(has bool) *TableQueryBuilder {
-	b.hasDeleted = has
 	return b
 }
 
@@ -155,39 +149,56 @@ func (b *TableQueryBuilder) Create(ctx context.Context, data interface{}) (inter
 	argIndex := 1
 
 	typ := val.Type()
+	var primaryKeyValue interface{}
+	var primaryKeyCol string
+	var primaryKeyType reflect.Kind
+	var primaryKeyIsZero bool
+
 	for i := 0; i < val.NumField(); i++ {
 		field := typ.Field(i)
 		fieldVal := val.Field(i)
+
+		dbTag := field.Tag.Get("db")
+		fieldName := dbTag
+		if fieldName == "" {
+			fieldName = toSnakeCase(field.Name)
+		}
+
+		if fieldName == b.primaryKey {
+			primaryKeyCol = fieldName
+			primaryKeyValue = fieldVal.Interface()
+			primaryKeyType = fieldVal.Kind()
+			primaryKeyIsZero = fieldVal.IsZero()
+			continue
+		}
 
 		if fieldVal.IsZero() {
 			continue
 		}
 
-		fieldName := toSnakeCase(field.Name)
-		if fieldName == b.primaryKey || fieldName == "created_at" || fieldName == "updated_at" {
-			continue
-		}
-
 		insertColumns = append(insertColumns, fieldName)
-		values = append(values, fmt.Sprintf("$%d", argIndex))
+		values = append(values, b.dialect.GetPlaceholder(argIndex))
 		args = append(args, fieldVal.Interface())
 		argIndex++
 	}
 
-	hasCreatedAt := contains(b.columns, "created_at")
-	hasUpdatedAt := contains(b.columns, "updated_at")
+	if primaryKeyCol != "" {
+		if !primaryKeyIsZero {
+			insertColumns = append(insertColumns, primaryKeyCol)
+			values = append(values, b.dialect.GetPlaceholder(argIndex))
+			args = append(args, primaryKeyValue)
+		} else if primaryKeyType == reflect.String {
+			generatedUUID := uuid.GenerateUUID()
+			primaryKeyValue = generatedUUID
+			insertColumns = append(insertColumns, primaryKeyCol)
+			values = append(values, b.dialect.GetPlaceholder(argIndex))
+			args = append(args, generatedUUID)
+		}
+	}
 
+	// returningColumns must contain ONLY columns from the model
 	returningColumns := make([]string, len(b.columns))
 	copy(returningColumns, b.columns)
-
-	if hasCreatedAt {
-		insertColumns = append(insertColumns, "created_at")
-		values = append(values, "NOW()")
-	}
-	if hasUpdatedAt {
-		insertColumns = append(insertColumns, "updated_at")
-		values = append(values, "NOW()")
-	}
 
 	quotedTable := b.dialect.QuoteIdentifier(b.table)
 	quotedInsertCols := make([]string, len(insertColumns))
@@ -198,21 +209,79 @@ func (b *TableQueryBuilder) Create(ctx context.Context, data interface{}) (inter
 	for i, col := range returningColumns {
 		quotedReturnCols[i] = b.dialect.QuoteIdentifier(col)
 	}
-	query := fmt.Sprintf(
-		"INSERT INTO %s (%s) VALUES (%s) RETURNING %s",
-		quotedTable,
-		strings.Join(quotedInsertCols, ", "),
-		strings.Join(values, ", "),
-		strings.Join(quotedReturnCols, ", "),
-	)
 
-	row := b.db.QueryRow(ctx, query, args...)
+	var row interface{}
+	if b.dialect.SupportsReturning() {
+		query := fmt.Sprintf(
+			"INSERT INTO %s (%s) VALUES (%s) RETURNING %s",
+			quotedTable,
+			strings.Join(quotedInsertCols, ", "),
+			strings.Join(values, ", "),
+			strings.Join(quotedReturnCols, ", "),
+		)
+		row = b.db.QueryRow(ctx, query, args...)
+	} else {
+		query := fmt.Sprintf(
+			"INSERT INTO %s (%s) VALUES (%s)",
+			quotedTable,
+			strings.Join(quotedInsertCols, ", "),
+			strings.Join(values, ", "),
+		)
+		result, err := b.db.Exec(ctx, query, args...)
+		if err != nil {
+			return nil, err
+		}
+
+		// SQLite não retorna o modelo criado, apenas confirma sucesso
+		if b.dialect.Name() == "sqlite" {
+			return nil, nil
+		}
+
+		if primaryKeyCol != "" && primaryKeyValue != nil {
+			selectQuery := fmt.Sprintf(
+				"SELECT %s FROM %s WHERE %s = %s LIMIT 1",
+				strings.Join(quotedReturnCols, ", "),
+				quotedTable,
+				b.dialect.QuoteIdentifier(primaryKeyCol),
+				b.dialect.GetPlaceholder(1),
+			)
+			row = b.db.QueryRow(ctx, selectQuery, primaryKeyValue)
+		} else if primaryKeyCol != "" {
+			if b.dialect.Name() == "mysql" {
+				selectQuery := fmt.Sprintf(
+					"SELECT %s FROM %s WHERE %s = LAST_INSERT_ID() LIMIT 1",
+					strings.Join(quotedReturnCols, ", "),
+					quotedTable,
+					b.dialect.QuoteIdentifier(primaryKeyCol),
+				)
+				row = b.db.QueryRow(ctx, selectQuery)
+			} else {
+				lastInsertID, err := result.LastInsertId()
+				if err != nil || lastInsertID == 0 {
+					return nil, fmt.Errorf("cannot retrieve inserted record: primary key was auto-generated but LastInsertId() failed: %v", err)
+				}
+				selectQuery := fmt.Sprintf(
+					"SELECT %s FROM %s WHERE %s = %s LIMIT 1",
+					strings.Join(quotedReturnCols, ", "),
+					quotedTable,
+					b.dialect.QuoteIdentifier(primaryKeyCol),
+					b.dialect.GetPlaceholder(1),
+				)
+				row = b.db.QueryRow(ctx, selectQuery, lastInsertID)
+			}
+		} else {
+			return nil, fmt.Errorf("cannot retrieve inserted record: no primary key and dialect does not support RETURNING")
+		}
+	}
 
 	if b.modelType == nil {
 		return row, nil
 	}
 
-	return b.scanRow(row)
+	if driverRow, ok := row.(driver.Row); ok {
+		return b.scanRow(driverRow)
+	}
+	return nil, fmt.Errorf("invalid row type")
 }
 
 // Update updates a record by primary key and returns the updated model
@@ -235,7 +304,6 @@ func (b *TableQueryBuilder) Update(ctx context.Context, id interface{}, data int
 	var updateColumns []string
 	var args []interface{}
 	argIndex := 1
-	updatedAtAdded := false
 
 	typ := val.Type()
 	for i := 0; i < val.NumField(); i++ {
@@ -245,14 +313,7 @@ func (b *TableQueryBuilder) Update(ctx context.Context, id interface{}, data int
 		fieldName := toSnakeCase(field.Name)
 		quotedFieldName := b.dialect.QuoteIdentifier(fieldName)
 
-		if fieldName == b.primaryKey || fieldName == "created_at" || fieldName == "deleted_at" {
-			continue
-		}
-
-		if fieldName == "updated_at" {
-			quotedUpdatedAt := b.dialect.QuoteIdentifier("updated_at")
-			updateColumns = append(updateColumns, fmt.Sprintf("%s = NOW()", quotedUpdatedAt))
-			updatedAtAdded = true
+		if fieldName == b.primaryKey {
 			continue
 		}
 
@@ -269,26 +330,9 @@ func (b *TableQueryBuilder) Update(ctx context.Context, id interface{}, data int
 		return nil, errors.ErrNoFieldsToUpdate
 	}
 
-	hasUpdatedAt := contains(b.columns, "updated_at")
-	if hasUpdatedAt && !updatedAtAdded {
-		quotedUpdatedAt := b.dialect.QuoteIdentifier("updated_at")
-		updateColumns = append(updateColumns, fmt.Sprintf("%s = NOW()", quotedUpdatedAt))
-	}
-
 	quotedPK := b.dialect.QuoteIdentifier(b.primaryKey)
 	whereClause := fmt.Sprintf("%s = $%d", quotedPK, argIndex)
 	args = append(args, id)
-
-	if b.hasDeleted {
-		quotedDeletedAt := b.dialect.QuoteIdentifier("deleted_at")
-		var sb strings.Builder
-		sb.Grow(len(whereClause) + 20) // Pre-alocar espaço estimado
-		sb.WriteString(whereClause)
-		sb.WriteString(" AND ")
-		sb.WriteString(quotedDeletedAt)
-		sb.WriteString(" IS NULL")
-		whereClause = sb.String()
-	}
 
 	quotedReturnCols := make([]string, len(b.columns))
 	for i, col := range b.columns {
@@ -314,7 +358,7 @@ func (b *TableQueryBuilder) Update(ctx context.Context, id interface{}, data int
 	return b.scanRow(row)
 }
 
-// Delete removes a record (soft delete if has deleted_at, otherwise hard delete)
+// Delete removes a record (hard delete)
 func (b *TableQueryBuilder) Delete(ctx context.Context, id interface{}) error {
 	ctx, cancel := contextutil.WithQueryTimeout(ctx)
 	defer cancel()
@@ -323,29 +367,14 @@ func (b *TableQueryBuilder) Delete(ctx context.Context, id interface{}) error {
 		return fmt.Errorf("%w: table %s", errors.ErrPrimaryKeyRequired, b.table)
 	}
 
-	var query string
-	var args []interface{}
-
 	quotedTable := b.dialect.QuoteIdentifier(b.table)
 	quotedPK := b.dialect.QuoteIdentifier(b.primaryKey)
-	quotedDeletedAt := b.dialect.QuoteIdentifier("deleted_at")
-	if b.hasDeleted {
-		query = fmt.Sprintf(
-			"UPDATE %s SET %s = NOW() WHERE %s = $1 AND %s IS NULL",
-			quotedTable,
-			quotedDeletedAt,
-			quotedPK,
-			quotedDeletedAt,
-		)
-		args = []interface{}{id}
-	} else {
-		query = fmt.Sprintf(
-			"DELETE FROM %s WHERE %s = $1",
-			quotedTable,
-			quotedPK,
-		)
-		args = []interface{}{id}
-	}
+	query := fmt.Sprintf(
+		"DELETE FROM %s WHERE %s = $1",
+		quotedTable,
+		quotedPK,
+	)
+	args := []interface{}{id}
 
 	_, err := b.db.Exec(ctx, query, args...)
 	return err
@@ -449,19 +478,51 @@ func (b *TableQueryBuilder) buildWhereFromMap(where Where, argIndex *int) (strin
 	return strings.Join(parts, " AND "), args
 }
 
-// buildColumnToFieldMap cria um mapa de nome de coluna para índice de campo
-func buildColumnToFieldMap(modelType reflect.Type) map[string]int {
+func buildColumnToFieldMap(modelType reflect.Type, columns []string) map[string]int {
 	columnToField := make(map[string]int)
+
+	// Build a reverse map: field identifier -> field index
+	// This allows us to quickly find fields by their various identifiers
+	fieldMap := make(map[string]int)
+
+	// First, build a map of all possible field identifiers to field indices
 	for i := 0; i < modelType.NumField(); i++ {
 		field := modelType.Field(i)
 		jsonTag := field.Tag.Get("json")
+		dbTag := field.Tag.Get("db")
+
+		// Remove options from json tag (e.g., "id,omitempty" -> "id")
 		if jsonTag != "" && jsonTag != "-" {
 			if idx := strings.Index(jsonTag, ","); idx != -1 {
 				jsonTag = jsonTag[:idx]
 			}
-			columnToField[jsonTag] = i
+		}
+
+		// Map all possible identifiers to this field index
+		// Priority: dbTag > jsonTag > snake_case field name
+		if dbTag != "" {
+			fieldMap[dbTag] = i
+		}
+		if jsonTag != "" && jsonTag != "-" {
+			fieldMap[jsonTag] = i
+		}
+		// Also map snake_case field name
+		fieldName := toSnakeCase(field.Name)
+		if fieldName != "" {
+			fieldMap[fieldName] = i
 		}
 	}
+
+	// Now iterate through columns and find matching fields
+	// This ensures all columns are checked and mapped
+	for _, col := range columns {
+		if idx, ok := fieldMap[col]; ok {
+			columnToField[col] = idx
+		}
+		// If column not found in fieldMap, it will not be in columnToField
+		// and scanRow will use a dummy variable for it
+	}
+
 	return columnToField
 }
 
@@ -474,13 +535,15 @@ func (b *TableQueryBuilder) scanRow(row driver.Row) (interface{}, error) {
 
 	modelValue := reflect.New(b.modelType).Elem()
 
-	columnToField := buildColumnToFieldMap(b.modelType)
+	columnToField := buildColumnToFieldMap(b.modelType, b.columns)
 
 	fields := make([]interface{}, len(b.columns))
+	mappedCount := 0
 	for i, colName := range b.columns {
 		if fieldIdx, ok := columnToField[colName]; ok {
 			field := modelValue.Field(fieldIdx)
 			fields[i] = field.Addr().Interface()
+			mappedCount++
 		} else {
 			var dummy interface{}
 			fields[i] = &dummy
@@ -489,7 +552,8 @@ func (b *TableQueryBuilder) scanRow(row driver.Row) (interface{}, error) {
 
 	err := row.Scan(fields...)
 	if err != nil {
-		return nil, err
+		// Log detailed error information for debugging
+		return nil, fmt.Errorf("scan failed: %w (columns: %v, mapped: %d/%d)", err, b.columns, mappedCount, len(b.columns))
 	}
 
 	return modelValue.Interface(), nil
@@ -502,7 +566,7 @@ func (b *TableQueryBuilder) scanRows(rows driver.Rows) (interface{}, error) {
 		return nil, errors.SanitizeError(err)
 	}
 
-	columnToField := buildColumnToFieldMap(b.modelType)
+	columnToField := buildColumnToFieldMap(b.modelType, b.columns)
 
 	sliceType := reflect.SliceOf(b.modelType)
 	initialCapacity := 16
@@ -564,20 +628,19 @@ func (b *TableQueryBuilder) scanRows(rows driver.Rows) (interface{}, error) {
 
 // Helper functions
 
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
-}
-
 func toSnakeCase(s string) string {
 	var result strings.Builder
 	for i, r := range s {
 		if i > 0 && r >= 'A' && r <= 'Z' {
-			result.WriteByte('_')
+			prev := s[i-1]
+			if prev >= 'a' && prev <= 'z' {
+				result.WriteByte('_')
+			} else if i < len(s)-1 {
+				next := s[i+1]
+				if next >= 'a' && next <= 'z' {
+					result.WriteByte('_')
+				}
+			}
 		}
 		result.WriteRune(r)
 	}

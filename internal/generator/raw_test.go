@@ -20,10 +20,15 @@ type mockBuilderDBTX struct{}
 // mockResult implements builder.Result
 type mockResult struct {
 	rowsAffected int64
+	lastInsertID int64
 }
 
 func (r *mockResult) RowsAffected() int64 {
 	return r.rowsAffected
+}
+
+func (r *mockResult) LastInsertId() (int64, error) {
+	return r.lastInsertID, nil
 }
 
 // mockRows implements builder.Rows

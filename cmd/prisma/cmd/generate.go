@@ -189,6 +189,10 @@ func runGenerateOnce(schemaPath string) error {
 		return fmt.Errorf("error generating raw: %w", err)
 	}
 
+	if err := generator.GenerateUtils(absoluteOutputDir); err != nil {
+		return fmt.Errorf("error generating utils: %w", err)
+	}
+
 	if err := generator.GenerateBuilder(schema, absoluteOutputDir); err != nil {
 		return fmt.Errorf("error generating builder: %w", err)
 	}

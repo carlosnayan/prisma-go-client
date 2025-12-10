@@ -61,6 +61,10 @@ type Dialect interface {
 	// GetLimitOffsetSyntax retorna a sintaxe LIMIT/OFFSET
 	// PostgreSQL: LIMIT n OFFSET m, MySQL: LIMIT m, n (ou LIMIT n OFFSET m)
 	GetLimitOffsetSyntax(limit, offset int) string
+
+	// SupportsReturning indica se o banco suporta RETURNING em INSERT/UPDATE
+	// PostgreSQL: true, MySQL: false, SQLite: false
+	SupportsReturning() bool
 }
 
 // GetDialect retorna o dialeto apropriado para o provider

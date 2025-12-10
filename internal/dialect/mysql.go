@@ -118,6 +118,10 @@ func (d *MySQLDialect) GetNowFunction() string {
 	return "NOW()"
 }
 
+func (d *MySQLDialect) SupportsReturning() bool {
+	return false
+}
+
 func (d *MySQLDialect) GetDriverName() string {
 	return "mysql"
 }

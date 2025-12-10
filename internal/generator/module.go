@@ -125,3 +125,34 @@ func calculateLocalImportPath(userModule, outputDir string) (builderPath, rawPat
 
 	return builderPath, rawPath, nil
 }
+
+// calculateUtilsImportPath calculates the import path for utils package
+// Returns the full import path like "userModule/db/utils"
+func calculateUtilsImportPath(userModule, outputDir string) (string, error) {
+	moduleRoot, err := findModuleRoot(outputDir)
+	if err != nil {
+		return "", err
+	}
+
+	// Calculate relative path from module root to outputDir
+	relPath, err := filepath.Rel(moduleRoot, outputDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to calculate relative path: %w", err)
+	}
+
+	// Normalize path to use forward slashes (even on Windows)
+	importBase := filepath.ToSlash(relPath)
+	if importBase == "." {
+		importBase = ""
+	}
+
+	// Build import path
+	var utilsPath string
+	if importBase != "" {
+		utilsPath = fmt.Sprintf("%s/%s/utils", userModule, importBase)
+	} else {
+		utilsPath = fmt.Sprintf("%s/utils", userModule)
+	}
+
+	return utilsPath, nil
+}

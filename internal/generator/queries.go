@@ -141,6 +141,7 @@ func generateQueryMethods(file *os.File, model *parser.Model, schema *parser.Sch
 	// Use FindMany() builder pattern instead: q.FindMany().Where(...).Exec(ctx)
 
 	generateWhereInputConverter(file, model, schema)
+	generateApplyWhereInputHelper(file, model, schema)
 	// Count - removed to avoid conflict with Prisma-style Count() builder
 	// Use Count() builder pattern instead
 
@@ -233,6 +234,86 @@ func generateWhereInputConverter(file *os.File, model *parser.Model, schema *par
 	fmt.Fprintf(file, "\t}\n\n")
 
 	fmt.Fprintf(file, "\treturn result\n")
+	fmt.Fprintf(file, "}\n\n")
+}
+
+// generateApplyWhereInputHelper generates a helper function to apply WhereInput to a query
+// This handles OR conditions correctly by using the Or() method
+func generateApplyWhereInputHelper(file *os.File, model *parser.Model, schema *parser.Schema) {
+	pascalModelName := toPascalCase(model.Name)
+
+	fmt.Fprintf(file, "// apply%sWhereInput applies WhereInput to a query builder, handling OR conditions correctly\n", pascalModelName)
+	fmt.Fprintf(file, "func apply%sWhereInput(query *builder.Query, where inputs.%sWhereInput) {\n", pascalModelName, pascalModelName)
+	fmt.Fprintf(file, "\t// Handle OR conditions first\n")
+	fmt.Fprintf(file, "\tif len(where.Or) > 0 {\n")
+	fmt.Fprintf(file, "\t\t// Apply first OR condition as regular WHERE\n")
+	fmt.Fprintf(file, "\t\tfirstOrMap := Convert%sWhereInputToWhere(where.Or[0])\n", pascalModelName)
+	fmt.Fprintf(file, "\t\tquery.Where(firstOrMap)\n")
+	fmt.Fprintf(file, "\t\t// Apply remaining OR conditions using Or()\n")
+	fmt.Fprintf(file, "\t\tfor i := 1; i < len(where.Or); i++ {\n")
+	fmt.Fprintf(file, "\t\t\torMap := Convert%sWhereInputToWhere(where.Or[i])\n", pascalModelName)
+	fmt.Fprintf(file, "\t\t\t// Build OR conditions from the map\n")
+	fmt.Fprintf(file, "\t\t\tfor field, value := range orMap {\n")
+	fmt.Fprintf(file, "\t\t\t\tif op, ok := value.(builder.WhereOperator); ok {\n")
+	fmt.Fprintf(file, "\t\t\t\t\tquotedField := query.GetDialect().QuoteIdentifier(field)\n")
+	fmt.Fprintf(file, "\t\t\t\t\tswitch op.GetOp() {\n")
+	fmt.Fprintf(file, "\t\t\t\t\tcase \">\":\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\tquery.Or(fmt.Sprintf(\"%%s > ?\", quotedField), op.GetValue())\n")
+	fmt.Fprintf(file, "\t\t\t\t\tcase \">=\":\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\tquery.Or(fmt.Sprintf(\"%%s >= ?\", quotedField), op.GetValue())\n")
+	fmt.Fprintf(file, "\t\t\t\t\tcase \"<\":\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\tquery.Or(fmt.Sprintf(\"%%s < ?\", quotedField), op.GetValue())\n")
+	fmt.Fprintf(file, "\t\t\t\t\tcase \"<=\":\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\tquery.Or(fmt.Sprintf(\"%%s <= ?\", quotedField), op.GetValue())\n")
+	fmt.Fprintf(file, "\t\t\t\t\tcase \"=\":\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\tquery.Or(fmt.Sprintf(\"%%s = ?\", quotedField), op.GetValue())\n")
+	fmt.Fprintf(file, "\t\t\t\t\tcase \"!=\":\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\tquery.Or(fmt.Sprintf(\"%%s != ?\", quotedField), op.GetValue())\n")
+	fmt.Fprintf(file, "\t\t\t\t\tcase \"LIKE\":\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\tquery.Or(fmt.Sprintf(\"%%s LIKE ?\", quotedField), op.GetValue())\n")
+	fmt.Fprintf(file, "\t\t\t\t\tcase \"ILIKE\":\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\tquery.Or(fmt.Sprintf(\"%%s ILIKE ?\", quotedField), op.GetValue())\n")
+	fmt.Fprintf(file, "\t\t\t\t\tcase \"IN\":\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\tif values, ok := op.GetValue().([]interface{}); ok {\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\t\tplaceholders := make([]string, len(values))\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\t\tfor j := range placeholders {\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\t\t\tplaceholders[j] = \"?\"\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\t\t}\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\t\tquery.Or(fmt.Sprintf(\"%%s IN (%%s)\", quotedField, strings.Join(placeholders, \", \")), values...)\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\t}\n")
+	fmt.Fprintf(file, "\t\t\t\t\tcase \"NOT IN\":\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\tif values, ok := op.GetValue().([]interface{}); ok {\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\t\tplaceholders := make([]string, len(values))\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\t\tfor j := range placeholders {\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\t\t\tplaceholders[j] = \"?\"\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\t\t}\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\t\tquery.Or(fmt.Sprintf(\"%%s NOT IN (%%s)\", quotedField, strings.Join(placeholders, \", \")), values...)\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\t}\n")
+	fmt.Fprintf(file, "\t\t\t\t\tcase \"IS NULL\":\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\tquery.Or(fmt.Sprintf(\"%%s IS NULL\", quotedField))\n")
+	fmt.Fprintf(file, "\t\t\t\t\tcase \"IS NOT NULL\":\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\tquery.Or(fmt.Sprintf(\"%%s IS NOT NULL\", quotedField))\n")
+	fmt.Fprintf(file, "\t\t\t\t\tdefault:\n")
+	fmt.Fprintf(file, "\t\t\t\t\t\tquery.Or(fmt.Sprintf(\"%%s = ?\", quotedField), op.GetValue())\n")
+	fmt.Fprintf(file, "\t\t\t\t\t}\n")
+	fmt.Fprintf(file, "\t\t\t\t} else if value == nil {\n")
+	fmt.Fprintf(file, "\t\t\t\t\tquotedField := query.GetDialect().QuoteIdentifier(field)\n")
+	fmt.Fprintf(file, "\t\t\t\t\tquery.Or(fmt.Sprintf(\"%%s IS NULL\", quotedField))\n")
+	fmt.Fprintf(file, "\t\t\t\t} else {\n")
+	fmt.Fprintf(file, "\t\t\t\t\tquotedField := query.GetDialect().QuoteIdentifier(field)\n")
+	fmt.Fprintf(file, "\t\t\t\t\tquery.Or(fmt.Sprintf(\"%%s = ?\", quotedField), value)\n")
+	fmt.Fprintf(file, "\t\t\t\t}\n")
+	fmt.Fprintf(file, "\t\t\t}\n")
+	fmt.Fprintf(file, "\t\t}\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\t// Handle regular conditions (non-OR)\n")
+	fmt.Fprintf(file, "\t// Create a copy without Or field to avoid recursion\n")
+	fmt.Fprintf(file, "\tregularWhere := where\n")
+	fmt.Fprintf(file, "\tregularWhere.Or = nil\n")
+	fmt.Fprintf(file, "\tregularMap := Convert%sWhereInputToWhere(regularWhere)\n", pascalModelName)
+	fmt.Fprintf(file, "\tif len(regularMap) > 0 {\n")
+	fmt.Fprintf(file, "\t\tquery.Where(regularMap)\n")
+	fmt.Fprintf(file, "\t}\n")
 	fmt.Fprintf(file, "}\n\n")
 }
 
@@ -502,8 +583,7 @@ func generatePrismaBuilders(file *os.File, model *parser.Model, schema *parser.S
 	fmt.Fprintf(file, "// For custom types, use ExecTyped[T]() instead\n")
 	fmt.Fprintf(file, "func (b *%sFindFirstBuilder) Exec(ctx context.Context) (*models.%s, error) {\n", pascalModelName, pascalModelName)
 	fmt.Fprintf(file, "\tif b.whereInput != nil {\n")
-	fmt.Fprintf(file, "\t\twhereMap := Convert%sWhereInputToWhere(*b.whereInput)\n", pascalModelName)
-	fmt.Fprintf(file, "\t\tb.query.Where(whereMap)\n")
+	fmt.Fprintf(file, "\t\tapply%sWhereInput(b.query.Query, *b.whereInput)\n", pascalModelName)
 	fmt.Fprintf(file, "\t}\n")
 	fmt.Fprintf(file, "\tif b.selectFields != nil {\n")
 	fmt.Fprintf(file, "\t\tvar selectedFields []string\n")
@@ -581,7 +661,7 @@ func generatePrismaBuilders(file *os.File, model *parser.Model, schema *parser.S
 	fmt.Fprintf(file, "\t\treturn fmt.Errorf(\"ExecTyped: dest must be a pointer to struct, got %%v\", elemType.Kind())\n")
 	fmt.Fprintf(file, "\t}\n")
 	fmt.Fprintf(file, "\t// Scan into dest\n")
-	fmt.Fprintf(file, "\terr := b.query.Query.ScanFirst(ctx, dest, elemType)\n")
+	fmt.Fprintf(file, "\terr := b.query.ScanFirst(ctx, dest, elemType)\n")
 	fmt.Fprintf(file, "\tif err != nil {\n")
 	fmt.Fprintf(file, "\t\treturn err\n")
 	fmt.Fprintf(file, "\t}\n")
@@ -619,8 +699,7 @@ func generatePrismaBuilders(file *os.File, model *parser.Model, schema *parser.S
 	fmt.Fprintf(file, "// For custom types, use ExecTyped[T]() instead\n")
 	fmt.Fprintf(file, "func (b *%sFindManyBuilder) Exec(ctx context.Context) ([]models.%s, error) {\n", pascalModelName, pascalModelName)
 	fmt.Fprintf(file, "\tif b.whereInput != nil {\n")
-	fmt.Fprintf(file, "\t\twhereMap := Convert%sWhereInputToWhere(*b.whereInput)\n", pascalModelName)
-	fmt.Fprintf(file, "\t\tb.query.Where(whereMap)\n")
+	fmt.Fprintf(file, "\t\tapply%sWhereInput(b.query.Query, *b.whereInput)\n", pascalModelName)
 	fmt.Fprintf(file, "\t}\n")
 	fmt.Fprintf(file, "\tif b.selectFields != nil {\n")
 	fmt.Fprintf(file, "\t\tvar selectedFields []string\n")
@@ -702,7 +781,7 @@ func generatePrismaBuilders(file *os.File, model *parser.Model, schema *parser.S
 	fmt.Fprintf(file, "\t\treturn fmt.Errorf(\"ExecTyped: dest must be a slice of structs, got %%v\", elemType.Kind())\n")
 	fmt.Fprintf(file, "\t}\n")
 	fmt.Fprintf(file, "\t// Scan into dest\n")
-	fmt.Fprintf(file, "\terr := b.query.Query.ScanFind(ctx, dest, elemType)\n")
+	fmt.Fprintf(file, "\terr := b.query.ScanFind(ctx, dest, elemType)\n")
 	fmt.Fprintf(file, "\tif err != nil {\n")
 	fmt.Fprintf(file, "\t\treturn err\n")
 	fmt.Fprintf(file, "\t}\n")
@@ -874,10 +953,29 @@ func generatePrismaBuilders(file *os.File, model *parser.Model, schema *parser.S
 			fmt.Fprintf(file, "\tresult.%s = b.data.%s\n", fieldName, fieldName)
 		}
 	}
-	fmt.Fprintf(file, "\terr := b.query.Query.Create(ctx, result)\n")
+
+	// Use TableQueryBuilder.Create which returns the actual database result
+	columns := getModelColumns(model, schema)
+	primaryKey := getPrimaryKey(model)
+	tableName := getTableName(model)
+	fmt.Fprintf(file, "\t// Use TableQueryBuilder to get the actual result from database\n")
+	fmt.Fprintf(file, "\tcolumns := []string{%s}\n", formatColumns(columns))
+	fmt.Fprintf(file, "\ttableBuilder := builder.NewTableQueryBuilder(b.query.Query.GetDB(), %q, columns)\n", tableName)
+	if primaryKey != "" {
+		fmt.Fprintf(file, "\ttableBuilder.SetPrimaryKey(%q)\n", primaryKey)
+	}
+	fmt.Fprintf(file, "\ttableBuilder.SetDialect(b.query.Query.GetDialect())\n")
+	fmt.Fprintf(file, "\ttableBuilder.SetModelType(reflect.TypeOf(models.%s{}))\n", pascalModelName)
+	fmt.Fprintf(file, "\tcreated, err := tableBuilder.Create(ctx, result)\n")
 	fmt.Fprintf(file, "\tif err != nil {\n")
 	fmt.Fprintf(file, "\t\treturn nil, err\n")
 	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\t// Convert the result from interface{} to *models.%s\n", pascalModelName)
+	fmt.Fprintf(file, "\tif createdModel, ok := created.(models.%s); ok {\n", pascalModelName)
+	fmt.Fprintf(file, "\t\treturn &createdModel, nil\n")
+	fmt.Fprintf(file, "\t}\n")
+	fmt.Fprintf(file, "\t// Fallback: if conversion fails, return the result we prepared\n")
+	fmt.Fprintf(file, "\t// This should not happen, but provides a safety net\n")
 	fmt.Fprintf(file, "\treturn result, nil\n")
 	fmt.Fprintf(file, "}\n\n")
 }
@@ -912,6 +1010,7 @@ func determineQueryImports(userModule, outputDir string) []string {
 	// context is always needed for all query methods
 	// fmt is needed for fmt.Errorf in builders
 	// reflect is needed for Scan() method
+	// strings is needed for buildColumnToFieldMapForScan (strings.Index)
 	// builder is always needed for Query embedding
 	// models is always needed for type references
 	// inputs is needed for WhereInput
@@ -919,6 +1018,7 @@ func determineQueryImports(userModule, outputDir string) []string {
 		"context",
 		"fmt",
 		"reflect",
+		"strings",
 		builderPath,
 		modelsPath,
 		inputsPath,

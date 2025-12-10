@@ -50,6 +50,10 @@ func generateModelFile(filePath string, model *parser.Model, schema *parser.Sche
 	fmt.Fprintf(file, "type %s struct {\n", pascalModelName)
 
 	for _, field := range model.Fields {
+		// Skip relations - only include actual database columns
+		if isRelation(field, schema) {
+			continue
+		}
 		generateField(file, field, model.Name)
 	}
 
@@ -127,6 +131,11 @@ func determineImports(model *parser.Model, schema *parser.Schema) []string {
 	imports := make(map[string]bool)
 
 	for _, field := range model.Fields {
+		// Skip relations - only check actual database columns
+		if isRelation(field, schema) {
+			continue
+		}
+
 		if field.Type == nil {
 			continue
 		}
@@ -136,6 +145,7 @@ func determineImports(model *parser.Model, schema *parser.Schema) []string {
 			switch mapped {
 			case "time.Time":
 				imports["time"] = true
+
 			case "json.RawMessage":
 				imports["encoding/json"] = true
 			}
@@ -167,11 +177,24 @@ func toPascalCase(s string) string {
 }
 
 // toSnakeCase converts PascalCase to snake_case
+// Handles acronyms correctly (e.g., "ISBN" -> "isbn", "XMLHttp" -> "xml_http")
 func toSnakeCase(s string) string {
 	var result strings.Builder
 	for i, r := range s {
 		if i > 0 && r >= 'A' && r <= 'Z' {
-			result.WriteByte('_')
+			// Check if previous character was lowercase or if this is part of an acronym
+			prev := s[i-1]
+			// If previous was lowercase, add underscore (e.g., "HttpRequest" -> "http_request")
+			// If previous was uppercase and next is lowercase, add underscore (e.g., "XMLHttp" -> "xml_http")
+			if prev >= 'a' && prev <= 'z' {
+				result.WriteByte('_')
+			} else if i < len(s)-1 {
+				next := s[i+1]
+				// If next is lowercase, this is end of acronym (e.g., "XMLHttp" -> "xml_http")
+				if next >= 'a' && next <= 'z' {
+					result.WriteByte('_')
+				}
+			}
 		}
 		result.WriteRune(r)
 	}

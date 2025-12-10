@@ -154,3 +154,7 @@ func (d *SQLiteDialect) GetLimitOffsetSyntax(limit, offset int) string {
 	}
 	return ""
 }
+
+func (d *SQLiteDialect) SupportsReturning() bool {
+	return false
+}

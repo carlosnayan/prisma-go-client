@@ -190,7 +190,15 @@ echo ""
 
 ## 4.3 Build CLI
 log_info "=== Test: Build CLI ==="
-run_test "Build CLI" "cd cmd/prisma && go build -o prisma . && cd ../.."
+run_test "Build CLI" "mkdir -p bin && go build -o bin/prisma ./cmd/prisma"
+if [ -f "bin/prisma" ]; then
+    log_info "Testing compiled binary..."
+    if ./bin/prisma --help > /dev/null 2>&1; then
+        log_success "Binary works correctly"
+    else
+        log_warning "Binary compiled but may have issues"
+    fi
+fi
 echo ""
 
 ## 4.4 Format check

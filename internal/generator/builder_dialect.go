@@ -62,7 +62,10 @@ func generateBuilderDialect(builderDir string) error {
 	fmt.Fprintf(file, "\tGetJSONContainsQuery(field string, value string) string\n\n")
 	fmt.Fprintf(file, "\t// GetLimitOffsetSyntax returns the LIMIT/OFFSET syntax\n")
 	fmt.Fprintf(file, "\t// PostgreSQL: LIMIT n OFFSET m, MySQL: LIMIT m, n (or LIMIT n OFFSET m)\n")
-	fmt.Fprintf(file, "\tGetLimitOffsetSyntax(limit, offset int) string\n")
+	fmt.Fprintf(file, "\tGetLimitOffsetSyntax(limit, offset int) string\n\n")
+	fmt.Fprintf(file, "\t// SupportsReturning indicates if the database supports RETURNING in INSERT/UPDATE\n")
+	fmt.Fprintf(file, "\t// PostgreSQL: true, MySQL: false, SQLite: false\n")
+	fmt.Fprintf(file, "\tSupportsReturning() bool\n")
 	fmt.Fprintf(file, "}\n\n")
 
 	// GetDialect function
@@ -173,6 +176,7 @@ func generatePostgreSQLDialect(file *os.File) {
 	fmt.Fprintf(file, "\t}\n")
 	fmt.Fprintf(file, "\treturn \"\"\n")
 	fmt.Fprintf(file, "}\n\n")
+	fmt.Fprintf(file, "func (d *PostgreSQLDialect) SupportsReturning() bool { return true }\n\n")
 }
 
 func generateMySQLDialect(file *os.File) {
@@ -248,6 +252,7 @@ func generateMySQLDialect(file *os.File) {
 	fmt.Fprintf(file, "\t}\n")
 	fmt.Fprintf(file, "\treturn \"\"\n")
 	fmt.Fprintf(file, "}\n\n")
+	fmt.Fprintf(file, "func (d *MySQLDialect) SupportsReturning() bool { return false }\n\n")
 }
 
 func generateSQLiteDialect(file *os.File) {
@@ -321,5 +326,6 @@ func generateSQLiteDialect(file *os.File) {
 	fmt.Fprintf(file, "\t\treturn fmt.Sprintf(\"OFFSET %%d\", offset)\n")
 	fmt.Fprintf(file, "\t}\n")
 	fmt.Fprintf(file, "\treturn \"\"\n")
-	fmt.Fprintf(file, "}\n")
+	fmt.Fprintf(file, "}\n\n")
+	fmt.Fprintf(file, "func (d *SQLiteDialect) SupportsReturning() bool { return false }\n")
 }

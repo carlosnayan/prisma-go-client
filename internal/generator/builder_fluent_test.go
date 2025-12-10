@@ -22,7 +22,7 @@ func TestGenerateLoggerInline_ContainsRequiredMethods(t *testing.T) {
 	}
 
 	// Generate the builder fluent file
-	err = generateBuilderFluent(builderDir, "postgresql")
+	err = generateBuilderFluent(builderDir, "postgresql", "test/utils")
 	if err != nil {
 		t.Fatalf("Failed to generate builder fluent: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestGenerateLoggerInline_LogMethodsNotEmpty(t *testing.T) {
 	}
 
 	// Generate the builder fluent file
-	err = generateBuilderFluent(builderDir, "postgresql")
+	err = generateBuilderFluent(builderDir, "postgresql", "test/utils")
 	if err != nil {
 		t.Fatalf("Failed to generate builder fluent: %v", err)
 	}
@@ -235,7 +235,7 @@ func TestGenerateLoggerInline_LogQueryWithTimingCallsInfo(t *testing.T) {
 	}
 
 	// Generate the builder fluent file
-	err = generateBuilderFluent(builderDir, "postgresql")
+	err = generateBuilderFluent(builderDir, "postgresql", "test/utils")
 	if err != nil {
 		t.Fatalf("Failed to generate builder fluent: %v", err)
 	}
@@ -290,7 +290,7 @@ func TestGenerateLoggerInline_GetLoggerUsesCurrentDefault(t *testing.T) {
 	}
 
 	// Generate the builder fluent file
-	err = generateBuilderFluent(builderDir, "postgresql")
+	err = generateBuilderFluent(builderDir, "postgresql", "test/utils")
 	if err != nil {
 		t.Fatalf("Failed to generate builder fluent: %v", err)
 	}

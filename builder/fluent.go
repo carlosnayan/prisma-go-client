@@ -15,6 +15,7 @@ import (
 	"github.com/carlosnayan/prisma-go-client/internal/errors"
 	"github.com/carlosnayan/prisma-go-client/internal/limits"
 	"github.com/carlosnayan/prisma-go-client/internal/logger"
+	"github.com/carlosnayan/prisma-go-client/internal/uuid"
 )
 
 // fieldCache caches field lookups by type and column name
@@ -25,15 +26,13 @@ var (
 
 // Query represents a query builder with fluent (chainable) API
 type Query struct {
-	db             driver.DB
-	table          string
-	columns        []string
-	primaryKey     string
-	hasDeleted     bool
-	modelType      reflect.Type
-	includeDeleted bool            // Flag to include deleted records
-	logger         *logger.Logger  // Logger for queries
-	dialect        dialect.Dialect // Database dialect
+	db         driver.DB
+	table      string
+	columns    []string
+	primaryKey string
+	modelType  reflect.Type
+	logger     *logger.Logger  // Logger for queries
+	dialect    dialect.Dialect // Database dialect
 
 	// Query state
 	whereConditions []whereCondition
@@ -96,16 +95,35 @@ func (q *Query) SetPrimaryKey(pk string) *Query {
 	return q
 }
 
-// SetHasDeleted indicates if the table has deleted_at
-func (q *Query) SetHasDeleted(has bool) *Query {
-	q.hasDeleted = has
-	return q
-}
-
 // SetModelType sets the model type for automatic scanning
 func (q *Query) SetModelType(modelType reflect.Type) *Query {
 	q.modelType = modelType
 	return q
+}
+
+// GetDB returns the database connection
+func (q *Query) GetDB() DBTX {
+	return q.db
+}
+
+// GetDialect returns the database dialect
+func (q *Query) GetDialect() dialect.Dialect {
+	return q.dialect
+}
+
+// GetTable returns the table name
+func (q *Query) GetTable() string {
+	return q.table
+}
+
+// GetColumns returns the column names
+func (q *Query) GetColumns() []string {
+	return q.columns
+}
+
+// GetPrimaryKey returns the primary key column name
+func (q *Query) GetPrimaryKey() string {
+	return q.primaryKey
 }
 
 // getLogger returns the logger, always getting the current default logger
@@ -824,18 +842,6 @@ func (q *Query) buildSelectQuery(single bool) (string, []interface{}) {
 		queryBuilder.WriteString(" WHERE ")
 		queryBuilder.WriteString(whereClause)
 		args = append(args, whereArgs...)
-
-		if q.hasDeleted && !q.includeDeleted {
-			deletedAtField := q.dialect.QuoteIdentifier("deleted_at")
-			queryBuilder.WriteString(" AND ")
-			queryBuilder.WriteString(deletedAtField)
-			queryBuilder.WriteString(" IS NULL")
-		}
-	} else if q.hasDeleted && !q.includeDeleted {
-		deletedAtField := q.dialect.QuoteIdentifier("deleted_at")
-		queryBuilder.WriteString(" WHERE ")
-		queryBuilder.WriteString(deletedAtField)
-		queryBuilder.WriteString(" IS NULL")
 	}
 
 	if len(q.groupBy) > 0 {
@@ -966,14 +972,6 @@ func (q *Query) buildCountQuery() (string, []interface{}) {
 		whereClause, whereArgs := q.buildWhereClause(&argIndex)
 		parts = append(parts, "WHERE", whereClause)
 		args = append(args, whereArgs...)
-
-		if q.hasDeleted && !q.includeDeleted {
-			deletedAtField := q.dialect.QuoteIdentifier("deleted_at")
-			parts = append(parts, fmt.Sprintf("AND %s IS NULL", deletedAtField))
-		}
-	} else if q.hasDeleted && !q.includeDeleted {
-		deletedAtField := q.dialect.QuoteIdentifier("deleted_at")
-		parts = append(parts, fmt.Sprintf("WHERE %s IS NULL", deletedAtField))
 	}
 
 	return strings.Join(parts, " "), args
@@ -995,16 +993,25 @@ func (q *Query) buildInsertQuery(value interface{}) (string, []interface{}) {
 	argIndex := 1
 
 	typ := val.Type()
+	var primaryKeyValue interface{}
+	var primaryKeyCol string
+	var primaryKeyType reflect.Kind
+	var primaryKeyIsZero bool
+
 	for i := 0; i < val.NumField(); i++ {
 		field := typ.Field(i)
 		fieldVal := val.Field(i)
+		fieldName := toSnakeCase(field.Name)
 
-		if fieldVal.IsZero() {
+		if fieldName == q.primaryKey {
+			primaryKeyCol = fieldName
+			primaryKeyValue = fieldVal.Interface()
+			primaryKeyType = fieldVal.Kind()
+			primaryKeyIsZero = fieldVal.IsZero()
 			continue
 		}
 
-		fieldName := toSnakeCase(field.Name)
-		if fieldName == q.primaryKey || fieldName == "created_at" || fieldName == "updated_at" {
+		if fieldVal.IsZero() {
 			continue
 		}
 
@@ -1014,16 +1021,17 @@ func (q *Query) buildInsertQuery(value interface{}) (string, []interface{}) {
 		argIndex++
 	}
 
-	hasCreatedAt := contains(q.columns, "created_at")
-	hasUpdatedAt := contains(q.columns, "updated_at")
-
-	if hasCreatedAt {
-		columns = append(columns, "created_at")
-		values = append(values, q.dialect.GetNowFunction())
-	}
-	if hasUpdatedAt {
-		columns = append(columns, "updated_at")
-		values = append(values, q.dialect.GetNowFunction())
+	if primaryKeyCol != "" {
+		if !primaryKeyIsZero {
+			columns = append(columns, primaryKeyCol)
+			values = append(values, q.dialect.GetPlaceholder(argIndex))
+			args = append(args, primaryKeyValue)
+		} else if primaryKeyType == reflect.String {
+			generatedUUID := uuid.GenerateUUID()
+			columns = append(columns, primaryKeyCol)
+			values = append(values, q.dialect.GetPlaceholder(argIndex))
+			args = append(args, generatedUUID)
+		}
 	}
 
 	quotedColumns := make([]string, len(columns))
@@ -1063,9 +1071,14 @@ func (q *Query) buildUpsertQuery(value interface{}) (string, []interface{}) {
 	for i := 0; i < val.NumField(); i++ {
 		field := typ.Field(i)
 		fieldVal := val.Field(i)
-		fieldName := toSnakeCase(field.Name)
 
-		// Capturar primary key se existir
+		// Use db tag if available, otherwise use snake_case of field name
+		dbTag := field.Tag.Get("db")
+		fieldName := dbTag
+		if fieldName == "" {
+			fieldName = toSnakeCase(field.Name)
+		}
+
 		if fieldName == q.primaryKey {
 			primaryKeyCol = fieldName
 			primaryKeyValue = fieldVal.Interface()
@@ -1076,18 +1089,11 @@ func (q *Query) buildUpsertQuery(value interface{}) (string, []interface{}) {
 			continue
 		}
 
-		if fieldName == "created_at" || fieldName == "updated_at" {
-			continue
-		}
-
 		columns = append(columns, fieldName)
 		values = append(values, q.dialect.GetPlaceholder(argIndex))
 		args = append(args, fieldVal.Interface())
 		argIndex++
 	}
-
-	hasCreatedAt := contains(q.columns, "created_at")
-	hasUpdatedAt := contains(q.columns, "updated_at")
 
 	// Se há primary key, adicionar à lista de colunas
 	if primaryKeyCol != "" && primaryKeyValue != nil {
@@ -1095,15 +1101,6 @@ func (q *Query) buildUpsertQuery(value interface{}) (string, []interface{}) {
 		values = append(values, q.dialect.GetPlaceholder(argIndex))
 		args = append(args, primaryKeyValue)
 		_ = argIndex // Incremento não necessário pois argIndex não é mais usado
-	}
-
-	if hasCreatedAt {
-		columns = append(columns, "created_at")
-		values = append(values, q.dialect.GetNowFunction())
-	}
-	if hasUpdatedAt {
-		columns = append(columns, "updated_at")
-		values = append(values, q.dialect.GetNowFunction())
 	}
 
 	quotedColumns := make([]string, len(columns))
@@ -1129,15 +1126,11 @@ func (q *Query) buildUpsertQuery(value interface{}) (string, []interface{}) {
 			quotedPK := q.dialect.QuoteIdentifier(primaryKeyCol)
 			var updateParts []string
 			for _, col := range columns {
-				if col == primaryKeyCol || col == "created_at" {
+				if col == primaryKeyCol {
 					continue
 				}
 				quotedCol := q.dialect.QuoteIdentifier(col)
-				if col == "updated_at" {
-					updateParts = append(updateParts, fmt.Sprintf("%s = %s", quotedCol, q.dialect.GetNowFunction()))
-				} else {
-					updateParts = append(updateParts, fmt.Sprintf("%s = EXCLUDED.%s", quotedCol, quotedCol))
-				}
+				updateParts = append(updateParts, fmt.Sprintf("%s = EXCLUDED.%s", quotedCol, quotedCol))
 			}
 			conflictPart = fmt.Sprintf("ON CONFLICT (%s) DO UPDATE SET %s", quotedPK, strings.Join(updateParts, ", "))
 		} else {
@@ -1149,15 +1142,11 @@ func (q *Query) buildUpsertQuery(value interface{}) (string, []interface{}) {
 		if primaryKeyCol != "" {
 			var updateParts []string
 			for _, col := range columns {
-				if col == primaryKeyCol || col == "created_at" {
+				if col == primaryKeyCol {
 					continue
 				}
 				quotedCol := q.dialect.QuoteIdentifier(col)
-				if col == "updated_at" {
-					updateParts = append(updateParts, fmt.Sprintf("%s = %s", quotedCol, q.dialect.GetNowFunction()))
-				} else {
-					updateParts = append(updateParts, fmt.Sprintf("%s = VALUES(%s)", quotedCol, quotedCol))
-				}
+				updateParts = append(updateParts, fmt.Sprintf("%s = VALUES(%s)", quotedCol, quotedCol))
 			}
 			conflictPart = fmt.Sprintf("ON DUPLICATE KEY UPDATE %s", strings.Join(updateParts, ", "))
 		} else {
@@ -1186,26 +1175,11 @@ func (q *Query) buildUpdateQuery(column string, value interface{}) (string, []in
 	args = append(args, value)
 	argIndex++
 
-	hasUpdatedAt := contains(q.columns, "updated_at")
-	if hasUpdatedAt {
-		parts = append(parts, fmt.Sprintf(", %s = %s",
-			q.dialect.QuoteIdentifier("updated_at"),
-			q.dialect.GetNowFunction()))
-	}
-
 	// WHERE
 	if len(q.whereConditions) > 0 {
 		whereClause, whereArgs := q.buildWhereClause(&argIndex)
 		parts = append(parts, "WHERE", whereClause)
 		args = append(args, whereArgs...)
-
-		if q.hasDeleted && !q.includeDeleted {
-			deletedAtField := q.dialect.QuoteIdentifier("deleted_at")
-			parts = append(parts, fmt.Sprintf("AND %s IS NULL", deletedAtField))
-		}
-	} else if q.hasDeleted && !q.includeDeleted {
-		deletedAtField := q.dialect.QuoteIdentifier("deleted_at")
-		parts = append(parts, fmt.Sprintf("WHERE %s IS NULL", deletedAtField))
 	}
 
 	return strings.Join(parts, " "), args
@@ -1219,17 +1193,11 @@ func (q *Query) buildUpdatesQuery(values map[string]interface{}) (string, []inte
 
 	var setParts []string
 	for col, val := range values {
-		if col == "updated_at" {
-			setParts = append(setParts, fmt.Sprintf("%s = %s",
-				q.dialect.QuoteIdentifier("updated_at"),
-				q.dialect.GetNowFunction()))
-		} else {
-			setParts = append(setParts, fmt.Sprintf("%s = %s",
-				q.dialect.QuoteIdentifier(col),
-				q.dialect.GetPlaceholder(argIndex)))
-			args = append(args, val)
-			argIndex++
-		}
+		setParts = append(setParts, fmt.Sprintf("%s = %s",
+			q.dialect.QuoteIdentifier(col),
+			q.dialect.GetPlaceholder(argIndex)))
+		args = append(args, val)
+		argIndex++
 	}
 
 	parts = append(parts, fmt.Sprintf("UPDATE %s SET %s",
@@ -1241,14 +1209,6 @@ func (q *Query) buildUpdatesQuery(values map[string]interface{}) (string, []inte
 		whereClause, whereArgs := q.buildWhereClause(&argIndex)
 		parts = append(parts, "WHERE", whereClause)
 		args = append(args, whereArgs...)
-
-		if q.hasDeleted && !q.includeDeleted {
-			deletedAtField := q.dialect.QuoteIdentifier("deleted_at")
-			parts = append(parts, fmt.Sprintf("AND %s IS NULL", deletedAtField))
-		}
-	} else if q.hasDeleted && !q.includeDeleted {
-		deletedAtField := q.dialect.QuoteIdentifier("deleted_at")
-		parts = append(parts, fmt.Sprintf("WHERE %s IS NULL", deletedAtField))
 	}
 
 	return strings.Join(parts, " "), args
@@ -1260,22 +1220,13 @@ func (q *Query) buildDeleteQuery() (string, []interface{}) {
 	var args []interface{}
 	argIndex := 1
 
-	if q.hasDeleted {
-		parts = append(parts, fmt.Sprintf("UPDATE %s SET %s = %s",
-			q.dialect.QuoteIdentifier(q.table),
-			q.dialect.QuoteIdentifier("deleted_at"),
-			q.dialect.GetNowFunction()))
-	} else {
-		parts = append(parts, fmt.Sprintf("DELETE FROM %s", q.dialect.QuoteIdentifier(q.table)))
-	}
+	parts = append(parts, fmt.Sprintf("DELETE FROM %s", q.dialect.QuoteIdentifier(q.table)))
 
 	// WHERE
 	if len(q.whereConditions) > 0 {
 		whereClause, whereArgs := q.buildWhereClause(&argIndex)
 		parts = append(parts, "WHERE", whereClause)
 		args = append(args, whereArgs...)
-	} else if q.hasDeleted {
-		parts = append(parts, fmt.Sprintf("WHERE %s IS NULL", q.dialect.QuoteIdentifier("deleted_at")))
 	}
 
 	return strings.Join(parts, " "), args
@@ -1302,11 +1253,16 @@ func (q *Query) scanRowIntoModel(row interface{}, dest interface{}) error {
 			columnsToScan = q.selectFields
 		}
 
+		// Build column-to-field map filtering only fields that correspond to actual columns
+		columnToField := buildColumnToFieldMapForScan(q.modelType, columnsToScan)
+
 		fields := make([]interface{}, len(columnsToScan))
+		mappedCount := 0
 		for i, colName := range columnsToScan {
-			field := findFieldByColumn(modelValue, colName)
-			if field.IsValid() {
+			if fieldIdx, ok := columnToField[colName]; ok {
+				field := modelValue.Field(fieldIdx)
 				fields[i] = field.Addr().Interface()
+				mappedCount++
 			} else {
 				var dummy interface{}
 				fields[i] = &dummy
@@ -1315,7 +1271,7 @@ func (q *Query) scanRowIntoModel(row interface{}, dest interface{}) error {
 
 		if err := driverRow.Scan(fields...); err != nil {
 			if logger := q.getLogger(); logger != nil {
-				logger.Error("Scan failed: %v (scanning %d fields: %v)", err, len(columnsToScan), columnsToScan)
+				logger.Error("Scan failed: %v (scanning %d fields: %v, mapped: %d)", err, len(columnsToScan), columnsToScan, mappedCount)
 			}
 			return err
 		}
@@ -1365,10 +1321,13 @@ func (q *Query) scanRowsIntoModel(rows interface{}, dest interface{}) error {
 				columnsToScan = q.selectFields
 			}
 
+			// Build column-to-field map filtering only fields that correspond to actual columns
+			columnToField := buildColumnToFieldMapForScan(sliceType, columnsToScan)
+
 			fields := make([]interface{}, len(columnsToScan))
 			for i, colName := range columnsToScan {
-				field := findFieldByColumn(modelValue, colName)
-				if field.IsValid() {
+				if fieldIdx, ok := columnToField[colName]; ok {
+					field := modelValue.Field(fieldIdx)
 					fields[i] = field.Addr().Interface()
 				} else {
 					var dummy interface{}
@@ -1399,6 +1358,57 @@ func (q *Query) scanRowsIntoModel(rows interface{}, dest interface{}) error {
 // scanRowsDirect performs direct scan (for simple cases)
 func (q *Query) scanRowsDirect(rows interface{}, dest interface{}) error {
 	return q.scanRowsIntoModel(rows, dest)
+}
+
+// buildColumnToFieldMapForScan creates a map of column names to field indices
+// Only includes fields that correspond to actual columns being scanned
+// Iterates through columns first to ensure all columns are mapped
+func buildColumnToFieldMapForScan(modelType reflect.Type, columns []string) map[string]int {
+	columnToField := make(map[string]int)
+
+	// Build a reverse map: field identifier -> field index
+	// This allows us to quickly find fields by their various identifiers
+	fieldMap := make(map[string]int)
+
+	// First, build a map of all possible field identifiers to field indices
+	for i := 0; i < modelType.NumField(); i++ {
+		field := modelType.Field(i)
+		jsonTag := field.Tag.Get("json")
+		dbTag := field.Tag.Get("db")
+
+		// Remove options from json tag (e.g., "id,omitempty" -> "id")
+		if jsonTag != "" {
+			if idx := strings.Index(jsonTag, ","); idx != -1 {
+				jsonTag = jsonTag[:idx]
+			}
+		}
+
+		// Map all possible identifiers to this field index
+		// Priority: dbTag > jsonTag > snake_case field name
+		if dbTag != "" {
+			fieldMap[dbTag] = i
+		}
+		if jsonTag != "" {
+			fieldMap[jsonTag] = i
+		}
+		// Also map snake_case field name
+		fieldName := toSnakeCase(field.Name)
+		if fieldName != "" {
+			fieldMap[fieldName] = i
+		}
+	}
+
+	// Now iterate through columns and find matching fields
+	// This ensures all columns are checked and mapped
+	for _, col := range columns {
+		if idx, ok := fieldMap[col]; ok {
+			columnToField[col] = idx
+		}
+		// If column not found in fieldMap, it will not be in columnToField
+		// and scanRowIntoModel will use a dummy variable for it
+	}
+
+	return columnToField
 }
 
 // findFieldByColumn finds a struct field by column name

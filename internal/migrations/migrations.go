@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/carlosnayan/prisma-go-client/internal/config"
-	"github.com/google/uuid"
+	"github.com/carlosnayan/prisma-go-client/internal/uuid"
 )
 
 // Migration represents a migration
@@ -409,7 +409,7 @@ func (m *Manager) ApplyMigration(migration *Migration) error {
 // generateMigrationID generates a unique UUID v4 for the migration
 // This must match Prisma's format for compatibility
 func generateMigrationID() string {
-	return uuid.New().String()
+	return uuid.GenerateUUID()
 }
 
 // calculateChecksum calculates SHA256 checksum of the SQL content

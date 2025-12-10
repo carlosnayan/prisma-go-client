@@ -248,6 +248,26 @@ func TestBuilder_AllProviders(t *testing.T) {
 				t.Fatalf("Create failed: %v", err)
 			}
 
+			// SQLite não retorna o modelo criado
+			if provider == "sqlite" {
+				if created != nil {
+					t.Error("SQLite Create should return nil, got non-nil value")
+				}
+				// Para SQLite, buscar o registro inserido usando FindFirst com o nome
+				found, err := builder.FindFirst(ctx, Where{"name": "Test"})
+				if err != nil {
+					t.Fatalf("FindFirst failed: %v", err)
+				}
+				foundRecord, ok := found.(TestRecord)
+				if !ok {
+					t.Fatal("FindFirst returned wrong type")
+				}
+				if foundRecord.Name != "Test" {
+					t.Errorf("Expected name Test, got %s", foundRecord.Name)
+				}
+				return
+			}
+
 			createdRecord, ok := created.(TestRecord)
 			if !ok {
 				t.Fatal("Create returned wrong type")

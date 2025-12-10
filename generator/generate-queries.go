@@ -296,36 +296,19 @@ func generateQueriesForTable(queriesDir, tableName string, table *TableInfo) err
 
 func generateFindFirst(w *os.File, tableName string, table *TableInfo, hasCreatedAt bool) {
 	columns := getSelectColumns(table)
-	whereClause := "WHERE deleted_at IS NULL"
-	if !table.HasDeleted {
-		whereClause = ""
-	}
 
 	fmt.Fprintf(w, "-- name: FindFirst%s :one\n", toPascalCase(tableName))
 	fmt.Fprintf(w, "SELECT %s\n", columns)
 	fmt.Fprintf(w, "FROM %s\n", tableName)
-	if whereClause != "" {
-		fmt.Fprintf(w, "%s\n", whereClause)
-	}
 	fmt.Fprintf(w, "LIMIT 1;\n\n")
 }
 
 func generateFindMany(w *os.File, tableName string, table *TableInfo, hasCreatedAt bool) {
 	columns := getSelectColumns(table)
-	whereClause := "WHERE deleted_at IS NULL"
-	if !table.HasDeleted {
-		whereClause = ""
-	}
 
 	fmt.Fprintf(w, "-- name: FindMany%s :many\n", toPascalCase(tableName))
 	fmt.Fprintf(w, "SELECT %s\n", columns)
 	fmt.Fprintf(w, "FROM %s\n", tableName)
-	if whereClause != "" {
-		fmt.Fprintf(w, "%s\n", whereClause)
-	}
-	if hasCreatedAt {
-		fmt.Fprintf(w, "ORDER BY created_at DESC\n")
-	}
 	fmt.Fprintf(w, "LIMIT $1 OFFSET $2;\n\n")
 }
 
@@ -344,47 +327,10 @@ func generateCreate(w *os.File, tableName string, table *TableInfo, hasCreatedAt
 				continue // Não incluir no INSERT
 			}
 		}
-		if col.Name == "created_at" && (strings.Contains(col.Default, "CURRENT_TIMESTAMP") || strings.Contains(col.Default, "NOW()")) {
-			returningColumns = append(returningColumns, col.Name)
-			continue // Não incluir no INSERT
-		}
-		if col.Name == "updated_at" && (strings.Contains(col.Default, "CURRENT_TIMESTAMP") || strings.Contains(col.Default, "NOW()")) {
-			returningColumns = append(returningColumns, col.Name)
-			continue // Não incluir no INSERT
-		}
-		if col.Name == "deleted_at" {
-			continue // Não incluir deleted_at no INSERT
-		}
 
 		insertColumns = append(insertColumns, col.Name)
 		values = append(values, fmt.Sprintf("$%d", len(insertColumns)))
 		returningColumns = append(returningColumns, col.Name)
-	}
-
-	// Adicionar created_at e updated_at no RETURNING apenas se existirem e não estiverem já incluídos
-	if hasCreatedAt {
-		found := false
-		for _, col := range returningColumns {
-			if col == "created_at" {
-				found = true
-				break
-			}
-		}
-		if !found {
-			returningColumns = append(returningColumns, "created_at")
-		}
-	}
-	if hasUpdatedAt {
-		found := false
-		for _, col := range returningColumns {
-			if col == "updated_at" {
-				found = true
-				break
-			}
-		}
-		if !found {
-			returningColumns = append(returningColumns, "updated_at")
-		}
 	}
 
 	fmt.Fprintf(w, "-- name: Create%s :one\n", toPascalCase(tableName))
@@ -399,17 +345,8 @@ func generateUpdate(w *os.File, tableName string, table *TableInfo, hasUpdatedAt
 	var returningColumns []string
 
 	for _, col := range table.Columns {
-		// Pular primary key, created_at, deleted_at
-		if col.Name == table.PrimaryKey || col.Name == "created_at" || col.Name == "deleted_at" {
-			continue
-		}
-
-		// updated_at será atualizado automaticamente
-		if col.Name == "updated_at" {
-			if !returningMap[col.Name] {
-				returningColumns = append(returningColumns, col.Name)
-				returningMap[col.Name] = true
-			}
+		// Pular primary key
+		if col.Name == table.PrimaryKey {
 			continue
 		}
 
@@ -420,47 +357,21 @@ func generateUpdate(w *os.File, tableName string, table *TableInfo, hasUpdatedAt
 		}
 	}
 
-	// Contar quantos parâmetros realmente existem (updated_at = NOW() não é parâmetro)
-	numParams := len(updateColumns)
-
-	// Adicionar updated_at = NOW() se existir (não conta como parâmetro)
-	if hasUpdatedAt {
-		updateColumns = append(updateColumns, "updated_at = NOW()")
-		if !returningMap["updated_at"] {
-			returningColumns = append(returningColumns, "updated_at")
-		}
-	}
-
 	// WHERE clause usando primary key
-	whereParam := numParams + 1
+	whereParam := len(updateColumns) + 1
 
 	fmt.Fprintf(w, "-- name: Update%s :one\n", toPascalCase(tableName))
 	fmt.Fprintf(w, "UPDATE %s\n", tableName)
 	fmt.Fprintf(w, "SET %s\n", strings.Join(updateColumns, ", "))
 	fmt.Fprintf(w, "WHERE %s = $%d", table.PrimaryKey, whereParam)
-	if table.HasDeleted {
-		fmt.Fprintf(w, " AND deleted_at IS NULL")
-	}
 	fmt.Fprintf(w, "\nRETURNING %s;\n\n", strings.Join(returningColumns, ", "))
 }
 
 func generateDelete(w *os.File, tableName string, table *TableInfo, hasUpdatedAt bool) {
-	if table.HasDeleted {
-		// Soft delete
-		fmt.Fprintf(w, "-- name: Delete%s :exec\n", toPascalCase(tableName))
-		fmt.Fprintf(w, "UPDATE %s\n", tableName)
-		if hasUpdatedAt {
-			fmt.Fprintf(w, "SET deleted_at = NOW(), updated_at = NOW()\n")
-		} else {
-			fmt.Fprintf(w, "SET deleted_at = NOW()\n")
-		}
-		fmt.Fprintf(w, "WHERE %s = $1 AND deleted_at IS NULL;\n\n", table.PrimaryKey)
-	} else {
-		// Hard delete
-		fmt.Fprintf(w, "-- name: Delete%s :exec\n", toPascalCase(tableName))
-		fmt.Fprintf(w, "DELETE FROM %s\n", tableName)
-		fmt.Fprintf(w, "WHERE %s = $1;\n\n", table.PrimaryKey)
-	}
+	// Hard delete
+	fmt.Fprintf(w, "-- name: Delete%s :exec\n", toPascalCase(tableName))
+	fmt.Fprintf(w, "DELETE FROM %s\n", tableName)
+	fmt.Fprintf(w, "WHERE %s = $1;\n\n", table.PrimaryKey)
 }
 
 func getSelectColumns(table *TableInfo) string {

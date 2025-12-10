@@ -12,7 +12,6 @@ package builder
 //	    "email": "user@example.com",
 //	    "age": builder.Gte(18),
 //	    "status": builder.In("active", "pending"),
-//	    "deleted_at": nil,
 //	}
 type Where map[string]interface{}
 

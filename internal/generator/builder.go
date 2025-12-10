@@ -42,13 +42,24 @@ func GenerateBuilder(schema *parser.Schema, outputDir string) error {
 		return fmt.Errorf("failed to generate context.go: %w", err)
 	}
 
+	// Detect user module for utils import path
+	userModule, err := detectUserModule(outputDir)
+	if err != nil {
+		return fmt.Errorf("failed to detect user module: %w", err)
+	}
+
+	utilsPath, err := calculateUtilsImportPath(userModule, outputDir)
+	if err != nil {
+		return fmt.Errorf("failed to calculate utils import path: %w", err)
+	}
+
 	// Get provider from schema to generate appropriate builder
 	provider := getProviderFromSchema(schema)
-	if err := generateBuilderMain(builderDir, provider); err != nil {
+	if err := generateBuilderMain(builderDir, provider, utilsPath); err != nil {
 		return fmt.Errorf("failed to generate builder.go: %w", err)
 	}
 
-	if err := generateBuilderFluent(builderDir, provider); err != nil {
+	if err := generateBuilderFluent(builderDir, provider, utilsPath); err != nil {
 		return fmt.Errorf("failed to generate fluent.go: %w", err)
 	}
 

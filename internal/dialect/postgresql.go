@@ -97,6 +97,10 @@ func (d *PostgreSQLDialect) GetNowFunction() string {
 	return "NOW()"
 }
 
+func (d *PostgreSQLDialect) SupportsReturning() bool {
+	return true
+}
+
 func (d *PostgreSQLDialect) GetDriverName() string {
 	return "pgx"
 }

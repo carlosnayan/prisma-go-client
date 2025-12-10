@@ -62,11 +62,21 @@ func TestBuilder_SQLite(t *testing.T) {
 		t.Fatalf("Create failed: %v", err)
 	}
 
-	createdUser, ok := created.(User)
-	if !ok {
-		t.Fatal("Create returned wrong type")
+	// SQLite não retorna o modelo criado, apenas confirma sucesso
+	if created != nil {
+		t.Error("SQLite Create should return nil, got non-nil value")
 	}
-	if createdUser.Email != "test@example.com" {
-		t.Errorf("Expected email test@example.com, got %s", createdUser.Email)
+
+	// Verificar que o usuário foi criado usando FindFirst
+	found, err := builder.FindFirst(ctx, Where{"email": "test@example.com"})
+	if err != nil {
+		t.Fatalf("FindFirst failed: %v", err)
+	}
+	foundUser, ok := found.(User)
+	if !ok {
+		t.Fatal("FindFirst returned wrong type")
+	}
+	if foundUser.Email != "test@example.com" {
+		t.Errorf("Expected email test@example.com, got %s", foundUser.Email)
 	}
 }
