@@ -72,6 +72,11 @@ func (m *mockBuilderDBTX) SQLDB() *sql.DB {
 	return nil
 }
 
+// Close implements builder.DBTX.Close
+func (m *mockBuilderDBTX) Close() {
+	// No-op for mock
+}
+
 // TestRawNew_WithMockBuilderDBTX tests that raw.New accepts builder.DBTX implementations
 // This test would have caught the original panic issue where raw.New couldn't recognize
 // builder.DBTX implementations due to type assertion failures.

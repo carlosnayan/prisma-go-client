@@ -79,6 +79,12 @@ func (a *txDBAdapter) SQLDB() *sql.DB {
 	return nil
 }
 
+// Close is a no-op for transaction adapters
+// Transactions should be closed via Commit() or Rollback()
+func (a *txDBAdapter) Close() {
+	// No-op: transactions are closed via Commit/Rollback, not Close
+}
+
 // ExecuteTransaction executes a function within a transaction
 // If the function returns an error, the transaction is automatically rolled back
 func ExecuteTransaction(ctx context.Context, db DBTX, fn TransactionFunc) error {

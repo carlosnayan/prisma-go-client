@@ -18,7 +18,7 @@ func TestGeneratedCode_Compiles(t *testing.T) {
 
 	// Create a temporary go.mod file for module detection
 	goModPath := filepath.Join(tmpDir, "go.mod")
-	goModContent := "module test\n\ngo 1.21\n"
+	goModContent := "module test\n\ngo 1.21\n\nreplace github.com/carlosnayan/prisma-go-client => /Users/carlos/Documents/estudo/prisma/prisma-go-client\n"
 	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
 		t.Fatalf("Failed to create go.mod: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestGeneratedCode_PackageNames(t *testing.T) {
 
 	// Create a temporary go.mod file for module detection
 	goModPath := filepath.Join(tmpDir, "go.mod")
-	goModContent := "module test\n\ngo 1.21\n"
+	goModContent := "module test\n\ngo 1.21\n\nreplace github.com/carlosnayan/prisma-go-client => /Users/carlos/Documents/estudo/prisma/prisma-go-client\n"
 	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
 		t.Fatalf("Failed to create go.mod: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestGeneratedCode_ColumnSyntax(t *testing.T) {
 
 	// Create a temporary go.mod file for module detection
 	goModPath := filepath.Join(tmpDir, "go.mod")
-	goModContent := "module test\n\ngo 1.21\n"
+	goModContent := "module test\n\ngo 1.21\n\nreplace github.com/carlosnayan/prisma-go-client => /Users/carlos/Documents/estudo/prisma/prisma-go-client\n"
 	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
 		t.Fatalf("Failed to create go.mod: %v", err)
 	}
@@ -289,7 +289,7 @@ func TestGeneratedCode_ImportsAndHelpers(t *testing.T) {
 
 	// Create a temporary go.mod file for module detection
 	goModPath := filepath.Join(tmpDir, "go.mod")
-	goModContent := "module test\n\ngo 1.21\n"
+	goModContent := "module test\n\ngo 1.21\n\nreplace github.com/carlosnayan/prisma-go-client => /Users/carlos/Documents/estudo/prisma/prisma-go-client\n"
 	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
 		t.Fatalf("Failed to create go.mod: %v", err)
 	}
@@ -387,7 +387,7 @@ func TestGeneratedCode_OptionalFieldsPointerHandling(t *testing.T) {
 
 	// Create go.mod
 	goModPath := filepath.Join(tmpDir, "go.mod")
-	goModContent := "module test\n\ngo 1.21\n"
+	goModContent := "module test\n\ngo 1.21\n\nreplace github.com/carlosnayan/prisma-go-client => /Users/carlos/Documents/estudo/prisma/prisma-go-client\n"
 	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
 		t.Fatalf("Failed to create go.mod: %v", err)
 	}
