@@ -96,6 +96,7 @@ func GenerateClient(schema *parser.Schema, outputDir string) error {
 		"client_struct.tmpl",
 		"logger_config.tmpl",
 		"new_client.tmpl",
+		"close_method.tmpl",
 		"raw_method.tmpl",
 		"transaction_client.tmpl",
 		"transaction_method.tmpl",

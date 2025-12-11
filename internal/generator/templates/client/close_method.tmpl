@@ -1,0 +1,7 @@
+// Close closes the database connection and releases resources
+// It's safe to call Close multiple times
+func (c *Client) Close() {
+	if c.db != nil {
+		c.db.Close()
+	}
+}

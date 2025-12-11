@@ -62,6 +62,11 @@ func (a *PgxPoolAdapter) SQLDB() *sql.DB {
 	return nil
 }
 
+// Close closes the connection pool
+func (a *PgxPoolAdapter) Close() {
+	a.pool.Close()
+}
+
 // PgxResult wraps pgconn.CommandTag
 type PgxResult struct {
 	result pgconn.CommandTag

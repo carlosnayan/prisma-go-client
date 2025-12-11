@@ -22,6 +22,9 @@ type DB interface {
 	// SQLDB returns the underlying *sql.DB for migrations and introspection
 	// Returns nil if not available (e.g., for pgx pool)
 	SQLDB() *sql.DB
+
+	// Close closes the database connection and releases resources
+	Close()
 }
 
 // Result represents the result of an Exec operation

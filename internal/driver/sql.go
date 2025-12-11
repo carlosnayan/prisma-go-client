@@ -54,6 +54,12 @@ func (a *SQLDBAdapter) SQLDB() *sql.DB {
 	return a.db
 }
 
+// Close closes the database connection
+// Note: sql.DB.Close() error is ignored to match interface signature
+func (a *SQLDBAdapter) Close() {
+	_ = a.db.Close()
+}
+
 // SQLResult wraps sql.Result
 type SQLResult struct {
 	result sql.Result
