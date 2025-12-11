@@ -144,6 +144,7 @@ func TestIntegration_MigrateWorkflow(t *testing.T) {
 	dir := setupTestDir(t)
 	defer func() { _ = cleanupTestDir(dir) }()
 
+	createTestGoMod(t, "test-module")
 	// This test requires a database
 	skipIfNoDatabase(t)
 	cleanup := setEnv(t, "DATABASE_URL", getTestDatabaseURL(t))

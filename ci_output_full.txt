@@ -1,0 +1,70 @@
+==========================================
+  Prisma Go Client - CI Local Tests
+==========================================
+
+[0;34m[INFO][0m Checking prerequisites...
+[0;32m[✓][0m Go found: go1.25.4
+[0;32m[✓][0m Docker found: 29.1.2
+[0;32m[✓][0m Docker Compose found
+
+[0;34m[INFO][0m Downloading Go dependencies...
+[0;32m[✓][0m Dependencies downloaded
+
+[0;34m[INFO][0m Installing development tools...
+[0;34m[INFO][0m Installing golangci-lint...
+[0;34m[INFO][0m Installing goimports...
+
+[0;34m[INFO][0m === Test: Linter ===
+[0;32m[✓][0m Linter (golangci-lint)
+
+[0;34m[INFO][0m === Test: General Tests ===
+[0;34m[INFO][0m Running: General tests (go test)
+[0;32m[✓][0m General tests (go test)
+
+[0;34m[INFO][0m === Test: Build CLI ===
+[0;34m[INFO][0m Running: Build CLI
+[0;32m[✓][0m Build CLI
+[0;34m[INFO][0m Testing compiled binary...
+[0;32m[✓][0m Binary works correctly
+
+[0;34m[INFO][0m === Test: Format Check ===
+[0;32m[✓][0m Format OK
+
+[0;34m[INFO][0m === Database Tests ===
+[0;34m[INFO][0m Starting Docker containers...
+[0;32m[✓][0m Containers started
+[0;34m[INFO][0m Waiting for databases to be ready...
+[0;34m[INFO][0m Checking PostgreSQL...
+/var/run/postgresql:5432 - accepting connections
+[0;32m[✓][0m PostgreSQL ready
+[0;34m[INFO][0m Checking MySQL...
+mysqld is alive
+[0;32m[✓][0m MySQL ready
+
+[0;34m[INFO][0m === Test: PostgreSQL (database/sql) ===
+[0;34m[INFO][0m Running: PostgreSQL tests (database/sql)
+[0;32m[✓][0m PostgreSQL tests (database/sql)
+
+[0;34m[INFO][0m === Test: PostgreSQL (pgx) ===
+[0;34m[INFO][0m Running: PostgreSQL tests (pgx)
+[0;32m[✓][0m PostgreSQL tests (pgx)
+
+[0;34m[INFO][0m === Test: MySQL ===
+[0;34m[INFO][0m Running: MySQL tests
+[0;32m[✓][0m MySQL tests
+
+[0;34m[INFO][0m === Test: SQLite ===
+[0;34m[INFO][0m Running: SQLite tests
+[0;32m[✓][0m SQLite tests
+
+[0;34m[INFO][0m Stopping Docker containers...
+[0;32m[✓][0m Containers stopped
+
+==========================================
+  Test Summary
+==========================================
+[0;32mTests passed: 17[0m
+[0;31mTests failed: 0[0m
+
+[0;32mAll tests passed![0m
+

@@ -1,5 +1,3 @@
 .DS_Store
-.env.test
 db
 ci_errors.txt
-*.test

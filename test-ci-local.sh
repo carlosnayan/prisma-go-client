@@ -287,14 +287,25 @@ if [ "$SKIP_DOCKER" = false ]; then
         
         echo ""
         
-        # 5.2 PostgreSQL tests
-        log_info "=== Test: PostgreSQL (database/sql) ==="
+        # 5.2 Set environment variables for all test providers
+        # Export all variations that tests might use
+        export TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:5433/postgres?sslmode=disable"
         export TEST_DATABASE_URL_POSTGRESQL="postgresql://postgres:postgres@localhost:5433/postgres?sslmode=disable"
-        run_test "PostgreSQL tests (database/sql)" "go test -v ./..."
+        export TEST_DATABASE_URL_MYSQL="mysql://root:password@localhost:3307/prisma_test"
+        export TEST_DATABASE_URL_SQLITE="file:./test.db"
+        
+        
+        # 5.3 PostgreSQL tests (database/sql with pgx driver)
+        log_info "=== Test: PostgreSQL (database/sql) ==="
+        if go list -m github.com/jackc/pgx/v5/pgxpool &> /dev/null || go get github.com/jackc/pgx/v5/pgxpool 2>/dev/null; then
+            run_test "PostgreSQL tests (database/sql)" "go test -tags=pgx -v ./..."
+        else
+            log_warning "pgx not available, skipping PostgreSQL tests"
+        fi
         echo ""
         
+        # 5.4 PostgreSQL (pgx) tests  
         log_info "=== Test: PostgreSQL (pgx) ==="
-        export TEST_DATABASE_URL_POSTGRESQL="postgresql://postgres:postgres@localhost:5433/postgres?sslmode=disable"
         if go list -m github.com/jackc/pgx/v5/pgxpool &> /dev/null || go get github.com/jackc/pgx/v5/pgxpool 2>/dev/null; then
             run_test "PostgreSQL tests (pgx)" "go test -tags=pgx -v ./..."
         else
@@ -302,9 +313,8 @@ if [ "$SKIP_DOCKER" = false ]; then
         fi
         echo ""
         
-        # 5.3 MySQL tests
+        # 5.5 MySQL tests
         log_info "=== Test: MySQL ==="
-        export TEST_DATABASE_URL_MYSQL="mysql://root:password@localhost:3307/prisma_test"
         if go list -m github.com/go-sql-driver/mysql &> /dev/null || go get github.com/go-sql-driver/mysql 2>/dev/null; then
             run_test "MySQL tests" "go test -tags=mysql -v ./..."
         else
@@ -312,9 +322,8 @@ if [ "$SKIP_DOCKER" = false ]; then
         fi
         echo ""
         
-        # 5.4 SQLite tests
+        # 5.6 SQLite tests
         log_info "=== Test: SQLite ==="
-        export TEST_DATABASE_URL_SQLITE="file:./test.db"
         if go list -m github.com/mattn/go-sqlite3 &> /dev/null || go get github.com/mattn/go-sqlite3 2>/dev/null; then
             run_test "SQLite tests" "go test -tags=sqlite -v ./..."
             rm -f test.db
@@ -323,7 +332,7 @@ if [ "$SKIP_DOCKER" = false ]; then
         fi
         echo ""
         
-        # 5.5 Stop containers
+        # 5.7 Stop containers
         log_info "Stopping Docker containers..."
         if docker-compose -f docker-compose.test.yml down 2>/dev/null || docker compose -f docker-compose.test.yml down 2>/dev/null; then
             log_success "Containers stopped"
