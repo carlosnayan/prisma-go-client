@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"os"
 	"testing"
 )
 
@@ -36,13 +37,53 @@ func TestDbPull_GeneratesSchema(t *testing.T) {
 	dir := setupTestDir(t)
 	defer func() { _ = cleanupTestDir(dir) }()
 
+	skipIfNoDatabase(t)
+
+	// Create isolated test database
+	dbName, cleanupDB := createIsolatedTestDB(t)
+	defer cleanupDB()
+
+	testDBURL := getTestDBURL(t, dbName)
+	cleanupEnv := setEnv(t, "DATABASE_URL", testDBURL)
+	defer cleanupEnv()
+
+	// Create test tables in the database using SQL
+	execSQL(t, testDBURL,
+		`CREATE TABLE users (
+			id TEXT PRIMARY KEY,
+			email TEXT NOT NULL UNIQUE,
+			name TEXT
+		)`,
+		`CREATE TABLE posts (
+			id TEXT PRIMARY KEY,
+			title TEXT NOT NULL,
+			user_id TEXT REFERENCES users(id)
+		)`,
+	)
+
 	createTestConfig(t, "")
 
-	skipIfNoDatabase(t)
-	cleanup := setEnv(t, "DATABASE_URL", getTestDatabaseURL(t))
-	defer cleanup()
+	// Ensure prisma directory exists for the generated schema
+	if err := os.MkdirAll("prisma", 0755); err != nil {
+		t.Fatalf("Failed to create prisma directory: %v", err)
+	}
 
-	// This test requires a database with tables
-	// We skip it to avoid needing full database setup
-	t.Skip("Requires database with existing tables")
+	// Run db pull to generate schema from existing tables
+	err := runDbPull([]string{})
+
+	if err != nil {
+		t.Logf("DB pull completed with: %v", err)
+	}
+
+	// Verify schema file was created
+	if !fileExists("prisma/schema.prisma") {
+		t.Error("Schema file should exist after db pull")
+	} else {
+		schemaContent := readFile(t, "prisma/schema.prisma")
+		if !contains(schemaContent, "model") {
+			t.Error("Schema should contain model definitions")
+		} else {
+			t.Log("Schema generated successfully")
+		}
+	}
 }

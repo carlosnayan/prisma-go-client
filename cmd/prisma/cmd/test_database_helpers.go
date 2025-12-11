@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -39,7 +40,8 @@ func generateTestUUID() string {
 func createIsolatedTestDB(t *testing.T) (dbName string, cleanup func()) {
 	t.Helper()
 
-	baseURL := getTestDatabaseURL(t)
+	// Check if TEST_DATABASE_URL is set (don't use default value)
+	baseURL := os.Getenv("TEST_DATABASE_URL")
 	if baseURL == "" {
 		t.Skip("TEST_DATABASE_URL not set, skipping database test")
 	}

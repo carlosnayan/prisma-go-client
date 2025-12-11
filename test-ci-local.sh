@@ -129,7 +129,77 @@ fi
 
 echo ""
 
-# 2. Download dependencies
+# 2. Start Docker containers (before any tests)
+if [ "$SKIP_DOCKER" = false ]; then
+    log_info "=== Starting Docker Containers ==="
+    log_info "Starting Docker containers..."
+    
+    if command -v docker-compose &> /dev/null; then
+        docker-compose -f docker-compose.test.yml up -d
+    else
+        docker compose -f docker-compose.test.yml up -d
+    fi
+    
+    log_success "Containers started"
+    
+    # Wait for databases to be ready
+    log_info "Waiting for databases to be ready..."
+    
+    # Check PostgreSQL
+    log_info "Checking PostgreSQL..."
+    POSTGRES_CONTAINER=$(docker ps -q -f name=postgres_test)
+    if [ -z "$POSTGRES_CONTAINER" ]; then
+        POSTGRES_CONTAINER=$(docker ps -q -f ancestor=postgres:15)
+    fi
+    
+    if [ -n "$POSTGRES_CONTAINER" ]; then
+        for i in {1..30}; do
+            if docker exec "$POSTGRES_CONTAINER" pg_isready -U postgres 2>/dev/null | grep -q "accepting connections"; then
+                log_success "PostgreSQL ready"
+                break
+            fi
+            if [ $i -eq 30 ]; then
+                log_warning "PostgreSQL did not become ready in time"
+            fi
+            sleep 2
+        done
+    else
+        log_warning "PostgreSQL container not found"
+    fi
+    
+    # Check MySQL
+    log_info "Checking MySQL..."
+    MYSQL_CONTAINER=$(docker ps -q -f name=mysql_test)
+    if [ -z "$MYSQL_CONTAINER" ]; then
+        MYSQL_CONTAINER=$(docker ps -q -f ancestor=mysql:8)
+    fi
+    
+    if [ -n "$MYSQL_CONTAINER" ]; then
+        for i in {1..30}; do
+            if docker exec "$MYSQL_CONTAINER" mysqladmin ping -h localhost -u root -ppassword 2>/dev/null; then
+                log_success "MySQL ready"
+                break
+            fi
+            if [ $i -eq 30 ]; then
+                log_warning "MySQL did not become ready in time"
+            fi
+            sleep 2
+        done
+    else
+        log_warning "MySQL container not found"
+    fi
+    
+    # Export database URLs for all tests
+    export TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:5433/postgres?sslmode=disable"
+    export TEST_DATABASE_URL_POSTGRESQL="postgresql://postgres:postgres@localhost:5433/postgres?sslmode=disable"
+    export TEST_DATABASE_URL_MYSQL="mysql://root:password@localhost:3307/prisma_test"
+    export TEST_DATABASE_URL_SQLITE="file:./test.db"
+    
+    log_success "Database URLs exported"
+    echo ""
+fi
+
+# 3. Download dependencies
 log_info "Downloading Go dependencies..."
 if go mod download; then
     log_success "Dependencies downloaded"
@@ -139,7 +209,7 @@ else
 fi
 echo ""
 
-# 3. Install tools
+# 4. Install tools
 log_info "Installing development tools..."
 
 if [ "$SKIP_LINTER" = false ]; then
@@ -232,116 +302,51 @@ fi
 if [ "$SKIP_DOCKER" = false ]; then
     log_info "=== Database Tests ==="
     
-    # 5.1 Start containers
-    log_info "Starting Docker containers..."
-    if docker-compose -f docker-compose.test.yml up -d 2>/dev/null || docker compose -f docker-compose.test.yml up -d 2>/dev/null; then
-        log_success "Containers started"
-        
-        # Wait for databases to be ready
-        log_info "Waiting for databases to be ready..."
-        sleep 5
-        
-        # Check PostgreSQL
-        log_info "Checking PostgreSQL..."
-        POSTGRES_CONTAINER=$(docker ps -q -f name=postgres_test)
-        if [ -z "$POSTGRES_CONTAINER" ]; then
-            POSTGRES_CONTAINER=$(docker ps -q -f ancestor=postgres:15)
-        fi
-        
-        if [ -n "$POSTGRES_CONTAINER" ]; then
-            for i in {1..30}; do
-                if docker exec "$POSTGRES_CONTAINER" pg_isready -U postgres 2>/dev/null; then
-                    log_success "PostgreSQL ready"
-                    break
-                fi
-                if [ $i -eq 30 ]; then
-                    log_warning "PostgreSQL did not become ready in time"
-                fi
-                sleep 2
-            done
-        else
-            log_warning "PostgreSQL container not found"
-        fi
-        
-        # Check MySQL
-        log_info "Checking MySQL..."
-        MYSQL_CONTAINER=$(docker ps -q -f name=mysql_test)
-        if [ -z "$MYSQL_CONTAINER" ]; then
-            MYSQL_CONTAINER=$(docker ps -q -f ancestor=mysql:8)
-        fi
-        
-        if [ -n "$MYSQL_CONTAINER" ]; then
-            for i in {1..30}; do
-                if docker exec "$MYSQL_CONTAINER" mysqladmin ping -h localhost -u root -ppassword 2>/dev/null; then
-                    log_success "MySQL ready"
-                    break
-                fi
-                if [ $i -eq 30 ]; then
-                    log_warning "MySQL did not become ready in time"
-                fi
-                sleep 2
-            done
-        else
-            log_warning "MySQL container not found"
-        fi
-        
-        echo ""
-        
-        # 5.2 Set environment variables for all test providers
-        # Export all variations that tests might use
-        export TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:5433/postgres?sslmode=disable"
-        export TEST_DATABASE_URL_POSTGRESQL="postgresql://postgres:postgres@localhost:5433/postgres?sslmode=disable"
-        export TEST_DATABASE_URL_MYSQL="mysql://root:password@localhost:3307/prisma_test"
-        export TEST_DATABASE_URL_SQLITE="file:./test.db"
-        
-        
-        # 5.3 PostgreSQL tests (database/sql with pgx driver)
-        log_info "=== Test: PostgreSQL (database/sql) ==="
-        if go list -m github.com/jackc/pgx/v5/pgxpool &> /dev/null || go get github.com/jackc/pgx/v5/pgxpool 2>/dev/null; then
-            run_test "PostgreSQL tests (database/sql)" "go test -tags=pgx -v ./..."
-        else
-            log_warning "pgx not available, skipping PostgreSQL tests"
-        fi
-        echo ""
-        
-        # 5.4 PostgreSQL (pgx) tests  
-        log_info "=== Test: PostgreSQL (pgx) ==="
-        if go list -m github.com/jackc/pgx/v5/pgxpool &> /dev/null || go get github.com/jackc/pgx/v5/pgxpool 2>/dev/null; then
-            run_test "PostgreSQL tests (pgx)" "go test -tags=pgx -v ./..."
-        else
-            log_warning "pgx not available, skipping pgx tests"
-        fi
-        echo ""
-        
-        # 5.5 MySQL tests
-        log_info "=== Test: MySQL ==="
-        if go list -m github.com/go-sql-driver/mysql &> /dev/null || go get github.com/go-sql-driver/mysql 2>/dev/null; then
-            run_test "MySQL tests" "go test -tags=mysql -v ./..."
-        else
-            log_warning "MySQL driver not available, skipping MySQL tests"
-        fi
-        echo ""
-        
-        # 5.6 SQLite tests
-        log_info "=== Test: SQLite ==="
-        if go list -m github.com/mattn/go-sqlite3 &> /dev/null || go get github.com/mattn/go-sqlite3 2>/dev/null; then
-            run_test "SQLite tests" "go test -tags=sqlite -v ./..."
-            rm -f test.db
-        else
-            log_warning "SQLite driver not available, skipping SQLite tests"
-        fi
-        echo ""
-        
-        # 5.7 Stop containers
-        log_info "Stopping Docker containers..."
-        if docker-compose -f docker-compose.test.yml down 2>/dev/null || docker compose -f docker-compose.test.yml down 2>/dev/null; then
-            log_success "Containers stopped"
-        else
-            log_warning "Failed to stop containers"
-        fi
+    # 5.1 PostgreSQL tests (database/sql with pgx driver)
+    log_info "=== Test: PostgreSQL (database/sql) ==="
+    if go list -m github.com/jackc/pgx/v5/pgxpool &> /dev/null || go get github.com/jackc/pgx/v5/pgxpool 2>/dev/null; then
+        run_test "PostgreSQL tests (database/sql)" "go test -tags=pgx -v ./..."
     else
-        log_warning "Failed to start Docker containers, skipping database tests"
+        log_warning "pgx not available, skipping PostgreSQL tests"
     fi
+    echo ""
+    
+    # 5.2 PostgreSQL (pgx) tests  
+    log_info "=== Test: PostgreSQL (pgx) ==="
+    if go list -m github.com/jackc/pgx/v5/pgxpool &> /dev/null || go get github.com/jackc/pgx/v5/pgxpool 2>/dev/null; then
+        run_test "PostgreSQL tests (pgx)" "go test -tags=pgx -v ./..."
+    else
+        log_warning "pgx not available, skipping pgx tests"
+    fi
+    echo ""
+    
+    # 5.3 MySQL tests
+    log_info "=== Test: MySQL ==="
+    if go list -m github.com/go-sql-driver/mysql &> /dev/null || go get github.com/go-sql-driver/mysql 2>/dev/null; then
+        run_test "MySQL tests" "go test -tags=mysql -v ./..."
+    else
+        log_warning "MySQL driver not available, skipping MySQL tests"
+    fi
+    echo ""
+    
+    # 5.4 SQLite tests
+    log_info "=== Test: SQLite ==="
+    if go list -m github.com/mattn/go-sqlite3 &> /dev/null || go get github.com/mattn/go-sqlite3 2>/dev/null; then
+        run_test "SQLite tests" "go test -tags=sqlite -v ./..."
+        rm -f test.db
+    else
+        log_warning "SQLite driver not available, skipping SQLite tests"
+    fi
+    echo ""
+    
+    # 5.5 Stop containers
+    log_info "Stopping Docker containers..."
+    if docker-compose -f docker-compose.test.yml down 2>/dev/null || docker compose -f docker-compose.test.yml down 2>/dev/null; then
+        log_success "Containers stopped"
+    else
+        log_warning "Failed to stop containers"
+    fi
+
     echo ""
 else
     log_warning "Database tests skipped (--skip-docker or Docker not available)"
