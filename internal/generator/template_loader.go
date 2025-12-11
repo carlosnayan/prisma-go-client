@@ -106,6 +106,7 @@ type SelectFieldInfo struct {
 type UpdateFieldInfo struct {
 	FieldName   string // PascalCase field name
 	DBFieldName string // Actual database column name
+	IsPointer   bool   // Whether the field in the model is a pointer type
 }
 
 // CreateFieldInfo holds information about a field for Create operations

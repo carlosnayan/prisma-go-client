@@ -48,7 +48,11 @@ func (b *{{.PascalName}}UpdateManyBuilder) ExecWithContext(ctx context.Context) 
 	// Convert UpdateInput to model for UpdateMany
 	result := models.{{.PascalName}}{}
 {{range .UpdateFields}}	if b.data.{{.FieldName}} != nil {
+		{{- if .IsPointer}}
+		result.{{.FieldName}} = b.data.{{.FieldName}}
+		{{- else}}
 		result.{{.FieldName}} = *b.data.{{.FieldName}}
+		{{- end}}
 	}
 {{end}}	// Use TableQueryBuilder to perform batch update
 	columns := []string{ {{- range $i, $col := .Columns}}{{if $i}}, {{end}}{{printf "%q" $col}}{{end}} }

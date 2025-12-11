@@ -150,9 +150,35 @@ func generateQueryFile(filePath string, model *parser.Model, schema *parser.Sche
 				}
 			}
 		}
+
+		// Determine if the field in the model is a pointer type
+		// A field is a pointer in the model if it's optional and uses a pointer type
+		// Exception: Json and Bytes types don't use pointers even when optional
+		isPointer := false
+		if field.Type != nil && field.Type.IsOptional {
+			// Json and Bytes don't use pointers in models, even when optional
+			if field.Type.Name == "Json" || field.Type.Name == "Bytes" {
+				isPointer = false
+			} else {
+				typeMapping := parser.GetTypeGoMapping()
+				nullableMapping := parser.GetTypeGoMappingNullable()
+				if _, ok := typeMapping[field.Type.Name]; ok {
+					// Check if the type has a nullable/pointer variant
+					// If it does, the model will use a pointer for optional fields
+					if _, hasNullable := nullableMapping[field.Type.Name]; hasNullable {
+						isPointer = true
+					}
+				} else {
+					// For unknown types, assume pointer if optional
+					isPointer = true
+				}
+			}
+		}
+
 		updateFields = append(updateFields, UpdateFieldInfo{
 			FieldName:   fieldName,
 			DBFieldName: dbFieldName,
+			IsPointer:   isPointer,
 		})
 	}
 
