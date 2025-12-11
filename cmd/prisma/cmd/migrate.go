@@ -545,15 +545,17 @@ func runMigrateReset(args []string) error {
 	fmt.Printf("%s\n", Info(fmt.Sprintf("Datasource \"db\": %s database \"%s\", schema \"%s\" at \"%s\"",
 		dbInfo.Provider, dbInfo.Database, dbInfo.Schema, dbInfo.Host)))
 
-	// Confirm destructive action
-	fmt.Printf("\n%s Are you sure you want to reset your database? %s %s",
-		Prompt("?"), Warning("All data will be lost."), PromptText("› (y/N)"))
-	reader := bufio.NewReader(os.Stdin)
-	confirm, _ := reader.ReadString('\n')
-	confirm = strings.TrimSpace(strings.ToLower(confirm))
+	// Confirm destructive action (skip in test mode)
+	if os.Getenv("PRISMA_MIGRATE_SKIP_CONFIRM") != "true" {
+		fmt.Printf("\n%s Are you sure you want to reset your database? %s %s",
+			Prompt("?"), Warning("All data will be lost."), PromptText("› (y/N)"))
+		reader := bufio.NewReader(os.Stdin)
+		confirm, _ := reader.ReadString('\n')
+		confirm = strings.TrimSpace(strings.ToLower(confirm))
 
-	if confirm != "yes" && confirm != "y" {
-		return nil
+		if confirm != "yes" && confirm != "y" {
+			return nil
+		}
 	}
 
 	// Connect to database with better error message

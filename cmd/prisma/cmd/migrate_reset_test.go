@@ -38,14 +38,60 @@ func TestMigrateReset_ResetsDatabase(t *testing.T) {
 	dir := setupTestDir(t)
 	defer func() { _ = cleanupTestDir(dir) }()
 
-	createTestConfig(t, "")
-	createTestSchema(t, "")
+	createTestGoMod(t, "test-module")
 
+	// Skip if database is not available (Docker not running in general tests)
 	skipIfNoDatabase(t)
-	cleanup := setEnv(t, "DATABASE_URL", getTestDatabaseURL(t))
-	defer cleanup()
 
-	// This test requires a working database and would reset it
-	// We skip it to avoid destroying test data
-	t.Skip("Skipping reset test to avoid database destruction")
+	// Create isolated test database
+	dbName, cleanupDB := createIsolatedTestDB(t)
+	defer cleanupDB()
+
+	testDBURL := getTestDBURL(t, dbName)
+	cleanupEnv := setEnv(t, "DATABASE_URL", testDBURL)
+	defer cleanupEnv()
+
+	createTestConfig(t, "")
+	createTestSchema(t, `datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-go"
+  output   = "./db"
+}
+
+model User {
+  id    String @id @default(uuid())
+  email String @unique
+  name  String?
+}`)
+
+	// Create table directly to simulate an existing database
+	execSQL(t, testDBURL, `
+		CREATE TABLE "User" (
+			id TEXT PRIMARY KEY,
+			email TEXT NOT NULL UNIQUE,
+			name TEXT
+		)
+	`)
+
+	// Verify table exists before reset
+	if !tableExists(t, testDBURL, "User") {
+		t.Fatal("User table should exist before reset")
+	}
+
+	// Run reset with non-interactive mode (skip confirmation)
+	cleanupSkipConfirm := setEnv(t, "PRISMA_MIGRATE_SKIP_CONFIRM", "true")
+	defer cleanupSkipConfirm()
+
+	err := runMigrateReset([]string{})
+	if err != nil {
+		t.Fatalf("Reset failed: %v", err)
+	}
+
+	// Verify table was dropped after reset
+	if tableExists(t, testDBURL, "User") {
+		t.Error("User table should not exist after reset")
+	}
 }
