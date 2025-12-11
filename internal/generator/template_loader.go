@@ -112,6 +112,7 @@ type UpdateFieldInfo struct {
 type CreateFieldInfo struct {
 	FieldName            string // PascalCase field name
 	IsOptional           bool   // Whether field is optional (pointer)
+	IsRequired           bool   // Whether field is required (not optional and no default)
 	IsNonPointerOptional bool   // Whether field doesn't use pointer in model even when optional (Json, Bytes)
 }
 

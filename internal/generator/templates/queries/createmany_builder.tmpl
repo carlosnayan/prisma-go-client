@@ -38,6 +38,20 @@ func (b *{{.PascalName}}CreateManyBuilder) ExecWithContext(ctx context.Context) 
 		return &builder.BatchPayload{Count: 0}, nil
 	}
 
+	// Validate required fields for each item
+	for i, input := range b.data {
+		var missingFields []string
+{{range .CreateFields}}{{if .IsRequired}}
+		// Required fields are never optional (not pointers), so check zero value directly
+		if reflect.ValueOf(input.{{.FieldName}}).IsZero() {
+			missingFields = append(missingFields, "{{.FieldName}}")
+		}
+{{end}}{{end}}
+		if len(missingFields) > 0 {
+			return nil, fmt.Errorf("validation error: required fields missing in item %d: %s", i, strings.Join(missingFields, ", "))
+		}
+	}
+
 	// Convert CreateInput slice to model slice
 	modelSlice := make([]interface{}, 0, len(b.data))
 	for _, input := range b.data {

@@ -30,6 +30,19 @@ func (b *{{.PascalName}}CreateBuilder) ExecWithContext(ctx context.Context) (*mo
 	if b.data == nil {
 		return nil, fmt.Errorf("data is required for create")
 	}
+
+	// Validate required fields
+	var missingFields []string
+{{range .CreateFields}}{{if .IsRequired}}
+	// Required fields are never optional (not pointers), so check zero value directly
+	if reflect.ValueOf(b.data.{{.FieldName}}).IsZero() {
+		missingFields = append(missingFields, "{{.FieldName}}")
+	}
+{{end}}{{end}}
+	if len(missingFields) > 0 {
+		return nil, fmt.Errorf("validation error: required fields missing: %s", strings.Join(missingFields, ", "))
+	}
+
 	result := &models.{{.PascalName}}{}
 {{range .CreateFields}}{{if .IsOptional}}	if b.data.{{.FieldName}} != nil {
 		{{- if .IsNonPointerOptional}}

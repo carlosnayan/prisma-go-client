@@ -73,6 +73,73 @@ user, err = query.Create().
     Exec() // Uses stored context
 ```
 
+### Handling Validation Errors
+
+When creating records, required fields must be provided. Handle validation errors appropriately:
+
+```go
+import (
+    "context"
+    "errors"
+    "fmt"
+    "my-app/db"
+    "my-app/db/inputs"
+    "strings"
+)
+
+ctx := context.Background()
+pool, _ := db.NewPgxPoolFromURL(ctx, databaseURL)
+dbDriver := db.NewPgxPoolDriver(pool)
+client := db.NewClient(dbDriver)
+
+// Attempt to create user with missing required field
+user, err := client.User.Create().
+    Data(inputs.UserCreateInput{
+        Name: "John Doe",
+        // Missing required 'email' field
+    }).
+    ExecWithContext(ctx)
+
+if err != nil {
+    // Check if it's a validation error
+    errMsg := err.Error()
+    if strings.Contains(errMsg, "validation error: required fields missing") {
+        fmt.Printf("Validation failed: %s\n", errMsg)
+        // Handle validation error (e.g., show to user, log, etc.)
+    } else {
+        // Handle other errors (database errors, etc.)
+        fmt.Printf("Unexpected error: %v\n", err)
+    }
+}
+```
+
+**Example: CreateMany with Validation**
+
+```go
+// Create multiple users with validation
+result, err := client.User.CreateMany().
+    Data([]inputs.UserCreateInput{
+        {Email: "user1@example.com", Name: "User 1", Bio: "Bio 1"}, // Valid
+        {Email: "user2@example.com"}, // Missing required fields
+        {Email: "user3@example.com", Name: "User 3", Bio: "Bio 3"}, // Valid
+    }).
+    ExecWithContext(ctx)
+
+if err != nil {
+    errMsg := err.Error()
+    if strings.Contains(errMsg, "validation error: required fields missing in item") {
+        // Extract item index from error message
+        fmt.Printf("Validation failed: %s\n", errMsg)
+        // Error format: "validation error: required fields missing in item 1: Name, Bio"
+    } else {
+        fmt.Printf("Unexpected error: %v\n", err)
+    }
+    return
+}
+
+fmt.Printf("Successfully created %d users\n", result.Count)
+```
+
 ### Find Records
 
 ```go

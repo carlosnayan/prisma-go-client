@@ -98,6 +98,109 @@ user, err := client.User.Create().
 	Exec(ctx)
 ```
 
+#### Required Fields Validation
+
+When creating records, all required fields must be provided. A field is considered required if:
+
+- It is not optional (no `?` suffix in the Prisma schema)
+- It does not have a `@default` value
+
+If required fields are missing, a validation error is returned:
+
+```go
+// Missing required field 'email'
+user, err := client.User.Create().
+	Data(inputs.UserCreateInput{
+		Name: "John Doe",
+	}).
+	Exec(ctx)
+// Error: validation error: required fields missing: Email
+```
+
+**Error Format:**
+
+- Single field: `"validation error: required fields missing: FieldName"`
+- Multiple fields: `"validation error: required fields missing: Field1, Field2"`
+
+**Fields with Default Values:**
+Fields with `@default` are not required, even if they are not optional:
+
+```prisma
+model User {
+  id        Int    @id @default(autoincrement())
+  email     String
+  name      String
+  status    String @default("active")  // Not required
+  createdAt DateTime @default(now())  // Not required
+}
+```
+
+**Optional Fields:**
+Optional fields (with `?` suffix) can be omitted or set to `nil`:
+
+```go
+user, err := client.User.Create().
+	Data(inputs.UserCreateInput{
+		Email: "user@example.com",
+		Name:  "John Doe",
+		Age:   nil, // Optional field
+	}).
+	Exec(ctx)
+```
+
+### CreateMany
+
+Create multiple records in a single operation:
+
+```go
+// Create multiple records
+result, err := client.User.CreateMany().
+	Data([]inputs.UserCreateInput{
+		{Email: "user1@example.com", Name: "User 1", Bio: "Bio 1"},
+		{Email: "user2@example.com", Name: "User 2", Bio: "Bio 2"},
+	}).
+	Exec(ctx)
+
+// result.Count contains the number of records created
+fmt.Printf("Created %d users\n", result.Count)
+```
+
+#### Required Fields Validation in CreateMany
+
+The same validation rules apply to `CreateMany`. Each item in the data slice is validated before insertion:
+
+```go
+// Item with missing required field
+result, err := client.User.CreateMany().
+	Data([]inputs.UserCreateInput{
+		{Email: "user1@example.com", Name: "User 1", Bio: "Bio 1"}, // Valid
+		{Email: "user2@example.com"}, // Missing 'name' and 'bio'
+	}).
+	Exec(ctx)
+// Error: validation error: required fields missing in item 1: Name, Bio
+```
+
+**Error Format for CreateMany:**
+
+- `"validation error: required fields missing in item {index}: Field1, Field2"`
+
+The index is 0-based, so `item 0` is the first item, `item 1` is the second, etc.
+
+**Skip Duplicates:**
+
+You can skip duplicate records using `SkipDuplicates`:
+
+```go
+result, err := client.User.CreateMany().
+	Data([]inputs.UserCreateInput{
+		{Email: "user@example.com", Name: "User", Bio: "Bio"},
+		{Email: "user@example.com", Name: "User", Bio: "Bio"}, // Duplicate
+	}).
+	SkipDuplicates(true).
+	Exec(ctx)
+// Duplicate records are skipped (PostgreSQL: ON CONFLICT DO NOTHING, MySQL: ON DUPLICATE KEY UPDATE)
+```
+
 ### Read
 
 ```go

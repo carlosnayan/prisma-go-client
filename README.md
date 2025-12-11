@@ -13,6 +13,7 @@ A type-safe ORM library for Go inspired by Prisma, offering an intuitive API for
 
 - 🔍 **Prisma-like Query Builder** - Familiar and intuitive API
 - 🛡️ **Type-Safe** - Leverage Go's type system
+- ✅ **Field Validation** - Automatic validation of required fields in Create and CreateMany
 - 🔄 **Migrations** - Database schema management
 - ⚡ **Performance** - Driver-agnostic architecture
 - 🎨 **Code Generation** - Automatically generate types and query builders

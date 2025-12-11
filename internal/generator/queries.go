@@ -165,10 +165,14 @@ func generateQueryFile(filePath string, model *parser.Model, schema *parser.Sche
 		fieldName := toPascalCase(field.Name)
 		isOptional := field.Type != nil && field.Type.IsOptional
 		isNonPointerOptional := isNonPointerOptionalType(field.Type)
+		hasDefault := hasDefaultValue(field)
+		// Field is required if: not optional AND no default value
+		isRequired := !isOptional && !hasDefault
 
 		createFields = append(createFields, CreateFieldInfo{
 			FieldName:            fieldName,
 			IsOptional:           isOptional,
+			IsRequired:           isRequired,
 			IsNonPointerOptional: isNonPointerOptional,
 		})
 	}
@@ -225,6 +229,16 @@ func isNonPointerOptionalType(fieldType *parser.FieldType) bool {
 	}
 	// Json and Bytes types don't use pointers in models even when optional
 	return fieldType.Name == "Json" || fieldType.Name == "Bytes"
+}
+
+// hasDefaultValue checks if a field has a @default attribute
+func hasDefaultValue(field *parser.ModelField) bool {
+	for _, attr := range field.Attributes {
+		if attr.Name == "default" {
+			return true
+		}
+	}
+	return false
 }
 
 // determineQueryImports determines which imports are needed for query files
