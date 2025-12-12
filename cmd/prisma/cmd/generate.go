@@ -17,7 +17,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-const version = "0.2.0"
+const version = "0.2.1"
 
 var (
 	watchFlag         bool

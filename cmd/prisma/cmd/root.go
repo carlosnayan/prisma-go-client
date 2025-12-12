@@ -21,7 +21,7 @@ var app *cli.App
 func Execute() error {
 	app = cli.NewApp(
 		"prisma",
-		"0.2.0",
+		"0.2.1",
 		"Prisma CLI for Go - Type-safe and intuitive ORM",
 	)
 
