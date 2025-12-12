@@ -11,6 +11,9 @@ type DB interface {
 
 	// Begin starts a new transaction
 	Begin(ctx context.Context) (Tx, error)
+
+	// Close closes the database connection and releases resources
+	Close()
 }
 
 // Result represents the result of an Exec operation

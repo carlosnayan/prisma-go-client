@@ -57,6 +57,9 @@ func (a *txDBAdapter) Begin(ctx context.Context) (Tx, error) {
 	return nil, fmt.Errorf("cannot begin a transaction within a transaction")
 }
 
+func (a *txDBAdapter) Close() {
+}
+
 // ExecuteTransaction executes a function within a transaction
 func ExecuteTransaction(ctx context.Context, db DBTX, fn TransactionFunc) error {
 	tx, err := BeginTransaction(ctx, db)

@@ -41,6 +41,11 @@ func (a *SQLDBAdapter) SQLDB() *sql.DB {
 	return a.db
 }
 
+// Close closes the database connection
+func (a *SQLDBAdapter) Close() {
+	_ = a.db.Close()
+}
+
 // SQLResult wraps sql.Result
 type SQLResult struct {
 	result sql.Result
