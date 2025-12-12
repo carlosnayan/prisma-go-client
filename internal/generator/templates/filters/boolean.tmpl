@@ -1,0 +1,6 @@
+// Boolean helper functions for BooleanFilter
+
+func Bool(value bool) *BooleanFilter {
+	return &BooleanFilter{Equals: &value}
+}
+

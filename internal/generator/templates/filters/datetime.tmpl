@@ -1,0 +1,22 @@
+// DateTime helper functions for DateTimeFilter
+
+func DateTime(value time.Time) *DateTimeFilter {
+	return &DateTimeFilter{Equals: &value}
+}
+
+func DateTimeGt(value time.Time) *DateTimeFilter {
+	return &DateTimeFilter{Gt: &value}
+}
+
+func DateTimeGte(value time.Time) *DateTimeFilter {
+	return &DateTimeFilter{Gte: &value}
+}
+
+func DateTimeLt(value time.Time) *DateTimeFilter {
+	return &DateTimeFilter{Lt: &value}
+}
+
+func DateTimeLte(value time.Time) *DateTimeFilter {
+	return &DateTimeFilter{Lte: &value}
+}
+

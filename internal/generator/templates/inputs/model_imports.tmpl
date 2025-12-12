@@ -1,5 +1,6 @@
-{{if gt (len .StdlibImports) 0}}import (
+{{if or (gt (len .StdlibImports) 0) .FiltersPath}}import (
 {{range .StdlibImports}}	{{printf "%q" .}}
+{{end}}{{if .FiltersPath}}	filters {{printf "%q" .FiltersPath}}
 {{end}})
 
 {{end}}

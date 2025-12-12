@@ -1,0 +1,37 @@
+
+func Contains(value string) *StringFilter {
+	return &StringFilter{Contains: &value}
+}
+
+func StartsWith(value string) *StringFilter {
+	return &StringFilter{StartsWith: &value}
+}
+
+func EndsWith(value string) *StringFilter {
+	return &StringFilter{EndsWith: &value}
+}
+
+func ContainsInsensitive(value string) *StringFilter {
+	return &StringFilter{ContainsInsensitive: &value}
+}
+
+func StartsWithInsensitive(value string) *StringFilter {
+	return &StringFilter{StartsWithInsensitive: &value}
+}
+
+func EndsWithInsensitive(value string) *StringFilter {
+	return &StringFilter{EndsWithInsensitive: &value}
+}
+
+func String(value string) *StringFilter {
+	return &StringFilter{Equals: &value}
+}
+
+func StringIn(values ...string) *StringFilter {
+	return &StringFilter{In: values}
+}
+
+func StringNotIn(values ...string) *StringFilter {
+	return &StringFilter{NotIn: values}
+}
+

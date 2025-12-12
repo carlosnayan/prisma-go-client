@@ -1,0 +1,5 @@
+{{if gt (len .Imports) 0}}import (
+{{range .Imports}}	{{printf "%q" .}}
+{{end}})
+
+{{end}}

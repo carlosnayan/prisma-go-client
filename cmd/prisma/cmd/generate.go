@@ -176,7 +176,7 @@ func runGenerateOnce(schemaPath string) error {
 	}
 
 	// Cleanup existing directories to ensure fresh generation
-	dirsToClean := []string{"inputs", "models", "queries"}
+	dirsToClean := []string{"inputs", "models", "queries", "filters"}
 	for _, dirName := range dirsToClean {
 		dirPath := filepath.Join(absoluteOutputDir, dirName)
 		if _, err := os.Stat(dirPath); err == nil {
@@ -210,8 +210,8 @@ func runGenerateOnce(schemaPath string) error {
 		return fmt.Errorf("error generating queries: %w", err)
 	}
 
-	if err := generator.GenerateHelpers(schema, absoluteOutputDir); err != nil {
-		return fmt.Errorf("error generating helpers: %w", err)
+	if err := generator.GenerateFilters(schema, absoluteOutputDir); err != nil {
+		return fmt.Errorf("error generating filters: %w", err)
 	}
 
 	if err := generator.GenerateClient(schema, absoluteOutputDir); err != nil {

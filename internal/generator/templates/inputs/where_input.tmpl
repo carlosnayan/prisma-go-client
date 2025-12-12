@@ -1,8 +1,9 @@
 // {{.PascalName}}WhereInput represents filter conditions for {{.ModelName}}
 type {{.PascalName}}WhereInput struct {
-{{range .WhereInputFields}}	{{.FieldName}} *{{.FilterType}} `json:"{{.JSONTag}},omitempty"`
+{{range .WhereInputFields}}	{{.FieldName}} *filters.{{.FilterType}} `json:"{{.JSONTag}},omitempty"`
 {{end}}	Or  []{{.PascalName}}WhereInput `json:"or,omitempty"`
 	And []{{.PascalName}}WhereInput `json:"and,omitempty"`
 	Not *{{.PascalName}}WhereInput `json:"not,omitempty"`
 }
+
 

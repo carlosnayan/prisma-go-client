@@ -148,10 +148,18 @@ type InputTemplateData struct {
 	ModelName        string
 	PascalName       string
 	StdlibImports    []string
+	FiltersPath      string
 	CreateFields     []InputFieldInfo
 	UpdateFields     []InputFieldInfo
 	WhereInputFields []WhereInputFieldInfo
 	SelectFields     []InputSelectFieldInfo
+}
+
+// InputHelpersTemplateData holds data for inputs/helpers.go template generation
+type InputHelpersTemplateData struct {
+	StdlibImports []string
+	NeedsDateTime bool
+	NeedsJson     bool
 }
 
 // executeTemplates executes multiple templates and writes them to a file
@@ -319,16 +327,16 @@ func executeModelTemplate(filePath, packageName, templateDir, templateName strin
 	return executeTemplate(file, tmplPath, data)
 }
 
-// executeHelpersTemplates executes multiple templates for helpers.go
-func executeHelpersTemplates(filePath string, templateNames []string, data HelpersTemplateData) error {
-	file, err := createGeneratedFile(filePath, "generated")
+// executeFiltersHelpersTemplates executes multiple templates for filters/helpers.go
+func executeFiltersHelpersTemplates(filePath string, templateNames []string, data HelpersTemplateData) error {
+	file, err := createGeneratedFile(filePath, "filters")
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
 	// Get the templates directory
-	_, templatesDir, err := getTemplatesDir("helpers")
+	_, templatesDir, err := getTemplatesDir("filters")
 	if err != nil {
 		return fmt.Errorf("failed to get templates directory: %w", err)
 	}
@@ -371,6 +379,31 @@ func executeQueryTemplates(filePath string, templateNames []string, data QueryTe
 
 // executeFiltersTemplates executes multiple templates for filters.go
 func executeFiltersTemplates(filePath string, templateNames []string, data FiltersTemplateData) error {
+	file, err := createGeneratedFile(filePath, "filters")
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	// Get the templates directory
+	_, templatesDir, err := getTemplatesDir("filters")
+	if err != nil {
+		return fmt.Errorf("failed to get templates directory: %w", err)
+	}
+
+	// Execute each template in order
+	for _, tmplName := range templateNames {
+		tmplPath := filepath.Join(templatesDir, tmplName)
+		if err := executeTemplate(file, tmplPath, data); err != nil {
+			return fmt.Errorf("failed to execute template %s: %w", tmplName, err)
+		}
+	}
+
+	return nil
+}
+
+// executeInputHelpersTemplates executes multiple templates for inputs/helpers.go
+func executeInputHelpersTemplates(filePath string, templateNames []string, data InputHelpersTemplateData) error {
 	file, err := createGeneratedFile(filePath, "inputs")
 	if err != nil {
 		return err

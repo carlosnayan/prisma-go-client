@@ -1,0 +1,8 @@
+// JsonFilter represents filter conditions for json.RawMessage fields
+type JsonFilter struct {
+	Equals    *json.RawMessage `json:"equals,omitempty"`
+	NotEquals *json.RawMessage `json:"notEquals,omitempty"`
+	IsNull    *bool            `json:"isNull,omitempty"`
+	IsNotNull *bool            `json:"isNotNull,omitempty"`
+}
+

@@ -1,0 +1,14 @@
+// FloatFilter represents filter conditions for float64 fields
+type FloatFilter struct {
+	Equals    *float64  `json:"equals,omitempty"`
+	NotEquals *float64  `json:"notEquals,omitempty"`
+	Gt        *float64  `json:"gt,omitempty"`
+	Gte       *float64  `json:"gte,omitempty"`
+	Lt        *float64  `json:"lt,omitempty"`
+	Lte       *float64  `json:"lte,omitempty"`
+	In        []float64 `json:"in,omitempty"`
+	NotIn     []float64 `json:"notIn,omitempty"`
+	IsNull    *bool     `json:"isNull,omitempty"`
+	IsNotNull *bool     `json:"isNotNull,omitempty"`
+}
+

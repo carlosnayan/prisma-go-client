@@ -83,8 +83,8 @@ func TestWhereInput_IncludesEnumFields(t *testing.T) {
 	contentStr := string(content)
 
 	// Verify that Role field is included in WhereInput
-	if !strings.Contains(contentStr, "Role *StringFilter") {
-		t.Error("WhereInput should include Role field with StringFilter type")
+	if !strings.Contains(contentStr, "Role *filters.StringFilter") {
+		t.Error("WhereInput should include Role field with filters.StringFilter type")
 	}
 
 	// Verify that the relation field is NOT included in WhereInput
@@ -103,8 +103,8 @@ func TestWhereInput_IncludesEnumFields(t *testing.T) {
 	}
 
 	// Verify that email (String field) is included
-	if !strings.Contains(contentStr, "Email *StringFilter") {
-		t.Error("WhereInput should include Email field with StringFilter type")
+	if !strings.Contains(contentStr, "Email *filters.StringFilter") {
+		t.Error("WhereInput should include Email field with filters.StringFilter type")
 	}
 }
 
@@ -184,8 +184,8 @@ func TestWhereInput_ExcludesRelations(t *testing.T) {
 	}
 
 	// Verify that Title (non-relation field) is included
-	if !strings.Contains(whereInputSection, "Title *StringFilter") {
-		t.Error("WhereInput should include Title field with StringFilter type")
+	if !strings.Contains(whereInputSection, "Title *filters.StringFilter") {
+		t.Error("WhereInput should include Title field with filters.StringFilter type")
 	}
 }
 
@@ -255,11 +255,11 @@ func TestWhereInput_MultipleEnums(t *testing.T) {
 	contentStr := string(content)
 
 	// Verify that both enum fields are included in WhereInput
-	if !strings.Contains(contentStr, "Role *StringFilter") {
-		t.Error("WhereInput should include Role field with StringFilter type")
+	if !strings.Contains(contentStr, "Role *filters.StringFilter") {
+		t.Error("WhereInput should include Role field with filters.StringFilter type")
 	}
 
-	if !strings.Contains(contentStr, "Status *StringFilter") {
-		t.Error("WhereInput should include Status field with StringFilter type")
+	if !strings.Contains(contentStr, "Status *filters.StringFilter") {
+		t.Error("WhereInput should include Status field with filters.StringFilter type")
 	}
 }

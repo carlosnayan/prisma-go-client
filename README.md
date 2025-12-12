@@ -284,6 +284,60 @@ func main() {
 }
 ```
 
+### 8. Pointer Helpers for Clean Code
+
+To simplify working with optional fields (pointers), use the generated helper functions in the `inputs` package:
+
+```go
+// ❌ Before: Verbose with temporary variables
+description := "My description"
+count := 42
+active := true
+
+item, err := client.Item.Create().
+    Data(inputs.ItemCreateInput{
+        Description: &description,
+        Count:       &count,
+        Active:      &active,
+    }).
+    Exec()
+
+// ✅ After: Clean and concise with helpers
+item, err := client.Item.Create().
+    Data(inputs.ItemCreateInput{
+        Description: inputs.String("My description"),
+        Count:       inputs.Int(42),
+        Active:      inputs.Bool(true),
+    }).
+    Exec()
+```
+
+**Available helpers in `inputs` package:**
+
+- `inputs.String(v string) *string`
+- `inputs.Int(v int) *int`
+- `inputs.Int64(v int64) *int64`
+- `inputs.Float(v float64) *float64`
+- `inputs.Bool(v bool) *bool`
+- `inputs.DateTime(v time.Time) *time.Time`
+- `inputs.Json(v json.RawMessage) *json.RawMessage`
+- `inputs.Bytes(v []byte) *[]byte`
+
+**Filter helpers** are also available in the `filters` package for advanced querying:
+
+```go
+import "my-app/db/filters"
+
+users, err := query.FindMany().
+    Where(inputs.UserWhereInput{
+        Email: filters.Contains("@example.com"),
+        Name:  filters.StartsWith("John"),
+    }).
+    Exec()
+```
+
+````
+
 **MySQL Example:**
 
 ```go
@@ -310,7 +364,7 @@ func SetupPrismaClient() {
         log.Fatalf("Error setting up client: %v", err)
     }
 }
-```
+````
 
 **SQLite Example:**
 
@@ -348,6 +402,7 @@ func SetupPrismaClient() {
 
 - [Quick Start Guide](docs/QUICKSTART.md)
 - [API Reference](docs/API.md)
+- [Helper Functions](docs/HELPERS.md) - Pointer and filter helpers
 - [Migrations Guide](docs/MIGRATIONS.md)
 - [Relationships Guide](docs/RELATIONSHIPS.md)
 - [Best Practices](docs/BEST_PRACTICES.md)

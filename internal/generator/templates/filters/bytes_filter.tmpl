@@ -1,0 +1,8 @@
+// BytesFilter represents filter conditions for []byte fields
+type BytesFilter struct {
+	Equals    *[]byte `json:"equals,omitempty"`
+	NotEquals *[]byte `json:"notEquals,omitempty"`
+	IsNull    *bool   `json:"isNull,omitempty"`
+	IsNotNull *bool   `json:"isNotNull,omitempty"`
+}
+

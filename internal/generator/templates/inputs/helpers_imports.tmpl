@@ -1,0 +1,5 @@
+{{if gt (len .StdlibImports) 0}}import (
+{{range .StdlibImports}}	"{{.}}"
+{{end}})
+
+{{end}}

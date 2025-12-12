@@ -1,0 +1,14 @@
+// IntFilter represents filter conditions for int fields
+type IntFilter struct {
+	Equals    *int   `json:"equals,omitempty"`
+	NotEquals *int   `json:"notEquals,omitempty"`
+	Gt        *int   `json:"gt,omitempty"`
+	Gte       *int   `json:"gte,omitempty"`
+	Lt        *int   `json:"lt,omitempty"`
+	Lte       *int   `json:"lte,omitempty"`
+	In        []int  `json:"in,omitempty"`
+	NotIn     []int  `json:"notIn,omitempty"`
+	IsNull    *bool  `json:"isNull,omitempty"`
+	IsNotNull *bool  `json:"isNotNull,omitempty"`
+}
+

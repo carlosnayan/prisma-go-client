@@ -1,0 +1,6 @@
+// Json helper functions for JsonFilter
+
+func Json(value json.RawMessage) *JsonFilter {
+	return &JsonFilter{Equals: &value}
+}
+
