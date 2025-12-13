@@ -1,0 +1,141 @@
+
+type PrismaError struct {
+	Code    string
+	Message string
+	cause   error
+}
+
+func (e *PrismaError) Error() string {
+	if e.cause != nil {
+		return e.Message + ": " + e.cause.Error()
+	}
+	return e.Message
+}
+
+func (e *PrismaError) Unwrap() error {
+	return e.cause
+}
+
+func (e *PrismaError) Is(target error) bool {
+	if t, ok := target.(*PrismaError); ok {
+		return e.Code == t.Code
+	}
+	return false
+}
+
+var (
+	ErrNotFound             = &PrismaError{Code: "P2025", Message: "Record not found"}
+	ErrUniqueConstraint     = &PrismaError{Code: "P2002", Message: "Unique constraint violation"}
+	ErrForeignKeyConstraint = &PrismaError{Code: "P2003", Message: "Foreign key constraint violation"}
+	ErrNullConstraint       = &PrismaError{Code: "P2011", Message: "Not null constraint violation"}
+	ErrRawQueryFailed       = &PrismaError{Code: "P2010", Message: "Raw query failed"}
+	ErrTimeout              = &PrismaError{Code: "P1008", Message: "Operation timeout"}
+	ErrConnectionFailed     = &PrismaError{Code: "P1001", Message: "Database not reachable"}
+)
+
+func wrapPrismaError(sentinel *PrismaError, cause error) *PrismaError {
+	return &PrismaError{Code: sentinel.Code, Message: sentinel.Message, cause: cause}
+}
+
+func IsNotFound(err error) bool {
+	var pe *PrismaError
+	if As(err, &pe) {
+		return pe.Code == "P2025"
+	}
+	return false
+}
+
+func IsUniqueConstraint(err error) bool {
+	var pe *PrismaError
+	if As(err, &pe) {
+		return pe.Code == "P2002"
+	}
+	return false
+}
+
+func IsForeignKeyConstraint(err error) bool {
+	var pe *PrismaError
+	if As(err, &pe) {
+		return pe.Code == "P2003"
+	}
+	return false
+}
+
+func isNoRows(err error) bool {
+	if err == nil {
+		return false
+	}
+	if Is(err, sql.ErrNoRows) {
+		return true
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "no rows") || strings.Contains(errStr, "ErrNoRows")
+}
+
+func isUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := strings.ToLower(err.Error())
+	return strings.Contains(errStr, "unique constraint") ||
+		strings.Contains(errStr, "duplicate key") ||
+		strings.Contains(errStr, "duplicate entry") ||
+		strings.Contains(errStr, "23505") ||
+		strings.Contains(errStr, "1062")
+}
+
+func isForeignKeyViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := strings.ToLower(err.Error())
+	return strings.Contains(errStr, "foreign key constraint") ||
+		strings.Contains(errStr, "23503") ||
+		strings.Contains(errStr, "1452")
+}
+
+func mapQueryError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if isNoRows(err) {
+		return nil
+	}
+	if isUniqueViolation(err) {
+		return wrapPrismaError(ErrUniqueConstraint, err)
+	}
+	if isForeignKeyViolation(err) {
+		return wrapPrismaError(ErrForeignKeyConstraint, err)
+	}
+	return err
+}
+
+func mapQueryRowError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if isNoRows(err) {
+		return wrapPrismaError(ErrNotFound, err)
+	}
+	if isUniqueViolation(err) {
+		return wrapPrismaError(ErrUniqueConstraint, err)
+	}
+	if isForeignKeyViolation(err) {
+		return wrapPrismaError(ErrForeignKeyConstraint, err)
+	}
+	return err
+}
+
+func mapExecError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if isUniqueViolation(err) {
+		return wrapPrismaError(ErrUniqueConstraint, err)
+	}
+	if isForeignKeyViolation(err) {
+		return wrapPrismaError(ErrForeignKeyConstraint, err)
+	}
+	return err
+}
+

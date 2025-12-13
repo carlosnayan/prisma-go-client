@@ -35,7 +35,7 @@ type ScanRowResult struct {
 
 func (r *ScanRowResult) Scan(dest interface{}) error {
 	if r.err != nil {
-		return r.err
+		return mapQueryRowError(r.err)
 	}
 	if r.row == nil {
 		return fmt.Errorf("no row to scan")
@@ -50,10 +50,11 @@ func (r *ScanRowResult) Scan(dest interface{}) error {
 		return fmt.Errorf("QueryRow.Scan: dest must be a pointer to struct, not slice. Use Query() for multiple rows")
 	}
 	if elemVal.Kind() != reflect.Struct {
-		return r.row.Scan(dest)
+		err := r.row.Scan(dest)
+		return mapQueryRowError(err)
 	}
 
-	return scanRow(r.row, dest)
+	return mapQueryRowError(scanRow(r.row, dest))
 }
 
 func scanRows(rows Rows, dest interface{}) error {

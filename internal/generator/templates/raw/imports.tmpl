@@ -1,7 +1,12 @@
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
 )
+
+var Is = errors.Is
+var As = errors.As
 

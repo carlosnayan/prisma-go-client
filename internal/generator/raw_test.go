@@ -1071,3 +1071,62 @@ func TestRowsAdapterHasColumns(t *testing.T) {
 		t.Error("rowsAdapter should have Columns method for column name extraction")
 	}
 }
+
+func TestRaw_PrismaErrorTypes(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputDir := filepath.Join(tmpDir, "generated")
+
+	goModPath := filepath.Join(tmpDir, "go.mod")
+	goModContent := "module test\n"
+	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
+		t.Fatalf("Failed to create go.mod: %v", err)
+	}
+
+	if err := GenerateRaw(outputDir); err != nil {
+		t.Fatalf("GenerateRaw failed: %v", err)
+	}
+
+	rawFile := filepath.Join(outputDir, "raw", "raw.go")
+	content, err := os.ReadFile(rawFile)
+	if err != nil {
+		t.Fatalf("Failed to read raw.go: %v", err)
+	}
+
+	contentStr := string(content)
+
+	if !strings.Contains(contentStr, "type PrismaError struct") {
+		t.Error("raw.go should contain PrismaError struct")
+	}
+
+	if !strings.Contains(contentStr, `ErrNotFound`) {
+		t.Error("raw.go should contain ErrNotFound sentinel error")
+	}
+
+	if !strings.Contains(contentStr, `ErrUniqueConstraint`) {
+		t.Error("raw.go should contain ErrUniqueConstraint sentinel error")
+	}
+
+	if !strings.Contains(contentStr, `func IsNotFound(err error) bool`) {
+		t.Error("raw.go should contain IsNotFound helper function")
+	}
+
+	if !strings.Contains(contentStr, `func mapQueryError(err error) error`) {
+		t.Error("raw.go should contain mapQueryError function for Query error mapping")
+	}
+
+	if !strings.Contains(contentStr, `func mapQueryRowError(err error) error`) {
+		t.Error("raw.go should contain mapQueryRowError function for QueryRow error mapping")
+	}
+
+	if !strings.Contains(contentStr, "func (e *PrismaError) Unwrap() error") {
+		t.Error("PrismaError should have Unwrap method for error unwrapping")
+	}
+
+	if !strings.Contains(contentStr, `Code: "P2025"`) {
+		t.Error("ErrNotFound should have code P2025")
+	}
+
+	if !strings.Contains(contentStr, `Code: "P2002"`) {
+		t.Error("ErrUniqueConstraint should have code P2002")
+	}
+}

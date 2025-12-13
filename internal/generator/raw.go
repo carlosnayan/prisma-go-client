@@ -52,6 +52,7 @@ func GenerateRaw(outputDir string) error {
 		"new_function.tmpl",
 		"builder_db_adapter.tmpl",
 		"adapters.tmpl",
+		"prisma_errors.tmpl",
 		"executor_methods.tmpl",
 		"scan_result.tmpl",
 	}

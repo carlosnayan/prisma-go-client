@@ -11,7 +11,7 @@ func (e *Executor) Query(sql string, args ...interface{}) *QueryBuilder {
 
 func (q *QueryBuilder) Exec() *ScanResult {
 	rows, err := q.executor.db.Query(context.Background(), q.sql, q.args...)
-	return &ScanResult{rows: rows, err: err}
+	return &ScanResult{rows: rows, err: mapQueryError(err)}
 }
 
 type QueryRowBuilder struct {
@@ -30,6 +30,7 @@ func (q *QueryRowBuilder) Exec() *ScanRowResult {
 }
 
 func (e *Executor) Exec(sql string, args ...interface{}) (Result, error) {
-	return e.db.Exec(context.Background(), sql, args...)
+	result, err := e.db.Exec(context.Background(), sql, args...)
+	return result, mapExecError(err)
 }
 

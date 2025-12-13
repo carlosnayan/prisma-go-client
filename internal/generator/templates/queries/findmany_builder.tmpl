@@ -37,7 +37,6 @@ func (b *{{.PascalName}}FindManyBuilder) Exec() ([]models.{{.PascalName}}, error
 // Returns ([]models.{{.PascalName}}, error)
 // Example: users, err := builder.FindMany().Where(...).ExecWithContext(ctx)
 func (b *{{.PascalName}}FindManyBuilder) ExecWithContext(ctx context.Context) ([]models.{{.PascalName}}, error) {
-	// Reset query state to prevent accumulation of conditions from previous operations
 	b.query.Query.Reset()
 	if b.whereInput != nil {
 		apply{{.PascalName}}WhereInput(b.query.Query, *b.whereInput)
@@ -53,7 +52,13 @@ func (b *{{.PascalName}}FindManyBuilder) ExecWithContext(ctx context.Context) ([
 	}
 	var results []models.{{.PascalName}}
 	err := b.query.Find(ctx, &results)
-	return results, err
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return results, nil
+		}
+		return nil, err
+	}
+	return results, nil
 }
 
 // ExecTyped executes the find many operation and scans the results into the provided slice
@@ -70,7 +75,6 @@ func (b *{{.PascalName}}FindManyBuilder) ExecTyped(dest interface{}) error {
 // dest must be a pointer to a slice of structs with json or db tags for field mapping
 // Example: var dtos []TenantsDTO; err := builder.ExecTypedWithContext(ctx, &dtos)
 func (b *{{.PascalName}}FindManyBuilder) ExecTypedWithContext(ctx context.Context, dest interface{}) error {
-	// Reset query state to prevent accumulation of conditions from previous operations
 	b.query.Query.Reset()
 	if b.whereInput != nil {
 		whereMap := Convert{{.PascalName}}WhereInputToWhere(*b.whereInput)
@@ -85,7 +89,6 @@ func (b *{{.PascalName}}FindManyBuilder) ExecTypedWithContext(ctx context.Contex
 			b.query.Select(selectedFields...)
 		}
 	}
-	// Validate dest is a pointer to slice
 	destVal := reflect.ValueOf(dest)
 	if destVal.Kind() != reflect.Ptr {
 		return fmt.Errorf("ExecTyped: dest must be a pointer to slice (e.g., *[]TenantsDTO), got %v", destVal.Kind())
@@ -101,9 +104,11 @@ func (b *{{.PascalName}}FindManyBuilder) ExecTypedWithContext(ctx context.Contex
 	if elemType.Kind() != reflect.Struct {
 		return fmt.Errorf("ExecTyped: dest must be a slice of structs, got %v", elemType.Kind())
 	}
-	// Scan into dest
 	err := b.query.ScanFind(ctx, dest, elemType)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
 		return err
 	}
 	return nil

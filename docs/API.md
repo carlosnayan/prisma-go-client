@@ -1115,17 +1115,92 @@ Available hooks:
 
 ## Error Handling
 
+Prisma Go Client provides standardized error types following the official Prisma error codes.
+
+### PrismaError Type
+
+All database errors are wrapped in a `PrismaError` with a code and message:
+
 ```go
-user, err := client.Authors.FindUnique(...).Exec()
-if err != nil {
-	if errors.Is(err, db.ErrNotFound) {
-		// Record not found
-	} else if errors.Is(err, db.ErrUniqueConstraint) {
-		// Unique constraint violation
-	} else {
-		// Other error
+type PrismaError struct {
+	Code    string // P1xxx (connection) or P2xxx (query)
+	Message string
+}
+
+func (e *PrismaError) Error() string   // Returns message with cause
+func (e *PrismaError) Unwrap() error   // Returns original driver error
+```
+
+### Error Codes
+
+| Code  | Error                     | Description                   |
+| ----- | ------------------------- | ----------------------------- |
+| P2025 | `ErrNotFound`             | Record not found              |
+| P2002 | `ErrUniqueConstraint`     | Unique constraint violation   |
+| P2003 | `ErrForeignKeyConstraint` | Foreign key violation         |
+| P2011 | `ErrNullConstraint`       | Not null constraint violation |
+| P2010 | `ErrRawQueryFailed`       | Raw query execution failed    |
+| P1001 | `ErrConnectionFailed`     | Database not reachable        |
+| P1008 | `ErrTimeout`              | Operation timeout             |
+
+### Checking Errors
+
+```go
+// Using helper functions
+if raw.IsNotFound(err) {
+	// Record not found
+}
+if raw.IsUniqueConstraint(err) {
+	// Duplicate key
+}
+
+// Using errors.Is
+if errors.Is(err, raw.ErrNotFound) {
+	// Record not found
+}
+
+// Using error code
+var prismaErr *raw.PrismaError
+if errors.As(err, &prismaErr) {
+	switch prismaErr.Code {
+	case "P2002":
+		// Unique constraint
+	case "P2025":
+		// Not found
 	}
 }
+```
+
+### Getting Original Error
+
+Use `errors.Unwrap()` to access the original driver error:
+
+```go
+if raw.IsUniqueConstraint(err) {
+	originalErr := errors.Unwrap(err)
+	log.Printf("Driver error: %v", originalErr)
+}
+```
+
+### Query vs QueryRow Behavior
+
+| Operation              | No Rows Found | Returns       |
+| ---------------------- | ------------- | ------------- |
+| `Query().Scan(&slice)` | Empty slice   | `nil` error   |
+| `QueryRow().Scan()`    | ErrNotFound   | `P2025` error |
+| `FindMany()`           | Empty slice   | `nil` error   |
+| `FindFirst()`          | ErrNotFound   | `P2025` error |
+
+```go
+// Query returns empty slice, no error
+var books []Book
+err := client.Raw().Query("SELECT * FROM books WHERE id = $1", 999).Exec().Scan(&books)
+// err == nil, books == []Book{}
+
+// QueryRow returns ErrNotFound
+var book Book
+err = client.Raw().QueryRow("SELECT * FROM books WHERE id = $1", 999).Exec().Scan(&book)
+// raw.IsNotFound(err) == true
 ```
 
 ## Best Practices
