@@ -239,6 +239,7 @@ func generateQueryFile(filePath string, model *parser.Model, schema *parser.Sche
 		"delete_builder.tmpl",
 		"update_builder.tmpl",
 		"updatemany_builder.tmpl",
+		"upsert_builder.tmpl",
 		"create_builder.tmpl",
 		"createmany_builder.tmpl",
 	}
@@ -288,11 +289,15 @@ func determineQueryImports(userModule, outputDir string) []string {
 	// fmt is needed for fmt.Errorf in builders
 	// reflect is needed for Scan() method
 	// strings is needed for buildColumnToFieldMapForScan (strings.Index)
+	// database/sql is needed for sql.ErrNoRows in upsert
+	// errors is needed for errors.Is in upsert
 	// builder is always needed for Query embedding
 	// models is always needed for type references
 	// inputs is needed for WhereInput
 	return []string{
 		"context",
+		"database/sql",
+		"errors",
 		"fmt",
 		"reflect",
 		"strings",

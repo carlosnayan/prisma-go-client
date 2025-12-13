@@ -1,0 +1,60 @@
+// Upsert returns a builder for upserting {{.PascalName}} records (Prisma-style)
+// Combines create and update into a single operation based on unique condition
+// Example: user, err := q.Upsert().Where(...).Create(...).Update(...).Exec()
+func (q *{{.PascalName}}Query) Upsert() *{{.PascalName}}UpsertBuilder {
+	return &{{.PascalName}}UpsertBuilder{query: q}
+}
+
+type {{.PascalName}}UpsertBuilder struct {
+	query  *{{.PascalName}}Query
+	where  *inputs.{{.PascalName}}WhereInput
+	create *inputs.{{.PascalName}}CreateInput
+	update *inputs.{{.PascalName}}UpdateInput
+}
+
+func (b *{{.PascalName}}UpsertBuilder) Where(where inputs.{{.PascalName}}WhereInput) *{{.PascalName}}UpsertBuilder {
+	b.where = &where
+	return b
+}
+
+func (b *{{.PascalName}}UpsertBuilder) Create(data inputs.{{.PascalName}}CreateInput) *{{.PascalName}}UpsertBuilder {
+	b.create = &data
+	return b
+}
+
+func (b *{{.PascalName}}UpsertBuilder) Update(data inputs.{{.PascalName}}UpdateInput) *{{.PascalName}}UpsertBuilder {
+	b.update = &data
+	return b
+}
+
+func (b *{{.PascalName}}UpsertBuilder) Exec() (*models.{{.PascalName}}, error) {
+	return b.ExecWithContext(b.query.Query.GetContext())
+}
+
+func (b *{{.PascalName}}UpsertBuilder) ExecWithContext(ctx context.Context) (*models.{{.PascalName}}, error) {
+	if b.where == nil {
+		return nil, fmt.Errorf("where is required for upsert")
+	}
+	if b.create == nil {
+		return nil, fmt.Errorf("create is required for upsert")
+	}
+	if b.update == nil {
+		return nil, fmt.Errorf("update is required for upsert")
+	}
+
+	existing, err := b.query.FindFirst().Where(*b.where).ExecWithContext(ctx)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("upsert find failed: %w", err)
+	}
+
+	if existing != nil {
+		err := b.query.Update().Where(*b.where).Data(*b.update).ExecWithContext(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("upsert update failed: %w", err)
+		}
+		return b.query.FindFirst().Where(*b.where).ExecWithContext(ctx)
+	}
+
+	return b.query.Create().Data(*b.create).ExecWithContext(ctx)
+}
+

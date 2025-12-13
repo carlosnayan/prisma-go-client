@@ -162,6 +162,21 @@ type InputHelpersTemplateData struct {
 	NeedsJson     bool
 }
 
+type UniqueConstraintInfo struct {
+	Fields      []UniqueFieldData
+	StructName  string
+	JSONTag     string
+	IsComposite bool
+	FieldName   string
+	GoType      string
+}
+
+type UniqueFieldData struct {
+	FieldName string
+	GoType    string
+	JSONTag   string
+}
+
 // executeTemplates executes multiple templates and writes them to a file
 func executeTemplates(outputDir, filename string, templateNames []string, data FluentTemplateData) error {
 	return executeTemplatesFromDir(outputDir, filename, "fluent", templateNames, data)

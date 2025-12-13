@@ -1,0 +1,12 @@
+{{if gt (len .UniqueConstraints) 0}}
+type {{.PascalName}}UniqueWhereInput struct {
+{{range .UniqueConstraints}}{{if .IsComposite}}	{{.StructName}} *{{$.PascalName}}{{.StructName}}Unique `json:"{{.JSONTag}},omitempty"`
+{{else}}	{{.FieldName}} *{{.GoType}} `json:"{{.JSONTag}},omitempty"`
+{{end}}{{end}}}
+
+{{range .UniqueConstraints}}{{if .IsComposite}}
+type {{$.PascalName}}{{.StructName}}Unique struct {
+{{range .Fields}}	{{.FieldName}} {{.GoType}} `json:"{{.JSONTag}}"`
+{{end}}}
+{{end}}{{end}}
+{{end}}
