@@ -51,12 +51,13 @@ Each model has fluent builders accessible through the client.
 
 ### Available Builders
 
-- `client.User.Create()` - Returns a Create builder
-- `client.User.FindMany()` - Returns a FindMany builder
-- `client.User.FindFirst()` - Returns a FindFirst builder
-- `client.User.Update()` - Returns an Update builder
-- `client.User.Delete()` - Returns a Delete builder
-- `client.User.WithContext(ctx)` - Sets the context for subsequent operations
+- `client.Authors.Create()` - Returns a Create builder
+- `client.Authors.FindMany()` - Returns a FindMany builder
+- `client.Authors.FindFirst()` - Returns a FindFirst builder
+- `client.Authors.Update()` - Returns an Update builder
+- `client.Authors.Delete()` - Returns a Delete builder
+- `client.Authors.Upsert()` - Returns an Upsert builder (create or update)
+- `client.Authors.WithContext(ctx)` - Sets the context for subsequent operations
 
 ### Context Management
 
@@ -64,20 +65,20 @@ You can set a context once and reuse it for multiple operations:
 
 ```go
 // Set context once
-query := client.User.WithContext(ctx)
+query := client.Authors.WithContext(ctx)
 
 // Use Exec() without passing context explicitly
 user, err := query.Create().
-    Data(inputs.UserCreateInput{
-        Email: "user@example.com",
-        Name:  db.String("John Doe"),
+    Data(inputs.AuthorsCreateInput{
+        Email: db.String("author@example.com"),
+        FirstName: "John", LastName: "Doe",
     }).
     Exec() // Uses stored context
 
 // Explicit context still works and takes priority
 user, err := query.Create().
-    Data(inputs.UserCreateInput{
-        Email: "user@example.com",
+    Data(inputs.AuthorsCreateInput{
+        Email: db.String("author@example.com"),
     }).
     ExecWithContext(otherCtx) // Uses otherCtx instead
 ```
@@ -90,10 +91,10 @@ If no context is stored and `Exec()` is called without parameters, `context.Back
 
 ```go
 // Create a single record using fluent API
-user, err := client.User.Create().
-	Data(inputs.UserCreateInput{
-		Email: "user@example.com",
-		Name:  db.String("John Doe"),
+user, err := client.Authors.Create().
+	Data(inputs.AuthorsCreateInput{
+		Email: db.String("author@example.com"),
+		FirstName: "John", LastName: "Doe",
 	}).
 	Exec(ctx)
 ```
@@ -109,9 +110,9 @@ If required fields are missing, a validation error is returned:
 
 ```go
 // Missing required field 'email'
-user, err := client.User.Create().
-	Data(inputs.UserCreateInput{
-		Name: "John Doe",
+user, err := client.Authors.Create().
+	Data(inputs.AuthorsCreateInput{
+		FirstName: "John", LastName: "Doe",
 	}).
 	Exec(ctx)
 // Error: validation error: required fields missing: Email
@@ -139,9 +140,9 @@ model User {
 Optional fields (with `?` suffix) can be omitted or set to `nil`:
 
 ```go
-user, err := client.User.Create().
-	Data(inputs.UserCreateInput{
-		Email: "user@example.com",
+user, err := client.Authors.Create().
+	Data(inputs.AuthorsCreateInput{
+		Email: db.String("author@example.com"),
 		Name:  "John Doe",
 		Age:   nil, // Optional field
 	}).
@@ -154,8 +155,8 @@ Create multiple records in a single operation:
 
 ```go
 // Create multiple records
-result, err := client.User.CreateMany().
-	Data([]inputs.UserCreateInput{
+result, err := client.Authors.CreateMany().
+	Data([]inputs.AuthorsCreateInput{
 		{Email: "user1@example.com", Name: "User 1", Bio: "Bio 1"},
 		{Email: "user2@example.com", Name: "User 2", Bio: "Bio 2"},
 	}).
@@ -171,8 +172,8 @@ The same validation rules apply to `CreateMany`. Each item in the data slice is 
 
 ```go
 // Item with missing required field
-result, err := client.User.CreateMany().
-	Data([]inputs.UserCreateInput{
+result, err := client.Authors.CreateMany().
+	Data([]inputs.AuthorsCreateInput{
 		{Email: "user1@example.com", Name: "User 1", Bio: "Bio 1"}, // Valid
 		{Email: "user2@example.com"}, // Missing 'name' and 'bio'
 	}).
@@ -191,10 +192,10 @@ The index is 0-based, so `item 0` is the first item, `item 1` is the second, etc
 You can skip duplicate records using `SkipDuplicates`:
 
 ```go
-result, err := client.User.CreateMany().
-	Data([]inputs.UserCreateInput{
-		{Email: "user@example.com", Name: "User", Bio: "Bio"},
-		{Email: "user@example.com", Name: "User", Bio: "Bio"}, // Duplicate
+result, err := client.Authors.CreateMany().
+	Data([]inputs.AuthorsCreateInput{
+		{Email: db.String("author@example.com"), Name: "User", Bio: "Bio"},
+		{Email: db.String("author@example.com"), Name: "User", Bio: "Bio"}, // Duplicate
 	}).
 	SkipDuplicates(true).
 	Exec(ctx)
@@ -205,24 +206,24 @@ result, err := client.User.CreateMany().
 
 ```go
 // Find first matching record with Select
-user, err := client.User.FindFirst().
-	Select(inputs.UserSelect{
+user, err := client.Authors.FindFirst().
+	Select(inputs.AuthorsSelect{
 		Email: true,
 		Name:  true,
 	}).
-	Where(inputs.UserWhereInput{
-		Email: db.String("user@example.com"),
+	Where(inputs.AuthorsWhereInput{
+		Email: db.String("author@example.com"),
 	}).
 	Exec(ctx)
 
 // Find many records with Select and Where
-users, err := client.User.FindMany().
-	Select(inputs.UserSelect{
+users, err := client.Authors.FindMany().
+	Select(inputs.AuthorsSelect{
 		Email: true,
 		Name:  true,
 	}).
-	Where(inputs.UserWhereInput{
-		Email: db.Contains("example.com"),
+	Where(inputs.AuthorsWhereInput{
+		Email: db.Contains("author"),
 	}).
 	Exec(ctx)
 ```
@@ -231,12 +232,12 @@ users, err := client.User.FindMany().
 
 ```go
 // Update single record
-err := client.User.Update().
-	Where(inputs.UserWhereInput{
+err := client.Authors.Update().
+	Where(inputs.AuthorsWhereInput{
 		Id: db.Int(1),
 	}).
-	Data(inputs.UserUpdateInput{
-		Name: db.String("Updated Name"),
+	Data(inputs.AuthorsUpdateInput{
+		Bio: db.String("Updated biography"),
 	}).
 	Exec(ctx)
 ```
@@ -245,11 +246,177 @@ err := client.User.Update().
 
 ```go
 // Delete single record
-err := client.User.Delete().
-	Where(inputs.UserWhereInput{
+err := client.Authors.Delete().
+	Where(inputs.AuthorsWhereInput{
 		Id: db.Int(1),
 	}).
 	Exec(ctx)
+```
+
+### Upsert
+
+Upsert combines create and update into a single operation: if a matching record exists, it updates it; otherwise, it creates a new record.
+
+```go
+// Create or update a genre based on unique name
+genre, err := client.Genres.Upsert().
+	Where(inputs.GenresWhereInput{
+		Name: filters.String("Science Fiction"),
+	}).
+	Create(inputs.GenresCreateInput{
+		Name:        "Science Fiction",
+		Description: inputs.String("Stories about futuristic science and technology"),
+	}).
+	Update(inputs.GenresUpdateInput{
+		Description: inputs.String("Updated description for Science Fiction"),
+	}).
+	Exec(ctx)
+```
+
+#### How Upsert Works
+
+1. **Where** - Condition to find existing record
+2. **Create** - Data for new record if not found
+3. **Update** - Data to apply if record exists
+
+| Scenario                  | Result                     |
+| ------------------------- | -------------------------- |
+| Record **does not exist** | Creates with `Create` data |
+| Record **exists**         | Updates with `Update` data |
+
+#### Upsert with Unique Field
+
+For models with `@unique` fields, use the unique field in Where:
+
+```go
+// books.isbn is @unique
+book, err := client.Books.Upsert().
+	Where(inputs.BooksWhereInput{
+		Isbn: filters.String("978-0-13-468599-1"),
+	}).
+	Create(inputs.BooksCreateInput{
+		Title: "The Pragmatic Programmer",
+		Isbn:  inputs.String("978-0-13-468599-1"),
+	}).
+	Update(inputs.BooksUpdateInput{
+		Title: inputs.String("The Pragmatic Programmer (Updated)"),
+	}).
+	ExecWithContext(ctx)
+```
+
+#### Upsert with Composite Unique Constraint
+
+For models with `@@unique([field1, field2])`, include ALL constraint fields in Where:
+
+```go
+// book_authors has @@unique([id_book, id_author])
+bookAuthor, err := client.BookAuthors.Upsert().
+	Where(inputs.BookAuthorsWhereInput{
+		IdBook:   filters.String(bookId),
+		IdAuthor: filters.String(authorId),
+	}).
+	Create(inputs.BookAuthorsCreateInput{
+		IdBook:   bookId,
+		IdAuthor: authorId,
+		Role:     inputs.String("author"),
+		Order:    0,
+	}).
+	Update(inputs.BookAuthorsUpdateInput{
+		Role:  inputs.String("co-author"),
+		Order: inputs.Int(1),
+	}).
+	Exec(ctx)
+```
+
+#### Unique Constraints and Upsert Behavior
+
+When using Upsert with models that have unique constraints, the behavior depends on which fields are used in the Where clause.
+
+**Example Schema (from schema.prisma):**
+
+```prisma
+model chapters {
+  id_chapter     String @id @default(dbgenerated("gen_random_uuid()"))
+  id_book        String
+  chapter_number Int
+  title          String
+  content        String?
+
+  @@unique([id_book, chapter_number], map: "chapters_unique_book_number")
+}
+```
+
+**Decision Table for `@@unique([id_book, chapter_number])`:**
+
+| Where Clause                     | Match Type      | Behavior                            |
+| -------------------------------- | --------------- | ----------------------------------- |
+| `{IdBook, ChapterNumber}`        | ✅ Exact match  | Works correctly                     |
+| `{IdBook}`                       | ❌ Incomplete   | May find/update wrong record        |
+| `{ChapterNumber}`                | ❌ Incomplete   | May find/update wrong record        |
+| `{IdBook, ChapterNumber, Title}` | ⚠️ Extra fields | Works, but Title used for filtering |
+
+**Best Practice:** When using Upsert with composite unique constraints, always include **all fields** that form the unique constraint in your Where clause.
+
+```go
+// ✅ Correct: All unique constraint fields
+client.Chapters.Upsert().
+	Where(inputs.ChaptersWhereInput{
+		IdBook:        filters.String(bookId),
+		ChapterNumber: filters.Int(1),
+	})
+
+// ⚠️ Incomplete: Missing ChapterNumber
+client.Chapters.Upsert().
+	Where(inputs.ChaptersWhereInput{
+		IdBook: filters.String(bookId),
+	})
+```
+
+#### Upsert Validation Errors
+
+All three methods (Where, Create, Update) are required:
+
+```go
+// ❌ Error: Missing Where
+_, err := client.Genres.Upsert().Create(...).Update(...).Exec()
+// "where is required for upsert"
+
+// ❌ Error: Missing Create
+_, err := client.Genres.Upsert().Where(...).Update(...).Exec()
+// "create is required for upsert"
+
+// ❌ Error: Missing Update
+_, err := client.Genres.Upsert().Where(...).Create(...).Exec()
+// "update is required for upsert"
+```
+
+#### Upsert in Data Sync Scenarios
+
+```go
+// Sync book-store availability from external source
+for _, storeData := range externalStoreData {
+	// book_stores has @@unique([id_book, id_store])
+	_, err := client.BookStores.Upsert().
+		Where(inputs.BookStoresWhereInput{
+			IdBook:  filters.String(storeData.BookID),
+			IdStore: filters.String(storeData.StoreID),
+		}).
+		Create(inputs.BookStoresCreateInput{
+			IdBook:        storeData.BookID,
+			IdStore:       storeData.StoreID,
+			Price:         storeData.Price,
+			StockQuantity: storeData.Stock,
+		}).
+		Update(inputs.BookStoresUpdateInput{
+			Price:         inputs.Decimal(storeData.Price),
+			StockQuantity: inputs.Int(storeData.Stock),
+		}).
+		Exec(ctx)
+
+	if err != nil {
+		log.Printf("Failed to sync store %s: %v", storeData.StoreID, err)
+	}
+}
 ```
 
 ## Query Options
@@ -258,34 +425,34 @@ err := client.User.Delete().
 
 ```go
 // Simple where
-users, err := client.User.FindMany().
-	Where(inputs.UserWhereInput{
-		Email: db.String("user@example.com"),
+users, err := client.Authors.FindMany().
+	Where(inputs.AuthorsWhereInput{
+		Email: db.String("author@example.com"),
 	}).
 	Exec(ctx)
 
 // Multiple conditions (AND)
-users, err := client.User.FindMany().
-	Where(inputs.UserWhereInput{
-		Email: db.String("user@example.com"),
+users, err := client.Authors.FindMany().
+	Where(inputs.AuthorsWhereInput{
+		Email: db.String("author@example.com"),
 		Name:  db.String("John"),
 	}).
 	Exec(ctx)
 
 // OR conditions
-users, err := client.User.FindMany().
-	Where(inputs.UserWhereInput{
-		Or: []inputs.UserWhereInput{
-			{Email: db.String("user1@example.com")},
-			{Email: db.String("user2@example.com")},
+users, err := client.Authors.FindMany().
+	Where(inputs.AuthorsWhereInput{
+		Or: []inputs.AuthorsWhereInput{
+			{Email: db.String("author1@example.com")},
+			{Email: db.String("author2@example.com")},
 		},
 	}).
 	Exec(ctx)
 
 // NOT conditions
-users, err := client.User.FindMany().
-	Where(inputs.UserWhereInput{
-		Not: &inputs.UserWhereInput{
+users, err := client.Authors.FindMany().
+	Where(inputs.AuthorsWhereInput{
+		Not: &inputs.AuthorsWhereInput{
 			Email: db.String("admin@example.com"),
 		},
 	}).
@@ -296,23 +463,23 @@ users, err := client.User.FindMany().
 
 ```go
 // Contains
-users, err := client.User.FindMany().
-	Where(inputs.UserWhereInput{
-		Email: db.Contains("example"),
+users, err := client.Authors.FindMany().
+	Where(inputs.AuthorsWhereInput{
+		Email: db.Contains("author"),
 	}).
 	Exec(ctx)
 
 // Starts with
-users, err := client.User.FindMany().
-	Where(inputs.UserWhereInput{
-		Email: db.StartsWith("user"),
+users, err := client.Authors.FindMany().
+	Where(inputs.AuthorsWhereInput{
+		FirstName: db.StartsWith("John"),
 	}).
 	Exec(ctx)
 
 // Ends with
-users, err := client.User.FindMany().
-	Where(inputs.UserWhereInput{
-		Email: db.EndsWith(".com"),
+users, err := client.Authors.FindMany().
+	Where(inputs.AuthorsWhereInput{
+		LastName: db.EndsWith("son"),
 	}).
 	Exec(ctx)
 ```
@@ -321,36 +488,36 @@ users, err := client.User.FindMany().
 
 ```go
 // Greater than
-posts, err := client.Post.FindMany().
-	Where(inputs.PostWhereInput{
-		Views: db.IntGt(100),
+posts, err := client.Books.FindMany().
+	Where(inputs.BooksWhereInput{
+		PageCount: db.IntGt(100),
 	}).
 	Exec(ctx)
 
 // Less than
-posts, err := client.Post.FindMany().
-	Where(inputs.PostWhereInput{
-		Views: db.IntLt(10),
+posts, err := client.Books.FindMany().
+	Where(inputs.BooksWhereInput{
+		PageCount: db.IntLt(10),
 	}).
 	Exec(ctx)
 
 // Greater than or equal
-posts, err := client.Post.FindMany().
-	Where(inputs.PostWhereInput{
-		Views: db.IntGte(100),
+posts, err := client.Books.FindMany().
+	Where(inputs.BooksWhereInput{
+		PageCount: db.IntGte(100),
 	}).
 	Exec(ctx)
 
 // Less than or equal
-posts, err := client.Post.FindMany().
-	Where(inputs.PostWhereInput{
-		Views: db.IntLte(10),
+posts, err := client.Books.FindMany().
+	Where(inputs.BooksWhereInput{
+		PageCount: db.IntLte(10),
 	}).
 	Exec(ctx)
 
 // In array (using StringIn helper)
-users, err := client.User.FindMany().
-	Where(inputs.UserWhereInput{
+users, err := client.Authors.FindMany().
+	Where(inputs.AuthorsWhereInput{
 		Id: db.Int(1), // For exact match, use Int()
 	}).
 	Exec(ctx)
@@ -360,14 +527,14 @@ users, err := client.User.FindMany().
 
 ```go
 // Order by single field
-users, err := client.Users().FindMany().
-	OrderBy(db.UserOrderByInput{
+users, err := client.Authors.FindMany().
+	OrderBy(db.AuthorsOrderByInput{
 		CreatedAt: db.SortOrderDesc,
 	}).Exec()
 
 // Order by multiple fields
-users, err := client.Users().FindMany().
-	OrderBy(db.UserOrderByInput{
+users, err := client.Authors.FindMany().
+	OrderBy(db.AuthorsOrderByInput{
 		CreatedAt: db.SortOrderDesc,
 		Name:      db.SortOrderAsc,
 	}).Exec()
@@ -377,17 +544,17 @@ users, err := client.Users().FindMany().
 
 ```go
 // Take results
-users, err := client.Users().FindMany().
+users, err := client.Authors.FindMany().
 	Take(10).Exec()
 
 // Skip results
-users, err := client.Users().FindMany().
+users, err := client.Authors.FindMany().
 	Skip(20).Exec()
 
 // Take and skip (pagination)
 page := 1
 pageSize := 10
-users, err := client.Users().FindMany().
+users, err := client.Authors.FindMany().
 	Skip((page - 1) * pageSize).
 	Take(pageSize).
 	Exec()
@@ -397,8 +564,8 @@ users, err := client.Users().FindMany().
 
 ```go
 // Select specific fields using type-safe Select
-users, err := client.User.FindMany().
-	Select(inputs.UserSelect{
+users, err := client.Authors.FindMany().
+	Select(inputs.AuthorsSelect{
 		Id:    true,
 		Email: true,
 		Name:  true,
@@ -427,14 +594,14 @@ type UserDTO struct {
 
 // Find first with custom DTO
 var userDTO *UserDTO
-err := client.User.FindFirst().
-	Select(inputs.UserSelect{
+err := client.Authors.FindFirst().
+	Select(inputs.AuthorsSelect{
 		Id:    true,
 		Email: true,
 		Name:  true,
 	}).
-	Where(inputs.UserWhereInput{
-		Email: db.String("user@example.com"),
+	Where(inputs.AuthorsWhereInput{
+		Email: db.String("author@example.com"),
 	}).
 	ExecTypedWithContext(ctx, &userDTO)
 if err != nil {
@@ -444,14 +611,14 @@ if err != nil {
 
 // Find many with custom DTO
 var usersDTO []UserDTO
-err = client.User.FindMany().
-	Select(inputs.UserSelect{
+err = client.Authors.FindMany().
+	Select(inputs.AuthorsSelect{
 		Id:    true,
 		Email: true,
 		Name:  true,
 	}).
-	Where(inputs.UserWhereInput{
-		Email: db.Contains("example.com"),
+	Where(inputs.AuthorsWhereInput{
+		Email: db.Contains("author"),
 	}).
 	ExecTypedWithContext(ctx, &usersDTO)
 if err != nil {
@@ -464,31 +631,31 @@ if err != nil {
 
 ```go
 // Set context once
-query := client.User.WithContext(ctx)
+query := client.Authors.WithContext(ctx)
 
 // Find first with custom DTO using stored context
 var userDTO *UserDTO
 err := query.FindFirst().
-	Select(inputs.UserSelect{
+	Select(inputs.AuthorsSelect{
 		Id:    true,
 		Email: true,
 		Name:  true,
 	}).
-	Where(inputs.UserWhereInput{
-		Email: db.String("user@example.com"),
+	Where(inputs.AuthorsWhereInput{
+		Email: db.String("author@example.com"),
 	}).
 	ExecTyped(&userDTO) // Uses stored context
 
 // Find many with custom DTO using stored context
 var usersDTO []UserDTO
 err = query.FindMany().
-	Select(inputs.UserSelect{
+	Select(inputs.AuthorsSelect{
 		Id:    true,
 		Email: true,
 		Name:  true,
 	}).
-	Where(inputs.UserWhereInput{
-		Email: db.Contains("example.com"),
+	Where(inputs.AuthorsWhereInput{
+		Email: db.Contains("author"),
 	}).
 	ExecTyped(&usersDTO) // Uses stored context
 ```
@@ -506,15 +673,15 @@ err = query.FindMany().
 
 ```go
 // Include related data
-posts, err := client.Posts().FindMany().
-	Include(db.PostIncludeInput{
+posts, err := client.Books.FindMany().
+	Include(db.BooksIncludeInput{
 		Author: true,
 	}).Exec()
 
 // Nested includes
-posts, err := client.Posts().FindMany().
-	Include(db.PostIncludeInput{
-		Author: db.UserIncludeInput{
+posts, err := client.Books.FindMany().
+	Include(db.BooksIncludeInput{
+		Author: db.AuthorsIncludeInput{
 			Posts: true,
 		},
 	}).Exec()
@@ -526,11 +693,11 @@ posts, err := client.Posts().FindMany().
 
 ```go
 // Count all
-count, err := client.Users().Count().Exec()
+count, err := client.Authors.Count().Exec()
 
 // Count with where
-count, err := client.Users().Count(
-	db.UserWhereInput{
+count, err := client.Authors.Count(
+	inputs.AuthorsWhereInput{
 		Email: db.StringContains("@example.com"),
 	},
 ).Exec()
@@ -540,31 +707,31 @@ count, err := client.Users().Count(
 
 ```go
 // Sum numeric field
-total, err := client.Posts().Sum("views").Exec()
+total, err := client.Books.Sum("views").Exec()
 ```
 
 ### Average
 
 ```go
 // Average numeric field
-avg, err := client.Posts().Avg("views").Exec()
+avg, err := client.Books.Avg("views").Exec()
 ```
 
 ### Min/Max
 
 ```go
 // Minimum value
-min, err := client.Posts().Min("views").Exec()
+min, err := client.Books.Min("views").Exec()
 
 // Maximum value
-max, err := client.Posts().Max("views").Exec()
+max, err := client.Books.Max("views").Exec()
 ```
 
 ### Group By
 
 ```go
 // Group by field
-results, err := client.Posts().GroupBy(
+results, err := client.Books.GroupBy(
 	[]string{"authorId"},
 	db.PostGroupByInput{
 		Count: true,
@@ -584,9 +751,9 @@ Transactions allow you to execute multiple operations atomically. If any operati
 err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 	// Create user
 	user, err := tx.User.Create().
-		Data(inputs.UserCreateInput{
-			Email: "user@example.com",
-			Name:  db.String("John Doe"),
+		Data(inputs.AuthorsCreateInput{
+			Email: db.String("author@example.com"),
+			FirstName: "John", LastName: "Doe",
 		}).
 		Exec(ctx)
 	if err != nil {
@@ -595,7 +762,7 @@ err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 
 	// Create post
 	_, err = tx.Post.Create().
-		Data(inputs.PostCreateInput{
+		Data(inputs.BooksCreateInput{
 			Title:    db.String("My Post"),
 			AuthorId: db.String(user.ID),
 		}).
@@ -610,8 +777,8 @@ err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 	// Create user
 	user, err := tx.User.Create().
-		Data(inputs.UserCreateInput{
-			Email: "user@example.com",
+		Data(inputs.AuthorsCreateInput{
+			Email: db.String("author@example.com"),
 		}).
 		Exec(ctx)
 	if err != nil {
@@ -620,11 +787,11 @@ err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 
 	// Update user
 	err = tx.User.Update().
-		Where(inputs.UserWhereInput{
+		Where(inputs.AuthorsWhereInput{
 			Id: db.String(user.ID),
 		}).
-		Data(inputs.UserUpdateInput{
-			Name: db.String("Updated Name"),
+		Data(inputs.AuthorsUpdateInput{
+			Bio: db.String("Updated biography"),
 		}).
 		Exec(ctx)
 	if err != nil {
@@ -634,7 +801,7 @@ err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 	// Create related records
 	for _, postData := range posts {
 		_, err = tx.Post.Create().
-			Data(inputs.PostCreateInput{
+			Data(inputs.BooksCreateInput{
 				Title:    db.String(postData.Title),
 				AuthorId: db.String(user.ID),
 			}).
@@ -654,8 +821,8 @@ err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 	// Use fluent API
 	user, err := tx.User.Create().
-		Data(inputs.UserCreateInput{
-			Email: "user@example.com",
+		Data(inputs.AuthorsCreateInput{
+			Email: db.String("author@example.com"),
 		}).
 		Exec(ctx)
 	if err != nil {
@@ -679,8 +846,8 @@ If any operation returns an error, the transaction is automatically rolled back:
 ```go
 err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 	user, err := tx.User.Create().
-		Data(inputs.UserCreateInput{
-			Email: "user@example.com",
+		Data(inputs.AuthorsCreateInput{
+			Email: db.String("author@example.com"),
 		}).
 		Exec(ctx)
 	if err != nil {
@@ -689,7 +856,7 @@ err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 
 	// If this fails, the user creation above will be rolled back
 	_, err = tx.Post.Create().
-		Data(inputs.PostCreateInput{
+		Data(inputs.BooksCreateInput{
 			Title: db.String("Post"),
 		}).
 		Exec(ctx)
@@ -745,20 +912,20 @@ If your model has `deletedAt` field:
 
 ```go
 // Soft delete
-err := client.Users().Delete(...).Exec()
+err := client.Authors.Delete(...).Exec()
 
 // Restore
-err := client.Users().Restore(...).Exec()
+err := client.Authors.Restore(...).Exec()
 
 // Force delete (permanent)
-err := client.Users().ForceDelete(...).Exec()
+err := client.Authors.ForceDelete(...).Exec()
 
 // Include deleted records
-users, err := client.Users().FindMany().
+users, err := client.Authors.FindMany().
 	IncludeDeleted().Exec()
 
 // Only deleted records
-users, err := client.Users().FindMany().
+users, err := client.Authors.FindMany().
 	OnlyDeleted().Exec()
 ```
 
@@ -766,7 +933,7 @@ users, err := client.Users().FindMany().
 
 ```go
 // Set JSON field
-user, err := client.Users().Update(
+user, err := client.Authors.Update(
 	...,
 	db.UserUpdateInput{
 		Metadata: db.JSON(map[string]interface{}{
@@ -786,14 +953,14 @@ hasKey := user.Metadata.Contains("key")
 
 ```go
 // Search
-posts, err := client.Posts().Search("search term").Exec()
+posts, err := client.Books.Search("search term").Exec()
 
 // Search with ranking
-results, err := client.Posts().SearchRanked("search term").Exec()
+results, err := client.Books.SearchRanked("search term").Exec()
 
 // Search in where clause
-posts, err := client.Posts().FindMany(
-	db.PostWhereInput{
+posts, err := client.Books.FindMany(
+	inputs.BooksWhereInput{
 		Content: db.StringSearch("term"),
 	},
 ).Exec()
@@ -813,13 +980,13 @@ if err != nil {
 
 ```go
 // Before create hook
-client.Users().BeforeCreate(func(user *db.User) error {
+client.Authors.BeforeCreate(func(user *db.User) error {
 	// Validate or modify before creation
 	return nil
 })
 
 // After create hook
-client.Users().AfterCreate(func(user *db.User) error {
+client.Authors.AfterCreate(func(user *db.User) error {
 	// Send notification, log, etc.
 	return nil
 })
@@ -839,7 +1006,7 @@ Available hooks:
 ## Error Handling
 
 ```go
-user, err := client.Users().FindUnique(...).Exec()
+user, err := client.Authors.FindUnique(...).Exec()
 if err != nil {
 	if errors.Is(err, db.ErrNotFound) {
 		// Record not found

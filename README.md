@@ -200,13 +200,13 @@ func main() {
     database.SetupPrismaClient()
 
     // Set context once and reuse it
-    query := database.Client.User.WithContext(ctx)
+    query := database.Client.Authors.WithContext(ctx)
 
     // Create a user using fluent API (using stored context)
     user, err := query.Create().
-        Data(inputs.UserCreateInput{
-            Email: "test@example.com",
-            Name:  db.String("Test User"),
+        Data(inputs.AuthorsCreateInput{
+            Email: "author@example.com",
+            FirstName: "Test", LastName: "Author",
         }).
         Exec() // Uses stored context
     if err != nil {
@@ -216,8 +216,8 @@ func main() {
 
     // Find users using fluent API with type-safe WhereInput
     users, err := query.FindMany().
-        Where(inputs.UserWhereInput{
-            Email: db.Contains("example.com"),
+        Where(inputs.AuthorsWhereInput{
+            Email: db.Contains("author"),
         }).
         Exec() // Uses stored context
     if err != nil {
@@ -225,14 +225,36 @@ func main() {
     }
     log.Printf("Found %d users\n", len(users))
 
+    // Upsert: Create or Update based on unique field
+    // genres.name is @unique - creates if not exists, updates if exists
+    query := database.Client.Genres.WithContext(ctx)
+    upsertedGenre, err := query.Upsert().
+        Where(inputs.GenresWhereInput{
+            Name: db.String("Science Fiction"),
+        }).
+        Create(inputs.GenresCreateInput{
+            Name:        "Science Fiction",
+            Description: db.String("Stories about futuristic science"),
+        }).
+        Update(inputs.GenresUpdateInput{
+            Description: db.String("Updated description for Sci-Fi"),
+        }).
+        Exec()
+    if err != nil {
+        log.Fatal(err)
+    }
+    log.Printf("Upserted genre: %+v\n", upsertedGenre)
+
+
+
     // Find first user with Select
     foundUser, err := query.FindFirst().
-        Select(inputs.UserSelect{
+        Select(inputs.AuthorsSelect{
             Email: true,
             Name:  true,
         }).
-        Where(inputs.UserWhereInput{
-            Email: db.String("test@example.com"),
+        Where(inputs.AuthorsWhereInput{
+            Email: db.String("author@example.com"),
         }).
         Exec() // Uses stored context
     if err != nil {
@@ -248,12 +270,12 @@ func main() {
 
     var userDTO *UserDTO
     err = query.FindFirst().
-        Select(inputs.UserSelect{
+        Select(inputs.AuthorsSelect{
             Email: true,
             Name:  true,
         }).
-        Where(inputs.UserWhereInput{
-            Email: db.String("test@example.com"),
+        Where(inputs.AuthorsWhereInput{
+            Email: db.String("author@example.com"),
         }).
         ExecTyped(&userDTO) // Uses stored context
     if err != nil {
@@ -264,7 +286,7 @@ func main() {
     // Find many with custom DTO
     var usersDTO []UserDTO
     err = query.FindMany().
-        Select(inputs.UserSelect{
+        Select(inputs.AuthorsSelect{
             Email: true,
             Name:  true,
         }).
@@ -329,7 +351,7 @@ item, err := client.Item.Create().
 import "my-app/db/filters"
 
 users, err := query.FindMany().
-    Where(inputs.UserWhereInput{
+    Where(inputs.AuthorsWhereInput{
         Email: filters.Contains("@example.com"),
         Name:  filters.StartsWith("John"),
     }).
