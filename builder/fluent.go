@@ -621,6 +621,8 @@ func (q *Query) First(ctx context.Context, dest interface{}) error {
 
 	queryStart := time.Now()
 	row := q.db.QueryRow(ctx, query, args...)
+	queryEnd := time.Now()
+	queryDuration := queryEnd.Sub(queryStart)
 
 	var err error
 	if q.modelType != nil {
@@ -628,8 +630,6 @@ func (q *Query) First(ctx context.Context, dest interface{}) error {
 	} else {
 		err = row.Scan(dest)
 	}
-	queryEnd := time.Now()
-	queryDuration := queryEnd.Sub(queryStart)
 
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
 

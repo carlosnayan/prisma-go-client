@@ -350,6 +350,10 @@ func (q *Query) ScanFirst(ctx context.Context, dest interface{}, scanType reflec
 
 	row := q.db.QueryRow(ctx, query, args...)
 
+	queryEnd := time.Now()
+
+	queryDuration := queryEnd.Sub(queryStart)
+
 	destVal := reflect.ValueOf(dest)
 
 	if destVal.Kind() != reflect.Ptr {
@@ -411,10 +415,6 @@ func (q *Query) ScanFirst(ctx context.Context, dest interface{}, scanType reflec
 		}
 
 	}
-
-	queryEnd := time.Now()
-
-	queryDuration := queryEnd.Sub(queryStart)
 
 	if err := row.Scan(fields...); err != nil {
 
