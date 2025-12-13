@@ -53,6 +53,7 @@ func GenerateRaw(outputDir string) error {
 		"builder_db_adapter.tmpl",
 		"adapters.tmpl",
 		"executor_methods.tmpl",
+		"scan_result.tmpl",
 	}
 
 	return executeRawTemplatesAppend(rawFile, restTemplateNames)

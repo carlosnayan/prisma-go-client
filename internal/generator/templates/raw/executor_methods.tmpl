@@ -1,44 +1,35 @@
-// Query executes a raw SQL query that returns multiple rows
-//
-// Example:
-//
-//	rows, err := executor.Query(ctx, `
-//	    SELECT u.*, t.tenant_name
-//	    FROM users u
-//	    JOIN tenants t ON u.id_tenant = t.id_tenant
-//	    WHERE u.deleted_at IS NULL AND t.id_tenant = $1
-//	`, tenantId)
-func (e *Executor) Query(ctx context.Context, sql string, args ...interface{}) (Rows, error) {
-	return e.db.Query(ctx, sql, args...)
+
+type QueryBuilder struct {
+	executor *Executor
+	sql      string
+	args     []interface{}
 }
 
-// QueryRow executes a raw SQL query that returns a single row
-//
-// Example:
-//
-//	row := executor.QueryRow(ctx, `
-//	    SELECT COUNT(*) as total,
-//	           COUNT(CASE WHEN enabled = true THEN 1 END) as enabled_count
-//	    FROM users
-//	    WHERE id_tenant = $1
-//	`, tenantId)
-//
-//	var total, enabled int
-//	err := row.Scan(&total, &enabled)
-func (e *Executor) QueryRow(ctx context.Context, sql string, args ...interface{}) Row {
-	return e.db.QueryRow(ctx, sql, args...)
+func (e *Executor) Query(sql string, args ...interface{}) *QueryBuilder {
+	return &QueryBuilder{executor: e, sql: sql, args: args}
 }
 
-// Exec executes a raw SQL command (INSERT, UPDATE, DELETE)
-//
-// Example:
-//
-//	result, err := executor.Exec(ctx, `
-//	    UPDATE users
-//	    SET last_login_at = NOW()
-//	    WHERE id_user = $1
-//	`, userId)
-func (e *Executor) Exec(ctx context.Context, sql string, args ...interface{}) (Result, error) {
-	return e.db.Exec(ctx, sql, args...)
+func (q *QueryBuilder) Exec() *ScanResult {
+	rows, err := q.executor.db.Query(context.Background(), q.sql, q.args...)
+	return &ScanResult{rows: rows, err: err}
+}
+
+type QueryRowBuilder struct {
+	executor *Executor
+	sql      string
+	args     []interface{}
+}
+
+func (e *Executor) QueryRow(sql string, args ...interface{}) *QueryRowBuilder {
+	return &QueryRowBuilder{executor: e, sql: sql, args: args}
+}
+
+func (q *QueryRowBuilder) Exec() *ScanRowResult {
+	row := q.executor.db.QueryRow(context.Background(), q.sql, q.args...)
+	return &ScanRowResult{row: row}
+}
+
+func (e *Executor) Exec(sql string, args ...interface{}) (Result, error) {
+	return e.db.Exec(context.Background(), sql, args...)
 }
 

@@ -1,0 +1,185 @@
+
+type ScanResult struct {
+	rows Rows
+	err  error
+}
+
+func (r *ScanResult) Scan(dest interface{}) error {
+	if r.err != nil {
+		return r.err
+	}
+	if r.rows == nil {
+		return fmt.Errorf("no rows to scan")
+	}
+	defer r.rows.Close()
+
+	destVal := reflect.ValueOf(dest)
+	if destVal.Kind() != reflect.Ptr {
+		return fmt.Errorf("Query.Scan: dest must be a pointer to slice")
+	}
+	if destVal.Elem().Kind() != reflect.Slice {
+		return fmt.Errorf("Query.Scan: dest must be a pointer to slice, got pointer to %s", destVal.Elem().Kind())
+	}
+
+	return scanRows(r.rows, dest)
+}
+
+func (r *ScanResult) Rows() (Rows, error) {
+	return r.rows, r.err
+}
+
+type ScanRowResult struct {
+	row Row
+	err error
+}
+
+func (r *ScanRowResult) Scan(dest interface{}) error {
+	if r.err != nil {
+		return r.err
+	}
+	if r.row == nil {
+		return fmt.Errorf("no row to scan")
+	}
+
+	destVal := reflect.ValueOf(dest)
+	if destVal.Kind() != reflect.Ptr {
+		return fmt.Errorf("QueryRow.Scan: dest must be a pointer to struct")
+	}
+	elemVal := destVal.Elem()
+	if elemVal.Kind() == reflect.Slice {
+		return fmt.Errorf("QueryRow.Scan: dest must be a pointer to struct, not slice. Use Query() for multiple rows")
+	}
+	if elemVal.Kind() != reflect.Struct {
+		return r.row.Scan(dest)
+	}
+
+	return scanRow(r.row, dest)
+}
+
+func scanRows(rows Rows, dest interface{}) error {
+	destVal := reflect.ValueOf(dest)
+	if destVal.Kind() != reflect.Ptr {
+		return fmt.Errorf("dest must be a pointer to slice")
+	}
+	
+	sliceVal := destVal.Elem()
+	if sliceVal.Kind() != reflect.Slice {
+		return fmt.Errorf("dest must be a pointer to slice")
+	}
+	
+	elemType := sliceVal.Type().Elem()
+	isPtr := elemType.Kind() == reflect.Ptr
+	if isPtr {
+		elemType = elemType.Elem()
+	}
+	
+	if elemType.Kind() != reflect.Struct {
+		return fmt.Errorf("slice element must be a struct or pointer to struct")
+	}
+	
+	colRows, ok := rows.(interface{ Columns() ([]string, error) })
+	if !ok {
+		return fmt.Errorf("rows does not support Columns()")
+	}
+	
+	columns, err := colRows.Columns()
+	if err != nil {
+		return fmt.Errorf("failed to get columns: %w", err)
+	}
+	
+	fieldMap := buildFieldMap(elemType)
+	
+	for rows.Next() {
+		elemPtr := reflect.New(elemType)
+		elem := elemPtr.Elem()
+		
+		scanDest := make([]interface{}, len(columns))
+		for i, col := range columns {
+			colName := extractColumnName(col)
+			if fieldIdx, ok := fieldMap[colName]; ok {
+				scanDest[i] = elem.Field(fieldIdx).Addr().Interface()
+			} else {
+				var discard interface{}
+				scanDest[i] = &discard
+			}
+		}
+		
+		if err := rows.Scan(scanDest...); err != nil {
+			return fmt.Errorf("failed to scan row: %w", err)
+		}
+		
+		if isPtr {
+			sliceVal.Set(reflect.Append(sliceVal, elemPtr))
+		} else {
+			sliceVal.Set(reflect.Append(sliceVal, elem))
+		}
+	}
+	
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("rows error: %w", err)
+	}
+	
+	return nil
+}
+
+func buildFieldMap(t reflect.Type) map[string]int {
+	fieldMap := make(map[string]int)
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		if tag := field.Tag.Get("db"); tag != "" && tag != "-" {
+			fieldMap[tag] = i
+		}
+	}
+	return fieldMap
+}
+
+func extractColumnName(col string) string {
+	col = strings.TrimSpace(col)
+	
+	lowerCol := strings.ToLower(col)
+	if idx := strings.LastIndex(lowerCol, " as "); idx != -1 {
+		return strings.TrimSpace(col[idx+4:])
+	}
+	
+	if idx := strings.LastIndex(col, "."); idx != -1 {
+		return col[idx+1:]
+	}
+	
+	return col
+}
+
+func scanRow(row Row, dest interface{}) error {
+	destVal := reflect.ValueOf(dest)
+	if destVal.Kind() != reflect.Ptr {
+		return fmt.Errorf("dest must be a pointer to struct")
+	}
+	
+	elemVal := destVal.Elem()
+	elemType := elemVal.Type()
+	
+	colRow, ok := row.(interface{ Columns() ([]string, error) })
+	if !ok {
+		return fmt.Errorf("row does not support Columns() - use Scan with individual fields")
+	}
+	
+	columns, err := colRow.Columns()
+	if err != nil {
+		return fmt.Errorf("failed to get columns: %w", err)
+	}
+	
+	fieldMap := buildFieldMap(elemType)
+	
+	scanDest := make([]interface{}, len(columns))
+	for i, col := range columns {
+		colName := extractColumnName(col)
+		if fieldIdx, ok := fieldMap[colName]; ok {
+			scanDest[i] = elemVal.Field(fieldIdx).Addr().Interface()
+		} else {
+			var discard interface{}
+			scanDest[i] = &discard
+		}
+	}
+	
+	return row.Scan(scanDest...)
+}
+

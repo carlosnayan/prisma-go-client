@@ -32,12 +32,47 @@ func (r *mockResult) LastInsertId() (int64, error) {
 }
 
 // mockRows implements builder.Rows
-type mockRows struct{}
+type mockRows struct {
+	columns []string
+	data    [][]interface{}
+	index   int
+}
 
-func (r *mockRows) Close()                         {}
-func (r *mockRows) Err() error                     { return nil }
-func (r *mockRows) Next() bool                     { return false }
-func (r *mockRows) Scan(dest ...interface{}) error { return nil }
+func (r *mockRows) Close()     {}
+func (r *mockRows) Err() error { return nil }
+func (r *mockRows) Next() bool {
+	if r.index < len(r.data) {
+		r.index++
+		return true
+	}
+	return false
+}
+func (r *mockRows) Scan(dest ...interface{}) error {
+	if r.index == 0 || r.index > len(r.data) {
+		return nil
+	}
+	row := r.data[r.index-1]
+	for i, v := range row {
+		if i < len(dest) {
+			switch d := dest[i].(type) {
+			case *string:
+				if s, ok := v.(string); ok {
+					*d = s
+				}
+			case *int:
+				if n, ok := v.(int); ok {
+					*d = n
+				}
+			case *interface{}:
+				*d = v
+			}
+		}
+	}
+	return nil
+}
+func (r *mockRows) Columns() ([]string, error) {
+	return r.columns, nil
+}
 
 // mockRow implements builder.Row
 type mockRow struct{}
@@ -765,4 +800,274 @@ func TestRawNew_WithSQLiteAdapter(t *testing.T) {
 	// 2. SQLDBAdapter implements builder.DBTX with correct return types
 	// 3. raw.New uses reflection to accept SQLDBAdapter (prevents panic)
 	// 4. The full flow SetupClient -> NewClient -> raw.New would work without panic
+}
+
+func TestRawQuery_FluentAPI(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputDir := filepath.Join(tmpDir, "generated")
+
+	goModPath := filepath.Join(tmpDir, "go.mod")
+	goModContent := "module test\n"
+	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
+		t.Fatalf("Failed to create go.mod: %v", err)
+	}
+
+	if err := GenerateRaw(outputDir); err != nil {
+		t.Fatalf("GenerateRaw failed: %v", err)
+	}
+
+	rawFile := filepath.Join(outputDir, "raw", "raw.go")
+	content, err := os.ReadFile(rawFile)
+	if err != nil {
+		t.Fatalf("Failed to read raw.go: %v", err)
+	}
+
+	contentStr := string(content)
+
+	if !strings.Contains(contentStr, "type QueryBuilder struct") {
+		t.Error("raw.go should contain QueryBuilder struct")
+	}
+
+	if !strings.Contains(contentStr, "func (e *Executor) Query(sql string, args ...interface{}) *QueryBuilder") {
+		t.Error("Executor.Query should return *QueryBuilder")
+	}
+
+	if !strings.Contains(contentStr, "func (q *QueryBuilder) Exec() *ScanResult") {
+		t.Error("QueryBuilder.Exec should return *ScanResult without ctx parameter")
+	}
+
+	if !strings.Contains(contentStr, "type ScanResult struct") {
+		t.Error("raw.go should contain ScanResult struct")
+	}
+
+	if !strings.Contains(contentStr, "func (r *ScanResult) Scan(dest interface{}) error") {
+		t.Error("ScanResult should have Scan method")
+	}
+
+	if !strings.Contains(contentStr, "func (r *ScanResult) Rows() (Rows, error)") {
+		t.Error("ScanResult should have Rows method for manual iteration")
+	}
+}
+
+func TestRawQueryRow_FluentAPI(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputDir := filepath.Join(tmpDir, "generated")
+
+	goModPath := filepath.Join(tmpDir, "go.mod")
+	goModContent := "module test\n"
+	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
+		t.Fatalf("Failed to create go.mod: %v", err)
+	}
+
+	if err := GenerateRaw(outputDir); err != nil {
+		t.Fatalf("GenerateRaw failed: %v", err)
+	}
+
+	rawFile := filepath.Join(outputDir, "raw", "raw.go")
+	content, err := os.ReadFile(rawFile)
+	if err != nil {
+		t.Fatalf("Failed to read raw.go: %v", err)
+	}
+
+	contentStr := string(content)
+
+	if !strings.Contains(contentStr, "type QueryRowBuilder struct") {
+		t.Error("raw.go should contain QueryRowBuilder struct")
+	}
+
+	if !strings.Contains(contentStr, "func (e *Executor) QueryRow(sql string, args ...interface{}) *QueryRowBuilder") {
+		t.Error("Executor.QueryRow should return *QueryRowBuilder")
+	}
+
+	if !strings.Contains(contentStr, "func (q *QueryRowBuilder) Exec() *ScanRowResult") {
+		t.Error("QueryRowBuilder.Exec should return *ScanRowResult without ctx parameter")
+	}
+
+	if !strings.Contains(contentStr, "type ScanRowResult struct") {
+		t.Error("raw.go should contain ScanRowResult struct")
+	}
+
+	if !strings.Contains(contentStr, "func (r *ScanRowResult) Scan(dest interface{}) error") {
+		t.Error("ScanRowResult.Scan should accept single interface{} for struct scanning")
+	}
+}
+
+func TestRawExec_ReturnsResult(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputDir := filepath.Join(tmpDir, "generated")
+
+	goModPath := filepath.Join(tmpDir, "go.mod")
+	goModContent := "module test\n"
+	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
+		t.Fatalf("Failed to create go.mod: %v", err)
+	}
+
+	if err := GenerateRaw(outputDir); err != nil {
+		t.Fatalf("GenerateRaw failed: %v", err)
+	}
+
+	rawFile := filepath.Join(outputDir, "raw", "raw.go")
+	content, err := os.ReadFile(rawFile)
+	if err != nil {
+		t.Fatalf("Failed to read raw.go: %v", err)
+	}
+
+	contentStr := string(content)
+
+	if !strings.Contains(contentStr, "func (e *Executor) Exec(sql string, args ...interface{}) (Result, error)") {
+		t.Error("Executor.Exec should return (Result, error) directly")
+	}
+}
+
+func TestExtractColumnName(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputDir := filepath.Join(tmpDir, "generated")
+
+	goModPath := filepath.Join(tmpDir, "go.mod")
+	goModContent := "module test\n"
+	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
+		t.Fatalf("Failed to create go.mod: %v", err)
+	}
+
+	if err := GenerateRaw(outputDir); err != nil {
+		t.Fatalf("GenerateRaw failed: %v", err)
+	}
+
+	rawFile := filepath.Join(outputDir, "raw", "raw.go")
+	content, err := os.ReadFile(rawFile)
+	if err != nil {
+		t.Fatalf("Failed to read raw.go: %v", err)
+	}
+
+	contentStr := string(content)
+
+	if !strings.Contains(contentStr, "func extractColumnName(col string) string") {
+		t.Error("raw.go should contain extractColumnName function")
+	}
+
+	if !strings.Contains(contentStr, "strings.LastIndex(lowerCol, \" as \")") {
+		t.Error("extractColumnName should handle 'AS' alias syntax")
+	}
+
+	if !strings.Contains(contentStr, "strings.LastIndex(col, \".\")") {
+		t.Error("extractColumnName should handle table.column syntax")
+	}
+}
+
+func TestColumnAliasHandling(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputDir := filepath.Join(tmpDir, "generated")
+
+	goModPath := filepath.Join(tmpDir, "go.mod")
+	goModContent := "module test\n"
+	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
+		t.Fatalf("Failed to create go.mod: %v", err)
+	}
+
+	if err := GenerateRaw(outputDir); err != nil {
+		t.Fatalf("GenerateRaw failed: %v", err)
+	}
+
+	rawFile := filepath.Join(outputDir, "raw", "raw.go")
+	content, err := os.ReadFile(rawFile)
+	if err != nil {
+		t.Fatalf("Failed to read raw.go: %v", err)
+	}
+
+	contentStr := string(content)
+
+	testCases := []struct {
+		scenario     string
+		mustContain  string
+		errorMessage string
+	}{
+		{
+			scenario:     "table alias with dot (cf.id_chatbot_flow)",
+			mustContain:  `strings.LastIndex(col, ".")`,
+			errorMessage: "Should extract 'id_chatbot_flow' from 'cf.id_chatbot_flow'",
+		},
+		{
+			scenario:     "column without alias (id_tenant)",
+			mustContain:  "return col",
+			errorMessage: "Should return 'id_tenant' as-is when no alias",
+		},
+		{
+			scenario:     "AS alias (ik.name as integration_key_name)",
+			mustContain:  `strings.LastIndex(lowerCol, " as ")`,
+			errorMessage: "Should extract 'integration_key_name' from 'ik.name as integration_key_name'",
+		},
+	}
+
+	for _, tc := range testCases {
+		if !strings.Contains(contentStr, tc.mustContain) {
+			t.Errorf("Scenario '%s': %s. Expected to find '%s' in generated code",
+				tc.scenario, tc.errorMessage, tc.mustContain)
+		}
+	}
+}
+
+func TestScanRowsWithDbTag(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputDir := filepath.Join(tmpDir, "generated")
+
+	goModPath := filepath.Join(tmpDir, "go.mod")
+	goModContent := "module test\n"
+	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
+		t.Fatalf("Failed to create go.mod: %v", err)
+	}
+
+	if err := GenerateRaw(outputDir); err != nil {
+		t.Fatalf("GenerateRaw failed: %v", err)
+	}
+
+	rawFile := filepath.Join(outputDir, "raw", "raw.go")
+	content, err := os.ReadFile(rawFile)
+	if err != nil {
+		t.Fatalf("Failed to read raw.go: %v", err)
+	}
+
+	contentStr := string(content)
+
+	if !strings.Contains(contentStr, "func buildFieldMap(t reflect.Type) map[string]int") {
+		t.Error("raw.go should contain buildFieldMap function")
+	}
+
+	if !strings.Contains(contentStr, `field.Tag.Get("db")`) {
+		t.Error("buildFieldMap should read 'db' struct tags")
+	}
+
+	if !strings.Contains(contentStr, `tag != "-"`) {
+		t.Error("buildFieldMap should skip fields with db:\"-\" tag")
+	}
+
+	if !strings.Contains(contentStr, "fieldMap[tag] = i") {
+		t.Error("buildFieldMap should map column names to field indices")
+	}
+}
+
+func TestRowsAdapterHasColumns(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputDir := filepath.Join(tmpDir, "generated")
+
+	goModPath := filepath.Join(tmpDir, "go.mod")
+	goModContent := "module test\n"
+	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
+		t.Fatalf("Failed to create go.mod: %v", err)
+	}
+
+	if err := GenerateRaw(outputDir); err != nil {
+		t.Fatalf("GenerateRaw failed: %v", err)
+	}
+
+	rawFile := filepath.Join(outputDir, "raw", "raw.go")
+	content, err := os.ReadFile(rawFile)
+	if err != nil {
+		t.Fatalf("Failed to read raw.go: %v", err)
+	}
+
+	contentStr := string(content)
+
+	if !strings.Contains(contentStr, "func (r *rowsAdapter) Columns() ([]string, error)") {
+		t.Error("rowsAdapter should have Columns method for column name extraction")
+	}
 }

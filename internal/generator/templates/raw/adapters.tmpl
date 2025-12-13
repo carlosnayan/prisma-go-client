@@ -41,6 +41,13 @@ func (r *rowsAdapter) Scan(dest ...interface{}) error {
 	return fmt.Errorf("rows does not implement Scan")
 }
 
+func (r *rowsAdapter) Columns() ([]string, error) {
+	if cols, ok := r.rows.(interface{ Columns() ([]string, error) }); ok {
+		return cols.Columns()
+	}
+	return nil, fmt.Errorf("rows does not implement Columns")
+}
+
 type rowAdapter struct {
 	row interface{}
 }

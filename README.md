@@ -296,13 +296,19 @@ func main() {
     }
     log.Printf("Found %d users\n", len(usersDTO))
 
-    // Raw SQL example
-    rows, err := database.Client.Raw().Query(ctx, "SELECT * FROM users WHERE email LIKE $1", "%example%")
+    // Raw SQL example (Query requires slice, QueryRow requires struct/primitive)
+    type BookResult struct {
+        IdBook string `db:"id_book"`
+        Title  string `db:"title"`
+    }
+    var books []BookResult
+    err = database.Client.Raw().Query("SELECT id_book, title FROM books WHERE status = $1", "PUBLISHED").
+        Exec().
+        Scan(&books)
     if err != nil {
         log.Fatal(err)
     }
-    defer rows.Close()
-    // Process rows...
+    // Use books...
 }
 ```
 

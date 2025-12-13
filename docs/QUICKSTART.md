@@ -245,23 +245,21 @@ func main() {
 	}
 	log.Printf("Updated user successfully\n")
 
-	// Example 5: Raw SQL query
-	rows, err := client.Raw().Query(ctx,
-		"SELECT id, email, name FROM users WHERE email LIKE $1",
-		"%example%",
-	)
+	// Example 5: Raw SQL query with automatic scan
+	type BookResult struct {
+		IdBook string `db:"id_book"`
+		Title  string `db:"title"`
+	}
+	var books []BookResult
+	err = client.Raw().Query(
+		"SELECT id_book, title FROM books WHERE status = $1",
+		"PUBLISHED",
+	).Exec().Scan(&books)
 	if err != nil {
 		log.Fatalf("Failed to execute raw query: %v", err)
 	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var id int
-		var email, name string
-		if err := rows.Scan(&id, &email, &name); err != nil {
-			log.Fatalf("Failed to scan row: %v", err)
-		}
-		log.Printf("Raw query result: id=%d, email=%s, name=%s\n", id, email, name)
+	for _, b := range books {
+		log.Printf("Raw query result: id=%s, title=%s\n", b.IdBook, b.Title)
 	}
 }
 ```
@@ -425,31 +423,56 @@ err = query.Delete().
 
 ### Raw SQL
 
-For complex queries, use Raw SQL:
+For complex queries, use Raw SQL with the fluent API:
+
+> **Note:** Structs used with `Scan()` must have `db:"column_name"` tags. `Query()` requires a slice, `QueryRow()` requires a struct or primitive.
 
 ```go
-// Query with results
-rows, err := client.Raw().Query(ctx,
-    "SELECT * FROM users WHERE created_at > $1",
-    time.Now().AddDate(0, -1, 0),
-)
+// Define destination struct with db tags
+type BookWithAuthor struct {
+    IdBook    string `db:"id_book"`
+    Title     string `db:"title"`
+    FirstName string `db:"first_name"`
+    LastName  string `db:"last_name"`
+}
+
+// Query multiple rows (requires slice)
+var books []BookWithAuthor
+err := client.Raw().Query(`
+    SELECT b.id_book, b.title, a.first_name, a.last_name
+    FROM books b
+    INNER JOIN book_authors ba ON b.id_book = ba.id_book
+    INNER JOIN authors a ON ba.id_author = a.id_author
+    WHERE b.status = $1
+`, "PUBLISHED").Exec().Scan(&books)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Query single row (requires struct or primitive)
+var count int
+err = client.Raw().QueryRow("SELECT COUNT(*) FROM authors").
+    Exec().
+    Scan(&count)
+
+// Manual row iteration (if needed)
+rows, err := client.Raw().Query("SELECT id_author, first_name, last_name FROM authors").
+    Exec().
+    Rows()
+if err != nil {
+    log.Fatal(err)
+}
 defer rows.Close()
 
 for rows.Next() {
-    // Scan results
+    var id, firstName, lastName string
+    rows.Scan(&id, &firstName, &lastName)
 }
 
-// Query single row
-row := client.Raw().QueryRow(ctx,
-    "SELECT COUNT(*) FROM users",
-)
-var count int
-row.Scan(&count)
-
 // Execute (INSERT, UPDATE, DELETE)
-result, err := client.Raw().Exec(ctx,
-    "UPDATE users SET name = $1 WHERE id = $2",
-    "New Name", userID,
+result, err := client.Raw().Exec(
+    "UPDATE books SET status = $1 WHERE id_book = $2",
+    "ARCHIVED", bookId,
 )
 rowsAffected := result.RowsAffected()
 ```

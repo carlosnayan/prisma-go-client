@@ -260,51 +260,94 @@ err = query.FindMany().
 
 ## Raw SQL Examples
 
-### Query with Results
+Raw SQL provides full flexibility when you need complex queries, JOINs, or database-specific features.
+
+> **Important:** Structs used with `Scan()` must have `db:"column_name"` tags. `Query()` requires a slice, `QueryRow()` requires a struct or primitive.
+
+### Query Multiple Rows (slice)
 
 ```go
-// Query multiple rows
-rows, err := client.Raw().Query(ctx,
-    "SELECT id, email, name FROM users WHERE created_at > $1",
-    time.Now().AddDate(0, -1, 0),
-)
+type BookWithAuthor struct {
+    IdBook    string `db:"id_book"`
+    Title     string `db:"title"`
+    FirstName string `db:"first_name"`
+    LastName  string `db:"last_name"`
+}
+
+var books []BookWithAuthor
+err := client.Raw().Query(`
+    SELECT b.id_book, b.title, a.first_name, a.last_name
+    FROM books b
+    INNER JOIN book_authors ba ON b.id_book = ba.id_book
+    INNER JOIN authors a ON ba.id_author = a.id_author
+    WHERE b.status = $1 AND b.deleted_at IS NULL
+    ORDER BY b.created_at DESC
+`, "PUBLISHED").Exec().Scan(&books)
+if err != nil {
+    log.Fatal(err)
+}
+
+for _, b := range books {
+    fmt.Printf("Book: %s by %s %s\n", b.Title, b.FirstName, b.LastName)
+}
+```
+
+### Query Single Row (struct or primitive)
+
+```go
+// With struct
+type BookStats struct {
+    TotalBooks     int `db:"total_books"`
+    PublishedBooks int `db:"published_books"`
+    AvgPageCount   int `db:"avg_page_count"`
+}
+
+var stats BookStats
+err := client.Raw().QueryRow(`
+    SELECT
+        COUNT(*) as total_books,
+        COUNT(*) FILTER (WHERE status = 'PUBLISHED') as published_books,
+        COALESCE(AVG(page_count), 0)::int as avg_page_count
+    FROM books
+    WHERE deleted_at IS NULL
+`).Exec().Scan(&stats)
+
+// With primitive
+var count int
+err = client.Raw().QueryRow("SELECT COUNT(*) FROM authors WHERE deleted_at IS NULL").
+    Exec().
+    Scan(&count)
+```
+
+### Manual Row Iteration
+
+When you need more control, use `.Rows()` for manual iteration:
+
+```go
+rows, err := client.Raw().Query(
+    "SELECT id_author, first_name, last_name FROM authors WHERE nationality = $1",
+    "Brazilian",
+).Exec().Rows()
 if err != nil {
     log.Fatal(err)
 }
 defer rows.Close()
 
 for rows.Next() {
-    var id int
-    var email, name string
-    if err := rows.Scan(&id, &email, &name); err != nil {
+    var id, firstName, lastName string
+    if err := rows.Scan(&id, &firstName, &lastName); err != nil {
         log.Fatal(err)
     }
-    fmt.Printf("User: %d - %s (%s)\n", id, name, email)
+    fmt.Printf("Author: %s %s\n", firstName, lastName)
 }
-```
-
-### Query Single Row
-
-```go
-// Query single row
-row := client.Raw().QueryRow(ctx,
-    "SELECT COUNT(*) FROM users WHERE email LIKE $1",
-    "%@example.com",
-)
-var count int
-if err := row.Scan(&count); err != nil {
-    log.Fatal(err)
-}
-fmt.Printf("Found %d users\n", count)
 ```
 
 ### Execute Commands
 
 ```go
-// Execute INSERT, UPDATE, DELETE
-result, err := client.Raw().Exec(ctx,
-    "UPDATE users SET name = $1 WHERE id = $2",
-    "Updated Name", userID,
+result, err := client.Raw().Exec(
+    "UPDATE books SET status = $1 WHERE id_book = $2",
+    "ARCHIVED", bookId,
 )
 if err != nil {
     log.Fatal(err)
@@ -312,26 +355,37 @@ if err != nil {
 fmt.Printf("Updated %d rows\n", result.RowsAffected())
 ```
 
-### Complex Raw Queries
+### Column Alias Handling
+
+The `Scan()` function automatically extracts column names from various SQL patterns:
+
+| SQL Column               | Use `db` Tag   |
+| ------------------------ | -------------- |
+| `id_book`                | `db:"id_book"` |
+| `b.title`                | `db:"title"`   |
+| `a.first_name as author` | `db:"author"`  |
+| `COUNT(*) as total`      | `db:"total"`   |
+
+**Example with table aliases and column aliases:**
 
 ```go
-// Join query
-rows, err := client.Raw().Query(ctx, `
-    SELECT u.id, u.email, COUNT(p.id) as post_count
-    FROM users u
-    LEFT JOIN posts p ON u.id = p.author_id
-    GROUP BY u.id, u.email
-    HAVING COUNT(p.id) > $1
-`, 5)
-defer rows.Close()
-
-for rows.Next() {
-    var userID int
-    var email string
-    var postCount int
-    rows.Scan(&userID, &email, &postCount)
-    fmt.Printf("User %s has %d posts\n", email, postCount)
+type BookWithGenre struct {
+    IdBook    string  `db:"id_book"`
+    Title     string  `db:"title"`
+    GenreName *string `db:"genre_name"`
 }
+
+var books []BookWithGenre
+err := client.Raw().Query(`
+    SELECT
+        b.id_book,
+        b.title,
+        g.name as genre_name
+    FROM books b
+    LEFT JOIN book_genres bg ON b.id_book = bg.id_book
+    LEFT JOIN genres g ON bg.id_genre = g.id_genre
+    WHERE b.status = $1 AND b.deleted_at IS NULL
+`, "PUBLISHED").Exec().Scan(&books)
 ```
 
 ## Transaction Examples
@@ -342,25 +396,24 @@ Use transactions to ensure multiple operations succeed or fail together:
 
 ```go
 err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
-    // Create user
-    user, err := tx.User.Create().
-        Data(inputs.UserCreateInput{
-            Email: "user@example.com",
-            Name:  db.String("John Doe"),
+    // Create author
+    author, err := tx.Authors.Create().
+        Data(inputs.AuthorsCreateInput{
+            FirstName: "John",
+            LastName:  "Doe",
         }).
         Exec(ctx)
     if err != nil {
         return err // Transaction rolled back automatically
     }
 
-    // Create related post
-    _, err = tx.Post.Create().
-        Data(inputs.PostCreateInput{
-            Title:    db.String("My First Post"),
-            AuthorId: db.String(user.ID),
+    // Create related book
+    _, err = tx.Books.Create().
+        Data(inputs.BooksCreateInput{
+            Title: "My First Book",
         }).
         Exec(ctx)
-    return err // If this fails, user creation is rolled back
+    return err // If this fails, author creation is rolled back
 })
 
 if err != nil {
@@ -372,35 +425,35 @@ if err != nil {
 
 ```go
 err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
-    // Create user
-    user, err := tx.User.Create().
-        Data(inputs.UserCreateInput{
-            Email: "user@example.com",
+    // Create author
+    author, err := tx.Authors.Create().
+        Data(inputs.AuthorsCreateInput{
+            FirstName: "John",
+            LastName:  "Doe",
         }).
         Exec(ctx)
     if err != nil {
         return err
     }
 
-    // Update user
-    err = tx.User.Update().
-        Where(inputs.UserWhereInput{
-            Id: db.String(user.ID),
+    // Update author
+    err = tx.Authors.Update().
+        Where(inputs.AuthorsWhereInput{
+            IdAuthor: db.String(author.IdAuthor),
         }).
-        Data(inputs.UserUpdateInput{
-            Name: db.String("Updated Name"),
+        Data(inputs.AuthorsUpdateInput{
+            Bio: db.String("Updated biography"),
         }).
         Exec(ctx)
     if err != nil {
         return err
     }
 
-    // Create multiple posts
-    for _, title := range []string{"Post 1", "Post 2", "Post 3"} {
-        _, err = tx.Post.Create().
-            Data(inputs.PostCreateInput{
-                Title:    db.String(title),
-                AuthorId: db.String(user.ID),
+    // Create multiple books
+    for _, title := range []string{"Book 1", "Book 2", "Book 3"} {
+        _, err = tx.Books.Create().
+            Data(inputs.BooksCreateInput{
+                Title: title,
             }).
             Exec(ctx)
         if err != nil {
@@ -419,10 +472,10 @@ You can mix fluent API and raw SQL within the same transaction:
 ```go
 err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
     // Use fluent API
-    user, err := tx.User.Create().
-        Data(inputs.UserCreateInput{
-            Email: "user@example.com",
-            Name:  db.String("John Doe"),
+    author, err := tx.Authors.Create().
+        Data(inputs.AuthorsCreateInput{
+            FirstName: "John",
+            LastName:  "Doe",
         }).
         Exec(ctx)
     if err != nil {
@@ -430,11 +483,11 @@ err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
     }
 
     // Use raw SQL within transaction
-    _, err = tx.Raw().Exec(ctx, `
-        UPDATE users
-        SET last_login = NOW()
-        WHERE id = $1
-    `, user.ID)
+    _, err = tx.Raw().Exec(`
+        UPDATE authors
+        SET updated_at = NOW()
+        WHERE id_author = $1
+    `, author.IdAuthor)
     return err
 })
 ```
@@ -445,23 +498,27 @@ If any operation fails, the entire transaction is rolled back:
 
 ```go
 err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
-    user, err := tx.User.Create().
-        Data(inputs.UserCreateInput{
-            Email: "user@example.com",
+    author, err := tx.Authors.Create().
+        Data(inputs.AuthorsCreateInput{
+            FirstName: "John",
+            LastName:  "Doe",
+            Email:     db.String("john@example.com"),
         }).
         Exec(ctx)
     if err != nil {
         return err // Transaction rolled back
     }
 
-    // This will fail if email already exists
-    _, err = tx.User.Create().
-        Data(inputs.UserCreateInput{
-            Email: "user@example.com", // Duplicate!
+    // This will fail if email already exists (unique constraint)
+    _, err = tx.Authors.Create().
+        Data(inputs.AuthorsCreateInput{
+            FirstName: "Jane",
+            LastName:  "Doe",
+            Email:     db.String("john@example.com"), // Duplicate!
         }).
         Exec(ctx)
     if err != nil {
-        return err // Transaction rolled back, first user creation undone
+        return err // Transaction rolled back, first author creation undone
     }
 
     return nil
@@ -549,33 +606,36 @@ func main() {
 
 	// === Raw SQL Examples ===
 
-	// Raw query
-	rows, err := client.Raw().Query(ctx,
-		"SELECT id, email FROM users WHERE email LIKE $1",
-		"%example%",
-	)
+	// Define struct with db tags for automatic scanning
+	type BookResult struct {
+		IdBook string `db:"id_book"`
+		Title  string `db:"title"`
+	}
+
+	// Raw query with automatic scan (requires slice)
+	var books []BookResult
+	err = client.Raw().Query(
+		"SELECT id_book, title FROM books WHERE status = $1",
+		"PUBLISHED",
+	).Exec().Scan(&books)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer rows.Close()
 
 	log.Println("Raw query results:")
-	for rows.Next() {
-		var id int
-		var email string
-		if err := rows.Scan(&id, &email); err != nil {
-			log.Fatal(err)
-		}
-		log.Printf("  ID: %d, Email: %s\n", id, email)
+	for _, b := range books {
+		log.Printf("  Book: %s - %s\n", b.IdBook, b.Title)
 	}
 
-	// Raw count
-	row := client.Raw().QueryRow(ctx, "SELECT COUNT(*) FROM users")
+	// Raw count with single row (requires primitive or struct)
 	var count int
-	if err := row.Scan(&count); err != nil {
+	err = client.Raw().QueryRow("SELECT COUNT(*) FROM authors").
+		Exec().
+		Scan(&count)
+	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Total users: %d\n", count)
+	log.Printf("Total authors: %d\n", count)
 }
 ```
 
