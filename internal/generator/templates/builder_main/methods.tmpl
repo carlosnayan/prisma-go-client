@@ -979,3 +979,37 @@ func (b *TableQueryBuilder) UpdateMany(ctx context.Context, where Where, data in
 
 }
 
+func (b *TableQueryBuilder) DeleteMany(ctx context.Context, where Where) (*BatchPayload, error) {
+
+	ctx, cancel := WithQueryTimeout(ctx)
+
+	defer cancel()
+
+	quotedTable := b.dialect.QuoteIdentifier(b.table)
+
+	var query string
+	var args []interface{}
+
+	if len(where) == 0 {
+		query = fmt.Sprintf("DELETE FROM %s", quotedTable)
+	} else {
+		argIndex := 1
+		whereClause, whereArgs := b.buildWhereFromMap(where, &argIndex)
+		args = whereArgs
+		query = fmt.Sprintf("DELETE FROM %s WHERE %s", quotedTable, whereClause)
+	}
+
+	result, err := b.db.Exec(ctx, query, args...)
+
+	if err != nil {
+
+		return nil, err
+
+	}
+
+	rowsAffected := result.RowsAffected()
+
+	return &BatchPayload{Count: int(rowsAffected)}, nil
+
+}
+

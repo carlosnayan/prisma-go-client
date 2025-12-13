@@ -250,8 +250,50 @@ err := client.Authors.Delete().
 	Where(inputs.AuthorsWhereInput{
 		Id: db.Int(1),
 	}).
-	Exec(ctx)
+	Exec()
 ```
+
+### DeleteMany
+
+Delete multiple records in a single operation. Unlike `Delete`, the `Where` clause is optional.
+
+```go
+// Delete records matching a condition
+query := client.Genres.WithContext(ctx)
+result, err := query.DeleteMany().
+	Where(inputs.GenresWhereInput{
+		Name: filters.Contains("Fiction"),
+	}).
+	Exec()
+fmt.Printf("Deleted %d genres\n", result.Count)
+```
+
+**Without Where - deletes ALL records from the table:**
+
+```go
+// Delete ALL records from the genres table
+result, err := client.Genres.DeleteMany().Exec()
+if err != nil {
+	log.Fatal(err)
+}
+fmt.Printf("Deleted %d records\n", result.Count)
+```
+
+**With ExecWithContext:**
+
+```go
+// Using explicit context
+result, err := client.Authors.DeleteMany().
+	Where(inputs.AuthorsWhereInput{
+		Nationality: filters.String("Unknown"),
+	}).
+	ExecWithContext(ctx)
+```
+
+| Method         | Where    | Returns                 |
+| -------------- | -------- | ----------------------- |
+| `Delete()`     | Required | `error`                 |
+| `DeleteMany()` | Optional | `*BatchPayload` (count) |
 
 ### Upsert
 

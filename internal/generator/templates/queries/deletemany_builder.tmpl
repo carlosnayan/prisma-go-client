@@ -1,0 +1,38 @@
+// DeleteMany returns a builder for deleting multiple {{.PascalName}} records (Prisma-style)
+// Where is optional - if not provided, deletes ALL records from the table
+// Example: result, err := q.DeleteMany().Where(inputs.{{.PascalName}}WhereInput{...}).Exec(ctx)
+func (q *{{.PascalName}}Query) DeleteMany() *{{.PascalName}}DeleteManyBuilder {
+	return &{{.PascalName}}DeleteManyBuilder{query: q}
+}
+
+type {{.PascalName}}DeleteManyBuilder struct {
+	query      *{{.PascalName}}Query
+	whereInput *inputs.{{.PascalName}}WhereInput
+}
+
+func (b *{{.PascalName}}DeleteManyBuilder) Where(where inputs.{{.PascalName}}WhereInput) *{{.PascalName}}DeleteManyBuilder {
+	b.whereInput = &where
+	return b
+}
+
+func (b *{{.PascalName}}DeleteManyBuilder) Exec() (*builder.BatchPayload, error) {
+	return b.ExecWithContext(b.query.Query.GetContext())
+}
+
+func (b *{{.PascalName}}DeleteManyBuilder) ExecWithContext(ctx context.Context) (*builder.BatchPayload, error) {
+	b.query.Query.Reset()
+
+	var whereMap map[string]interface{}
+	if b.whereInput != nil {
+		whereMap = Convert{{.PascalName}}WhereInputToWhere(*b.whereInput)
+	}
+
+	columns := []string{ {{- range $i, $col := .Columns}}{{if $i}}, {{end}}{{printf "%q" $col}}{{end}} }
+	tableBuilder := builder.NewTableQueryBuilder(b.query.Query.GetDB(), {{printf "%q" .TableName}}, columns)
+{{if .PrimaryKey}}	tableBuilder.SetPrimaryKey({{printf "%q" .PrimaryKey}})
+{{end}}	tableBuilder.SetDialect(b.query.Query.GetDialect())
+	tableBuilder.SetModelType(reflect.TypeOf(models.{{.PascalName}}{}))
+
+	return tableBuilder.DeleteMany(ctx, whereMap)
+}
+
