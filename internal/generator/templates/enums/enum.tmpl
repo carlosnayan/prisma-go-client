@@ -1,0 +1,8 @@
+// {{.PascalName}} represents the enum {{.EnumName}}
+type {{.PascalName}} string
+
+const (
+{{- range .Values}}
+	{{.ConstName}} {{$.PascalName}} = "{{.Value}}"
+{{- end}}
+)

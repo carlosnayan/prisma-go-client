@@ -174,7 +174,7 @@ func runGenerateOnce(schemaPath string) error {
 	}
 
 	// Cleanup existing directories to ensure fresh generation
-	dirsToClean := []string{"inputs", "models", "queries", "filters"}
+	dirsToClean := []string{"inputs", "models", "queries", "filters", "enums"}
 	for _, dirName := range dirsToClean {
 		dirPath := filepath.Join(absoluteOutputDir, dirName)
 		if _, err := os.Stat(dirPath); err == nil {
@@ -182,6 +182,10 @@ func runGenerateOnce(schemaPath string) error {
 				return fmt.Errorf("error cleaning %s directory: %w", dirName, err)
 			}
 		}
+	}
+
+	if err := generator.GenerateEnums(schema, absoluteOutputDir); err != nil {
+		return fmt.Errorf("error generating enums: %w", err)
 	}
 
 	if err := generator.GenerateModels(schema, absoluteOutputDir); err != nil {

@@ -162,6 +162,17 @@ type InputHelpersTemplateData struct {
 	NeedsJson     bool
 }
 
+type EnumTemplateData struct {
+	EnumName   string
+	PascalName string
+	Values     []EnumValueInfo
+}
+
+type EnumValueInfo struct {
+	ConstName string
+	Value     string
+}
+
 type UniqueConstraintInfo struct {
 	Fields      []UniqueFieldData
 	StructName  string
@@ -465,4 +476,20 @@ func executeInputTemplates(filePath string, templateNames []string, data InputTe
 	}
 
 	return nil
+}
+
+func executeEnumTemplate(filePath, templateDir, templateName string, data EnumTemplateData) error {
+	file, err := createGeneratedFile(filePath, "enums")
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	_, templatesDir, err := getTemplatesDir(templateDir)
+	if err != nil {
+		return fmt.Errorf("failed to get templates directory for %s: %w", templateDir, err)
+	}
+
+	tmplPath := filepath.Join(templatesDir, templateName)
+	return executeTemplate(file, tmplPath, data)
 }
