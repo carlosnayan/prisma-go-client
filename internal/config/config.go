@@ -5,9 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/BurntSushi/toml"
-	"github.com/joho/godotenv"
 )
 
 // Config representa a configuração completa do Prisma (equivalente ao prisma.config.ts v7)
@@ -118,15 +115,13 @@ func Load(configPath string) (*Config, error) {
 
 				parent := filepath.Dir(dir)
 				if parent == dir {
-					// Não encontrou .env ou env, tenta carregar do diretório atual
-					_ = godotenv.Load()
+					_ = loadDotEnv(".env")
 					break
 				}
 				dir = parent
 			}
 		} else {
-			// Fallback: tentar carregar .env do diretório atual
-			_ = godotenv.Load()
+			_ = loadDotEnv(".env")
 		}
 	}
 
@@ -159,7 +154,7 @@ func Load(configPath string) (*Config, error) {
 	}
 
 	var config Config
-	if _, err := toml.Decode(string(data), &config); err != nil {
+	if err := decodeTOML(string(data), &config); err != nil {
 		return nil, fmt.Errorf("erro ao parsear prisma.conf: %w", err)
 	}
 
@@ -327,46 +322,7 @@ Para resolver:
 // loadEnvFile carrega um arquivo .env ou env e remove aspas dos valores
 // Suporta formato: KEY='value' ou KEY="value" ou KEY=value
 func loadEnvFile(envPath string) error {
-	// Carregar usando godotenv
-	if err := godotenv.Load(envPath); err != nil {
-		return err
-	}
-
-	// Ler o arquivo para processar e remover aspas
-	content, err := os.ReadFile(envPath)
-	if err != nil {
-		return err
-	}
-
-	lines := strings.Split(string(content), "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		// Procurar por =
-		idx := strings.Index(line, "=")
-		if idx == -1 {
-			continue
-		}
-
-		key := strings.TrimSpace(line[:idx])
-		value := strings.TrimSpace(line[idx+1:])
-
-		// Remover aspas simples ou duplas do início e fim
-		if len(value) >= 2 {
-			if (value[0] == '\'' && value[len(value)-1] == '\'') ||
-				(value[0] == '"' && value[len(value)-1] == '"') {
-				value = value[1 : len(value)-1]
-			}
-		}
-
-		// Atualizar variável de ambiente
-		os.Setenv(key, value)
-	}
-
-	return nil
+	return loadDotEnv(envPath)
 }
 
 // GetSchemaPath retorna o caminho do schema.prisma

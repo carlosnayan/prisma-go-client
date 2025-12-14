@@ -1,4 +1,5 @@
 import (
+	"bufio"
 	"context"
 	"database/sql"
 	"fmt"
@@ -7,7 +8,6 @@ import (
 	"strings"
 
 	{{printf "%q" .BuilderPath}}
-	"github.com/BurntSushi/toml"
 {{- if eq .Provider "postgresql"}}
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"

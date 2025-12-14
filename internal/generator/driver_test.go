@@ -339,7 +339,9 @@ func TestSetupClient_GetDatabaseURLFromConfig(t *testing.T) {
 	}
 
 	// Verify it handles env() format
-	if !strings.Contains(contentStr, "env(\"") || !strings.Contains(contentStr, "env('") {
+	hasEnvDouble := strings.Contains(contentStr, `env(\"`)
+	hasEnvSingle := strings.Contains(contentStr, `env('`)
+	if !hasEnvDouble || !hasEnvSingle {
 		t.Error("getDatabaseURLFromConfig should handle env() format")
 	}
 

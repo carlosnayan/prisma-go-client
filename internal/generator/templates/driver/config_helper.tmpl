@@ -1,40 +1,23 @@
-// getDatabaseURLFromConfig reads DATABASE_URL from prisma.conf
 func getDatabaseURLFromConfig() (string, error) {
-	// Look for prisma.conf in project root
 	wd, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
 
-	// Search up directories for prisma.conf
 	dir := wd
 	for {
 		configPath := filepath.Join(dir, "prisma.conf")
 		if _, err := os.Stat(configPath); err == nil {
-			// Read and parse prisma.conf
 			data, err := os.ReadFile(configPath)
 			if err != nil {
 				return "", err
 			}
 
-			// Parse TOML config
-			type Config struct {
-				Datasource struct {
-					URL string `toml:"url"`
-				} `toml:"datasource"`
-			}
-			var cfg Config
-			if _, err := toml.Decode(string(data), &cfg); err != nil {
-				return "", err
-			}
-
-			// Expand environment variables in URL (support env("DATABASE_URL") or ${DATABASE_URL})
-			url := cfg.Datasource.URL
+			url := parseDatasourceURL(string(data))
 			if url == "" {
 				return "", nil
 			}
 
-			// Handle env("VAR") or env('VAR') format
 			if strings.HasPrefix(url, "env(\"") {
 				end := strings.Index(url, "\")")
 				if end > 5 {
@@ -55,7 +38,6 @@ func getDatabaseURLFromConfig() (string, error) {
 				}
 			}
 
-			// Handle ${VAR} format
 			if strings.Contains(url, "${") {
 				url = os.ExpandEnv(url)
 			}
@@ -65,10 +47,42 @@ func getDatabaseURLFromConfig() (string, error) {
 
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			// Reached root, not found
 			return "", nil
 		}
 		dir = parent
 	}
+}
+
+func parseDatasourceURL(data string) string {
+	inDatasource := false
+	scanner := bufio.NewScanner(strings.NewReader(data))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if line == "[datasource]" {
+			inDatasource = true
+			continue
+		}
+		if strings.HasPrefix(line, "[") {
+			inDatasource = false
+			continue
+		}
+		if inDatasource && strings.HasPrefix(line, "url") {
+			idx := strings.Index(line, "=")
+			if idx == -1 {
+				continue
+			}
+			value := strings.TrimSpace(line[idx+1:])
+			if len(value) >= 2 {
+				if (value[0] == '"' && value[len(value)-1] == '"') || (value[0] == '\'' && value[len(value)-1] == '\'') {
+					value = value[1 : len(value)-1]
+				}
+			}
+			return value
+		}
+	}
+	return ""
 }
 

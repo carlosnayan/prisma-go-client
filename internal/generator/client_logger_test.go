@@ -69,28 +69,23 @@ func TestGenerateLoggerConfigHelper_ReadsDebugSection(t *testing.T) {
 		t.Error("Generated client should contain configureLoggerFromConfig function")
 	}
 
-	// Verify it reads prisma.conf
 	if !strings.Contains(contentStr, "prisma.conf") {
 		t.Error("configureLoggerFromConfig should search for prisma.conf")
 	}
 
-	// Verify it parses [debug] section
-	if !strings.Contains(contentStr, `toml:"debug,omitempty"`) {
-		t.Error("configureLoggerFromConfig should parse [debug] section from TOML")
+	if !strings.Contains(contentStr, "parseLogLevels") {
+		t.Error("configureLoggerFromConfig should use parseLogLevels function")
 	}
 
-	// Verify it reads log array from debug section
-	if !strings.Contains(contentStr, `Log []string `+"`toml:\"log,omitempty\"`") {
-		t.Error("configureLoggerFromConfig should read log array from debug section")
+	if !strings.Contains(contentStr, "loadDotEnvFile") {
+		t.Error("configureLoggerFromConfig should use loadDotEnvFile function")
 	}
 
-	// Verify it calls SetLogLevels
-	if !strings.Contains(contentStr, "builder.SetLogLevels(cfg.Debug.Log)") {
-		t.Error("configureLoggerFromConfig should call builder.SetLogLevels with cfg.Debug.Log")
+	if !strings.Contains(contentStr, "builder.SetLogLevels") {
+		t.Error("configureLoggerFromConfig should call builder.SetLogLevels")
 	}
 
-	// Verify it checks if log levels are specified
-	if !strings.Contains(contentStr, "if len(cfg.Debug.Log) > 0") {
+	if !strings.Contains(contentStr, "if len(logLevels) > 0") {
 		t.Error("configureLoggerFromConfig should check if log levels are specified")
 	}
 }

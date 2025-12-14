@@ -211,14 +211,12 @@ func determineClientImports(schema *parser.Schema, userModule, outputDir string)
 	imports[modelsPath] = true
 	imports[queriesPath] = true
 	imports[rawPath] = true
-	// Add imports for logger configuration
 	imports["os"] = true
 	imports["path/filepath"] = true
 	imports["sync"] = true
-	imports["github.com/BurntSushi/toml"] = true
-	imports["github.com/joho/godotenv"] = true
+	imports["bufio"] = true
+	imports["strings"] = true
 
-	// Add driver import based on provider (blank import)
 	provider := migrations.GetProviderFromSchema(schema)
 	switch provider {
 	case "postgresql":
@@ -236,13 +234,18 @@ func determineClientImports(schema *parser.Schema, userModule, outputDir string)
 	if imports["reflect"] {
 		result = append(result, "reflect")
 	}
+	if imports["bufio"] {
+		result = append(result, "bufio")
+	}
+	if imports["strings"] {
+		result = append(result, "strings")
+	}
 	if imports[builderPath] {
 		result = append(result, builderPath)
 	}
 	if imports[modelsPath] {
 		result = append(result, modelsPath)
 	}
-	// Add logger config imports
 	if imports["os"] {
 		result = append(result, "os")
 	}
@@ -251,12 +254,6 @@ func determineClientImports(schema *parser.Schema, userModule, outputDir string)
 	}
 	if imports["sync"] {
 		result = append(result, "sync")
-	}
-	if imports["github.com/BurntSushi/toml"] {
-		result = append(result, "github.com/BurntSushi/toml")
-	}
-	if imports["github.com/joho/godotenv"] {
-		result = append(result, "github.com/joho/godotenv")
 	}
 	if imports[queriesPath] {
 		result = append(result, queriesPath)

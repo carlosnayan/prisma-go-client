@@ -7,14 +7,12 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
 	"github.com/carlosnayan/prisma-go-client/cli"
 	"github.com/carlosnayan/prisma-go-client/internal/generator"
 	"github.com/carlosnayan/prisma-go-client/internal/parser"
-	"github.com/fsnotify/fsnotify"
 )
 
 const version = "0.2.2"
@@ -306,91 +304,37 @@ func runGenerateWatch(schemaPath string) error {
 	fmt.Printf("Watching... %s\n", schemaDir)
 	fmt.Println()
 
-	// Initial generation
 	if err := runGenerateOnce(schemaPath); err != nil {
 		fmt.Printf("Error in initial generation: %v\n", err)
 	}
 
-	// Create watcher
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		return fmt.Errorf("error creating file watcher: %w", err)
-	}
-	defer watcher.Close()
-
-	// Watch schema directory
-	if err := watcher.Add(schemaDir); err != nil {
-		return fmt.Errorf("error watching directory: %w", err)
-	}
-
-	// Watch schema file specifically
-	if err := watcher.Add(schemaPath); err != nil {
-		return fmt.Errorf("error watching schema file: %w", err)
-	}
-
-	// Setup signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-	// Debounce mechanism
-	var mu sync.Mutex
-	var lastEventTime time.Time
-	debounceDelay := 300 * time.Millisecond
+	lastModTime := getFileModTime(schemaPath)
+	pollInterval := 500 * time.Millisecond
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
 
-	// Channel for debounced events
-	debouncedEvents := make(chan struct{}, 1)
-
-	// Debounce goroutine
-	go func() {
-		for range time.Tick(100 * time.Millisecond) {
-			mu.Lock()
-			if !lastEventTime.IsZero() && time.Since(lastEventTime) > debounceDelay {
-				select {
-				case debouncedEvents <- struct{}{}:
-				default:
-				}
-				lastEventTime = time.Time{}
-			}
-			mu.Unlock()
-		}
-	}()
-
-	// Event processing loop
 	for {
 		select {
-		case event, ok := <-watcher.Events:
-			if !ok {
-				return nil
-			}
+		case <-ticker.C:
+			currentModTime := getFileModTime(schemaPath)
+			if currentModTime != lastModTime && !currentModTime.IsZero() {
+				lastModTime = currentModTime
 
-			// Only react to write events on .prisma files
-			if event.Op&fsnotify.Write == fsnotify.Write || event.Op&fsnotify.Create == fsnotify.Create {
-				if strings.HasSuffix(event.Name, ".prisma") {
-					mu.Lock()
-					lastEventTime = time.Now()
-					mu.Unlock()
+				relPath, _ := filepath.Rel(".", schemaPath)
+				fmt.Printf("Change detected in %s\n", relPath)
+				fmt.Println("Building...")
+				fmt.Println()
+
+				if err := runGenerateOnce(schemaPath); err != nil {
+					fmt.Printf("Error during generation: %v\n", err)
+					fmt.Println()
+				} else {
+					fmt.Printf("Watching... %s\n", schemaDir)
+					fmt.Println()
 				}
-			}
-
-		case err, ok := <-watcher.Errors:
-			if !ok {
-				return nil
-			}
-			fmt.Printf("Watcher error: %v\n", err)
-
-		case <-debouncedEvents:
-			// Schema changed, regenerate
-			relPath, _ := filepath.Rel(".", schemaPath)
-			fmt.Printf("Change detected in %s\n", relPath)
-			fmt.Println("Building...")
-			fmt.Println()
-
-			if err := runGenerateOnce(schemaPath); err != nil {
-				fmt.Printf("Error during generation: %v\n", err)
-				fmt.Println()
-			} else {
-				fmt.Printf("Watching... %s\n", schemaDir)
-				fmt.Println()
 			}
 
 		case <-sigChan:
@@ -398,4 +342,12 @@ func runGenerateWatch(schemaPath string) error {
 			return nil
 		}
 	}
+}
+
+func getFileModTime(path string) time.Time {
+	info, err := os.Stat(path)
+	if err != nil {
+		return time.Time{}
+	}
+	return info.ModTime()
 }

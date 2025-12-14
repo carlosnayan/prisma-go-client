@@ -625,7 +625,6 @@ func runMigrateReset(args []string) error {
 		return fmt.Errorf("error getting local migrations: %w", err)
 	}
 
-	// Apply all migrations
 	for _, migration := range local {
 		fmt.Printf("Applying migration `%s`\n", MigrationName(migration.Name))
 		if err := manager.ApplyMigration(migration); err != nil {
@@ -633,29 +632,8 @@ func runMigrateReset(args []string) error {
 		}
 	}
 
-	// Execute seed if configured (automatically when uncommented in prisma.conf)
-	if cfg.Migrations != nil && cfg.Migrations.Seed != "" {
-		fmt.Println()
-		fmt.Println("Running seed...")
-		if err := migrations.ExecuteSeed(cfg.Migrations.Seed); err != nil {
-			return fmt.Errorf("error running seed: %w", err)
-		}
-		fmt.Println(Success("Seed completed successfully"))
-	}
-
-	// Run generate automatically after reset
-	fmt.Println()
-	fmt.Println("Generating code...")
-	if err := runGenerate([]string{}); err != nil {
-		return fmt.Errorf("error generating code: %w", err)
-	}
-
-	// Show success message and migrations tree
-	fmt.Println()
-	fmt.Println(Success("Database reset successful"))
-	fmt.Println()
-
 	if len(local) > 0 {
+		fmt.Println()
 		fmt.Println("The following migration(s) have been applied:")
 		fmt.Println()
 		fmt.Println("migrations/")
@@ -665,6 +643,24 @@ func runMigrateReset(args []string) error {
 		}
 		fmt.Println()
 	}
+
+	if cfg.Migrations != nil && cfg.Migrations.Seed != "" {
+		fmt.Println("Running seed...")
+		if err := migrations.ExecuteSeed(cfg.Migrations.Seed); err != nil {
+			return fmt.Errorf("error running seed: %w", err)
+		}
+		fmt.Println(Success("Seed completed successfully"))
+	}
+
+	fmt.Println()
+	fmt.Println("Generating code...")
+	if err := runGenerate([]string{}); err != nil {
+		return fmt.Errorf("error generating code: %w", err)
+	}
+
+	fmt.Println()
+	fmt.Println(Success("Database reset successful"))
+	fmt.Println()
 
 	return nil
 }
