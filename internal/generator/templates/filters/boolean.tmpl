@@ -1,6 +1,18 @@
-// Boolean helper functions for BooleanFilter
 
-func Bool(value bool) *BooleanFilter {
+type BooleanFilters struct{}
+
+func (BooleanFilters) Equals(value bool) *BooleanFilter {
 	return &BooleanFilter{Equals: &value}
 }
 
+func (BooleanFilters) NotEquals(value bool) *BooleanFilter {
+	return &BooleanFilter{NotEquals: &value}
+}
+
+func (BooleanFilters) IsNull() *BooleanFilter {
+	return &BooleanFilter{IsNull: boolPtr(true)}
+}
+
+func (BooleanFilters) IsNotNull() *BooleanFilter {
+	return &BooleanFilter{IsNotNull: boolPtr(true)}
+}

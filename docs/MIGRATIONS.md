@@ -55,14 +55,15 @@ prisma migrate dev --name custom_migration
 Creates and applies a new migration in development:
 
 ```bash
+# With --name flag
 prisma migrate dev --name migration_name
+
+# Or provide name as positional argument
+prisma migrate dev migration_name
 ```
 
-Options:
-
-- `--name`: Migration name (required)
-- `--create-only`: Create migration without applying
-- `--skip-generate`: Skip code generation
+> [!NOTE]
+> If name is not provided as argument or flag, you will be prompted interactively.
 
 ### `prisma migrate deploy`
 
@@ -130,6 +131,57 @@ prisma migrate diff --from schema.prisma --to database
 
 # Compare database with schema
 prisma migrate diff --from database --to schema.prisma
+```
+
+### `prisma db push`
+
+Push schema changes directly to the database without creating migration files:
+
+```bash
+prisma db push
+```
+
+**Options:**
+
+- `--accept-data-loss` - Accept potential data loss from destructive operations (dropping columns/tables)
+- `--skip-generate` - Do not run code generation after push
+
+**Example:**
+
+```bash
+# Push changes that may cause data loss, skip generation
+prisma db push --accept-data-loss --skip-generate
+```
+
+> [!WARNING]
+> Use `db push` only in development. For production, always use migrations (`migrate deploy`).
+
+### `prisma db execute`
+
+Execute arbitrary SQL against your database:
+
+**Options:**
+
+- `--file` - Path to SQL file to execute
+- `--stdin` - Read SQL from standard input
+
+> [!WARNING]
+> Only one of `--file` or `--stdin` can be specified at a time.
+
+**Examples:**
+
+```bash
+# Execute SQL from file
+prisma db execute --file schema_changes.sql
+
+# Execute from stdin (pipe)
+echo "TRUNCATE TABLE logs;" | prisma db execute --stdin
+
+# Interactive mode (reads until Ctrl+D)
+prisma db execute --stdin
+DROP TABLE IF EXISTS old_table;
+CREATE INDEX idx_user_email ON users(email);
+^D
 ```
 
 ## Migration Files

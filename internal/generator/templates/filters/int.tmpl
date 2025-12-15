@@ -1,30 +1,42 @@
-// Int helper functions for IntFilter
 
-func Int(value int) *IntFilter {
+type IntFilters struct{}
+
+func (IntFilters) Equals(value int) *IntFilter {
 	return &IntFilter{Equals: &value}
 }
 
-func IntGt(value int) *IntFilter {
+func (IntFilters) NotEquals(value int) *IntFilter {
+	return &IntFilter{NotEquals: &value}
+}
+
+func (IntFilters) Gt(value int) *IntFilter {
 	return &IntFilter{Gt: &value}
 }
 
-func IntGte(value int) *IntFilter {
+func (IntFilters) Gte(value int) *IntFilter {
 	return &IntFilter{Gte: &value}
 }
 
-func IntLt(value int) *IntFilter {
+func (IntFilters) Lt(value int) *IntFilter {
 	return &IntFilter{Lt: &value}
 }
 
-func IntLte(value int) *IntFilter {
+func (IntFilters) Lte(value int) *IntFilter {
 	return &IntFilter{Lte: &value}
 }
 
-func IntIn(values ...int) *IntFilter {
+func (IntFilters) In(values ...int) *IntFilter {
 	return &IntFilter{In: values}
 }
 
-func IntNotIn(values ...int) *IntFilter {
+func (IntFilters) NotIn(values ...int) *IntFilter {
 	return &IntFilter{NotIn: values}
 }
 
+func (IntFilters) IsNull() *IntFilter {
+	return &IntFilter{IsNull: boolPtr(true)}
+}
+
+func (IntFilters) IsNotNull() *IntFilter {
+	return &IntFilter{IsNotNull: boolPtr(true)}
+}

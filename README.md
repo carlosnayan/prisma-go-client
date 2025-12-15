@@ -225,8 +225,8 @@ func main() {
     }
     log.Printf("Found %d users\n", len(users))
 
-    // Upsert: Create or Update based on unique field
-    // genres.name is @unique - creates if not exists, updates if exists
+    // Upsert: Create or Update based on Where condition
+    // Where accepts any column - automatically optimized when using unique indexes
     query := database.Client.Genres.WithContext(ctx)
     upsertedGenre, err := query.Upsert().
         Where(inputs.GenresWhereInput{
@@ -358,8 +358,8 @@ import "my-app/db/filters"
 
 users, err := query.FindMany().
     Where(inputs.AuthorsWhereInput{
-        Email: filters.Contains("@example.com"),
-        Name:  filters.StartsWith("John"),
+        Email: filters.Strings.Contains("@example.com"),
+        Name:  filters.Strings.StartsWith("John"),
     }).
     Exec()
 ```
@@ -460,6 +460,20 @@ func SetupPrismaClient() {
 - `prisma db pull` - Introspect database and generate schema.prisma
 - `prisma db seed` - Execute database seed scripts
 - `prisma db execute` - Execute arbitrary SQL
+
+### Global Flags
+
+All commands support the following global flags:
+
+- `--config, -c` - Path to configuration file (default: prisma.conf)
+- `--schema, -s` - Path to schema.prisma (default: prisma/schema.prisma)
+- `--verbose, -v` - Verbose mode (show detailed logs)
+
+**Example:**
+
+```bash
+prisma migrate dev --config custom.conf --schema custom/schema.prisma --verbose
+```
 
 ## 🗄️ Supported Databases
 

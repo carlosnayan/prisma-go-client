@@ -258,6 +258,109 @@ err = query.FindMany().
 	ExecTyped(&usersDTO) // Uses stored context
 ```
 
+## Advanced Query Examples
+
+### Using Advanced WHERE Operators
+
+#### Full-Text Search
+
+PostgreSQL and MySQL support full-text search:
+
+```go
+import (
+	"context"
+	"my-app/db"
+	"my-app/db/filters"
+	"my-app/db/inputs"
+)
+
+// Basic full-text search
+articles, err := client.Articles.FindMany().
+	Where(inputs.ArticlesWhereInput{
+		Content: filters.FullTextSearch("postgresql optimization"),
+	}).
+	Exec(ctx)
+
+// Language-specific search (PostgreSQL)
+articles, err = client.Articles.FindMany().
+	Where(inputs.ArticlesWhereInput{
+		Content: filters.FullTextSearchConfig(map[string]interface{}{
+			"query": "otimização & performance",
+			"config": "portuguese",
+		}),
+	}).
+	Exec(ctx)
+```
+
+#### JSON Array Operations
+
+Working with JSON array fields:
+
+```go
+// Find records where array contains specific value
+admins, err := client.Users.FindMany().
+	Where(inputs.UsersWhereInput{
+		Roles: filters.Has("admin"),
+	}).
+	Exec(ctx)
+
+// Array contains all specified values
+powerUsers, err := client.Users.FindMany().
+	Where(inputs.UsersWhereInput{
+		Roles: filters.HasEvery([]interface{}{"admin", "editor"}),
+	}).
+	Exec(ctx)
+
+// Array contains any of the values
+moderators, err := client.Users.FindMany().
+	Where(inputs.UsersWhereInput{
+		Roles: filters.HasSome([]interface{}{"admin", "moderator", "editor"}),
+	}).
+	Exec(ctx)
+
+// Empty array check
+unassigned, err := client.Users.FindMany().
+	Where(inputs.UsersWhereInput{
+		Roles: filters.IsEmpty(),
+	}).
+	Exec(ctx)
+```
+
+### Join and Group By
+
+Complex queries using joins and grouping:
+
+```go
+// Count books per author using Raw SQL
+type AuthorBookCount struct {
+	AuthorID   string `db:"author_id"`
+	AuthorName string `db:"author_name"`
+	BookCount  int    `db:"book_count"`
+}
+
+var results []AuthorBookCount
+err := client.Raw().Query(`
+	SELECT
+		a.id_author as author_id,
+		a.first_name || ' ' || a.last_name as author_name,
+		COUNT(ba.id_book) as book_count
+	FROM authors a
+	LEFT JOIN book_authors ba ON a.id_author = ba.id_author
+	GROUP BY a.id_author, a.first_name, a.last_name
+	HAVING COUNT(ba.id_book) > $1
+	ORDER BY book_count DESC
+`, 5).Exec().Scan(&results)
+
+if err != nil {
+	log.Fatal(err)
+}
+
+// Print results
+for _, result := range results {
+	fmt.Printf("%s: %d books\n", result.AuthorName, result.BookCount)
+}
+```
+
 ## Raw SQL Examples
 
 Raw SQL provides full flexibility when you need complex queries, JOINs, or database-specific features.

@@ -118,7 +118,7 @@ func updateUser(ctx context.Context, client *db.Client, userID int) error {
 
 ### Purpose
 
-Filter helpers provide a type-safe way to construct complex query filters. They are organized in a separate `filters` package.
+Filter helpers provide a type-safe way to construct complex query filters. They are organized in the `filters` package using namespaces for each data type.
 
 ### Usage
 
@@ -130,52 +130,69 @@ import (
 
 users, err := client.User.WithContext(ctx).FindMany().
     Where(inputs.UserWhereInput{
-        Email: filters.Contains("@example.com"),
-        Name:  filters.StartsWith("John"),
+        Email: filters.Strings.Contains("@example.com"),
+        Name:  filters.Strings.StartsWith("John"),
+        Age:   filters.Int.Gt(18),
     }).
     Exec()
 ```
 
 ### Available Filter Helpers
 
-#### String Filters
+#### String Filters (filters.Strings.\*)
 
 ```go
-filters.String("value")                    // Equals
-filters.Contains("substring")              // Contains substring
-filters.StartsWith("prefix")               // Starts with prefix
-filters.EndsWith("suffix")                 // Ends with suffix
-filters.ContainsInsensitive("substring")   // Case-insensitive contains
-filters.StartsWithInsensitive("prefix")    // Case-insensitive starts with
-filters.EndsWithInsensitive("suffix")      // Case-insensitive ends with
-filters.StringIn("val1", "val2", "val3")   // In list
-filters.StringNotIn("val1", "val2")        // Not in list
+filters.Strings.Equals("value")                     // Equals
+filters.Strings.NotEquals("value")                  // Not equals
+filters.Strings.Contains("substring")               // Contains substring
+filters.Strings.StartsWith("prefix")                // Starts with prefix
+filters.Strings.EndsWith("suffix")                  // Ends with suffix
+filters.Strings.ContainsInsensitive("substring")    // Case-insensitive contains
+filters.Strings.StartsWithInsensitive("prefix")     // Case-insensitive starts with
+filters.Strings.EndsWithInsensitive("suffix")       // Case-insensitive ends with
+filters.Strings.In("val1", "val2", "val3")          // In list
+filters.Strings.NotIn("val1", "val2")               // Not in list
+filters.Strings.IsNull()                            // Field is NULL
+filters.Strings.IsNotNull()                         // Field is NOT NULL
 ```
 
 #### Numeric Filters
 
-```go
-filters.Int(42)                 // Equals
-filters.IntGt(10)              // Greater than
-filters.IntGte(10)             // Greater than or equal
-filters.IntLt(100)             // Less than
-filters.IntLte(100)            // Less than or equal
-filters.IntIn(1, 2, 3)         // In list
-filters.IntNotIn(4, 5)         // Not in list
-
-// Similar helpers available for Int64 and Float
-filters.Int64(1000)
-filters.Float(3.14)
-```
-
-#### Boolean Filters
+**Integer (filters.Int.\*):**
 
 ```go
-filters.Bool(true)   // Equals true
-filters.Bool(false)  // Equals false
+filters.Int.Equals(42)          // Equals
+filters.Int.NotEquals(0)        // Not equals
+filters.Int.Gt(10)              // Greater than
+filters.Int.Gte(10)             // Greater than or equal
+filters.Int.Lt(100)             // Less than
+filters.Int.Lte(100)            // Less than or equal
+filters.Int.In(1, 2, 3)         // In list
+filters.Int.NotIn(4, 5)         // Not in list
+filters.Int.IsNull()            // Field is NULL
+filters.Int.IsNotNull()         // Field is NOT NULL
 ```
 
-#### DateTime Filters
+**Float (filters.Float.\*):**
+
+```go
+filters.Float.Equals(3.14)      // Equals
+filters.Float.Gt(0.0)           // Greater than
+filters.Float.Lte(100.5)        // Less than or equal
+// Same methods as Int
+```
+
+#### Boolean Filters (filters.Boolean.\*)
+
+```go
+filters.Boolean.Equals(true)      // Equals true
+filters.Boolean.Equals(false)     // Equals false
+filters.Boolean.NotEquals(false)  // Not equals
+filters.Boolean.IsNull()          // Field is NULL
+filters.Boolean.IsNotNull()       // Field is NOT NULL
+```
+
+#### DateTime Filters (filters.DateTime.\*)
 
 ```go
 import "time"
@@ -183,11 +200,14 @@ import "time"
 now := time.Now()
 yesterday := now.AddDate(0, 0, -1)
 
-filters.DateTime(now)               // Equals
-filters.DateTimeGt(yesterday)       // Greater than (after)
-filters.DateTimeGte(yesterday)      // Greater than or equal
-filters.DateTimeLt(now)             // Less than (before)
-filters.DateTimeLte(now)            // Less than or equal
+filters.DateTime.Equals(now)        // Equals
+filters.DateTime.NotEquals(now)     // Not equals
+filters.DateTime.Gt(yesterday)      // Greater than (after)
+filters.DateTime.Gte(yesterday)     // Greater than or equal
+filters.DateTime.Lt(now)            // Less than (before)
+filters.DateTime.Lte(now)           // Less than or equal
+filters.DateTime.IsNull()           // Field is NULL
+filters.DateTime.IsNotNull()        // Field is NOT NULL
 ```
 
 ### Complex Filter Examples
@@ -197,12 +217,12 @@ filters.DateTimeLte(now)            // Less than or equal
 ```go
 users, err := client.User.WithContext(ctx).FindMany().
     Where(inputs.UserWhereInput{
-        Email:    filters.Contains("@company.com"),
-        IsActive: filters.Bool(true),
-        Age:      filters.IntGte(18),
+        Email:    filters.Strings.Contains("@company.com"),
+        IsActive: filters.Boolean.Equals(true),
+        Age:      filters.Int.Gte(18),
         Or: []inputs.UserWhereInput{
-            {Name: filters.StartsWith("John")},
-            {Name: filters.StartsWith("Jane")},
+            {Name: filters.Strings.StartsWith("John")},
+            {Name: filters.Strings.StartsWith("Jane")},
         },
     }).
     Exec()
@@ -214,11 +234,11 @@ users, err := client.User.WithContext(ctx).FindMany().
 users, err := client.User.WithContext(ctx).FindMany().
     Where(inputs.UserWhereInput{
         And: []inputs.UserWhereInput{
-            {Email: filters.Contains("@example.com")},
-            {IsActive: filters.Bool(true)},
+            {Email: filters.Strings.Contains("@example.com")},
+            {IsActive: filters.Boolean.Equals(true)},
         },
         Not: &inputs.UserWhereInput{
-            Name: filters.Contains("test"),
+            Name: filters.Strings.Contains("test"),
         },
     }).
     Exec()

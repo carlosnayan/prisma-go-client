@@ -1,22 +1,34 @@
-// DateTime helper functions for DateTimeFilter
 
-func DateTime(value time.Time) *DateTimeFilter {
+type DateTimeFilters struct{}
+
+func (DateTimeFilters) Equals(value time.Time) *DateTimeFilter {
 	return &DateTimeFilter{Equals: &value}
 }
 
-func DateTimeGt(value time.Time) *DateTimeFilter {
+func (DateTimeFilters) NotEquals(value time.Time) *DateTimeFilter {
+	return &DateTimeFilter{NotEquals: &value}
+}
+
+func (DateTimeFilters) Gt(value time.Time) *DateTimeFilter {
 	return &DateTimeFilter{Gt: &value}
 }
 
-func DateTimeGte(value time.Time) *DateTimeFilter {
+func (DateTimeFilters) Gte(value time.Time) *DateTimeFilter {
 	return &DateTimeFilter{Gte: &value}
 }
 
-func DateTimeLt(value time.Time) *DateTimeFilter {
+func (DateTimeFilters) Lt(value time.Time) *DateTimeFilter {
 	return &DateTimeFilter{Lt: &value}
 }
 
-func DateTimeLte(value time.Time) *DateTimeFilter {
+func (DateTimeFilters) Lte(value time.Time) *DateTimeFilter {
 	return &DateTimeFilter{Lte: &value}
 }
 
+func (DateTimeFilters) IsNull() *DateTimeFilter {
+	return &DateTimeFilter{IsNull: boolPtr(true)}
+}
+
+func (DateTimeFilters) IsNotNull() *DateTimeFilter {
+	return &DateTimeFilter{IsNotNull: boolPtr(true)}
+}

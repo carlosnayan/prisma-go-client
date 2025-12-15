@@ -262,7 +262,7 @@ Delete multiple records in a single operation. Unlike `Delete`, the `Where` clau
 query := client.Genres.WithContext(ctx)
 result, err := query.DeleteMany().
 	Where(inputs.GenresWhereInput{
-		Name: filters.Contains("Fiction"),
+		Name: filters.Strings.Contains("Fiction"),
 	}).
 	Exec()
 fmt.Printf("Deleted %d genres\n", result.Count)
@@ -285,7 +285,7 @@ fmt.Printf("Deleted %d records\n", result.Count)
 // Using explicit context
 result, err := client.Authors.DeleteMany().
 	Where(inputs.AuthorsWhereInput{
-		Nationality: filters.String("Unknown"),
+		Nationality: filters.Strings.Equals("Unknown"),
 	}).
 	ExecWithContext(ctx)
 ```
@@ -303,7 +303,7 @@ Upsert combines create and update into a single operation: if a matching record 
 // Create or update a genre based on unique name
 genre, err := client.Genres.Upsert().
 	Where(inputs.GenresWhereInput{
-		Name: filters.String("Science Fiction"),
+		Name: filters.Strings.Equals("Science Fiction"),
 	}).
 	Create(inputs.GenresCreateInput{
 		Name:        "Science Fiction",
@@ -317,7 +317,7 @@ genre, err := client.Genres.Upsert().
 
 #### How Upsert Works
 
-1. **Where** - Condition to find existing record
+1. **Where** - Condition to find existing record (accepts **any column**, not just unique fields)
 2. **Create** - Data for new record if not found
 3. **Update** - Data to apply if record exists
 
@@ -326,15 +326,18 @@ genre, err := client.Genres.Upsert().
 | Record **does not exist** | Creates with `Create` data |
 | Record **exists**         | Updates with `Update` data |
 
-#### Upsert with Unique Field
+> [!NOTE]
+> The `Where` clause accepts **any column**, not just `@unique` fields. When you use a unique index in the Where clause, the query is automatically optimized for better performance.
 
-For models with `@unique` fields, use the unique field in Where:
+#### Upsert with Unique Field (Recommended)
+
+For optimal performance with models that have `@unique` fields, use the unique field in Where:
 
 ```go
-// books.isbn is @unique
+// books.isbn is @unique - automatically optimized
 book, err := client.Books.Upsert().
 	Where(inputs.BooksWhereInput{
-		Isbn: filters.String("978-0-13-468599-1"),
+		Isbn: filters.Strings.Equals("978-0-13-468599-1"),
 	}).
 	Create(inputs.BooksCreateInput{
 		Title: "The Pragmatic Programmer",
@@ -403,8 +406,8 @@ model chapters {
 // ✅ Correct: All unique constraint fields
 client.Chapters.Upsert().
 	Where(inputs.ChaptersWhereInput{
-		IdBook:        filters.String(bookId),
-		ChapterNumber: filters.Int(1),
+		IdBook:        filters.Strings.Equals(bookId),
+		ChapterNumber: filters.Int.Equals(1),
 	})
 
 // ⚠️ Incomplete: Missing ChapterNumber
@@ -711,6 +714,156 @@ err = query.FindMany().
 
 **Note:** Use `ExecTyped[*YourType]()` for single results and `ExecTyped[[]YourType]()` for multiple results.
 
+### Advanced Query Operators
+
+#### Join Operations
+
+The query builder supports various types of SQL joins for complex queries:
+
+```go
+// Inner join
+authors, err := client.Authors.
+	InnerJoin("books", "books.author_id = authors.id").
+	Where("books.status = ?", "PUBLISHED").
+	Find(ctx, &authors)
+
+// Left join
+authors, err := client.Authors.
+	LeftJoin("books", "books.author_id = authors.id").
+	Find(ctx, &authors)
+
+// Right join
+authors, err := client.Authors.
+	RightJoin("books", "books.author_id = authors.id").
+	Find(ctx, &authors)
+```
+
+#### Group By and Having
+
+Group results and apply conditions to grouped data:
+
+```go
+// Group by with having clause
+results, err := client.Books.
+	Select("author_id", "COUNT(*) as count").
+	Group("author_id").
+	Having("COUNT(*) > ?", 5).
+	Find(ctx, &results)
+```
+
+#### Full-Text Search (PostgreSQL/MySQL)
+
+> [!NOTE]
+> Full-text search is available for PostgreSQL and MySQL databases with appropriate text search indexes.
+
+```go
+import (
+	"my-app/db"
+	"my-app/db/filters"
+	"my-app/db/inputs"
+)
+
+// Basic full-text search
+posts, err := client.Posts.FindMany().
+	Where(inputs.PostsWhereInput{
+		Content: filters.FullTextSearch("golang prisma"),
+	}).
+	Exec(ctx)
+
+// With custom configuration (PostgreSQL)
+posts, err := client.Posts.FindMany().
+	Where(inputs.PostsWhereInput{
+		Content: filters.FullTextSearchConfig(map[string]interface{}{
+			"query": "golang & prisma",
+			"config": "english", // or "portuguese", "spanish", etc.
+		}),
+	}).
+	Exec(ctx)
+```
+
+#### JSON Array Operators
+
+For fields with JSON array type, use these specialized operators:
+
+```go
+// Has - check if array contains a specific value
+users, err := client.Users.FindMany().
+	Where(inputs.UsersWhereInput{
+		Tags: filters.Has("admin"),
+	}).
+	Exec(ctx)
+
+// HasEvery - array contains all specified values
+users, err := client.Users.FindMany().
+	Where(inputs.UsersWhereInput{
+		Tags: filters.HasEvery([]interface{}{"admin", "editor"}),
+	}).
+	Exec(ctx)
+
+// HasSome - array contains any of the specified values
+users, err := client.Users.FindMany().
+	Where(inputs.UsersWhereInput{
+		Tags: filters.HasSome([]interface{}{"admin", "editor", "viewer"}),
+	}).
+	Exec(ctx)
+
+// IsEmpty - array is empty
+users, err := client.Users.FindMany().
+	Where(inputs.UsersWhereInput{
+		Tags: filters.IsEmpty(),
+	}).
+	Exec(ctx)
+```
+
+#### Null Check Operators
+
+Check for NULL values in database fields:
+
+```go
+import (
+	"my-app/db/filters"
+	"my-app/db/inputs"
+)
+
+// IS NULL - check if string field is null
+users, err := client.Users.FindMany().
+	Where(inputs.UsersWhereInput{
+		Bio: filters.Strings.IsNull(),
+	}).
+	Exec(ctx)
+
+// IS NOT NULL - check if string field is not null
+users, err := client.Users.FindMany().
+	Where(inputs.UsersWhereInput{
+		Bio: filters.Strings.IsNotNull(),
+	}).
+	Exec(ctx)
+
+// For DateTime fields
+users, err := client.Users.FindMany().
+	Where(inputs.UsersWhereInput{
+		DeletedAt: filters.DateTime.IsNull(),
+	}).
+	Exec(ctx)
+```
+
+#### Case-Insensitive Operations
+
+Perform case-insensitive string operations (uses PostgreSQL's ILIKE):
+
+```go
+// Case-insensitive contains (matches "John", "JOHN", "john", etc.)
+users, err := client.Users.FindMany().
+	Where(inputs.UsersWhereInput{
+		Name: filters.Strings.ContainsInsensitive("john"),
+	}).
+	Exec(ctx)
+
+// Other case-insensitive operators
+filters.Strings.StartsWithInsensitive("prefix")
+filters.Strings.EndsWithInsensitive("suffix")
+```
+
 ### Including Relations
 
 ```go
@@ -733,55 +886,40 @@ posts, err := client.Books.FindMany().
 
 ### Count
 
-```go
-// Count all
-count, err := client.Authors.Count().Exec()
-
-// Count with where
-count, err := client.Authors.Count(
-	inputs.AuthorsWhereInput{
-		Email: db.StringContains("@example.com"),
-	},
-).Exec()
-```
-
-### Sum
+Count is the only aggregation currently implemented:
 
 ```go
-// Sum numeric field
-total, err := client.Books.Sum("views").Exec()
+// Count all records
+count, err := client.Authors.Count(ctx)
+
+// Count with where condition
+count, err := client.Authors.Count(ctx, Where{"email": Contains("@example.com")})
 ```
 
-### Average
-
-```go
-// Average numeric field
-avg, err := client.Books.Avg("views").Exec()
-```
-
-### Min/Max
-
-```go
-// Minimum value
-min, err := client.Books.Min("views").Exec()
-
-// Maximum value
-max, err := client.Books.Max("views").Exec()
-```
-
-### Group By
-
-```go
-// Group by field
-results, err := client.Books.GroupBy(
-	[]string{"authorId"},
-	db.PostGroupByInput{
-		Count: true,
-		Sum:   []string{"views"},
-		Avg:   []string{"views"},
-	},
-).Exec()
-```
+> [!NOTE]
+> Additional aggregation functions (Sum, Avg, Min, Max, GroupBy with aggregations) are planned but not yet implemented. For complex aggregations, use Raw SQL queries:
+>
+> ```go
+> type AggResult struct {
+>     Total int     `db:"total"`
+>     AvgPrice float64 `db:"avg_price"`
+>     MaxViews int     `db:"max_views"`
+> }
+> var result AggResult
+> err := client.Raw().QueryRow(`
+>     SELECT
+>         COUNT(*) as total,
+>         AVG(price) as avg_price,
+>         MAX(views) as max_views
+>     FROM books
+>     WHERE deleted_at IS NULL
+> `).Exec().Scan(&result)
+> if err != nil {
+>     log.Fatal(err)
+> }
+> fmt.Printf("Total: %d, Avg Price: %.2f, Max Views: %d\n",
+>     result.Total, result.AvgPrice, result.MaxViews)
+> ```
 
 ## Transactions
 

@@ -1,37 +1,50 @@
 
-func Contains(value string) *StringFilter {
-	return &StringFilter{Contains: &value}
-}
+type StringFilters struct{}
 
-func StartsWith(value string) *StringFilter {
-	return &StringFilter{StartsWith: &value}
-}
-
-func EndsWith(value string) *StringFilter {
-	return &StringFilter{EndsWith: &value}
-}
-
-func ContainsInsensitive(value string) *StringFilter {
-	return &StringFilter{ContainsInsensitive: &value}
-}
-
-func StartsWithInsensitive(value string) *StringFilter {
-	return &StringFilter{StartsWithInsensitive: &value}
-}
-
-func EndsWithInsensitive(value string) *StringFilter {
-	return &StringFilter{EndsWithInsensitive: &value}
-}
-
-func String(value string) *StringFilter {
+func (StringFilters) Equals(value string) *StringFilter {
 	return &StringFilter{Equals: &value}
 }
 
-func StringIn(values ...string) *StringFilter {
+func (StringFilters) NotEquals(value string) *StringFilter {
+	return &StringFilter{NotEquals: &value}
+}
+
+func (StringFilters) Contains(value string) *StringFilter {
+	return &StringFilter{Contains: &value}
+}
+
+func (StringFilters) StartsWith(value string) *StringFilter {
+	return &StringFilter{StartsWith: &value}
+}
+
+func (StringFilters) EndsWith(value string) *StringFilter {
+	return &StringFilter{EndsWith: &value}
+}
+
+func (StringFilters) ContainsInsensitive(value string) *StringFilter {
+	return &StringFilter{ContainsInsensitive: &value}
+}
+
+func (StringFilters) StartsWithInsensitive(value string) *StringFilter {
+	return &StringFilter{StartsWithInsensitive: &value}
+}
+
+func (StringFilters) EndsWithInsensitive(value string) *StringFilter {
+	return &StringFilter{EndsWithInsensitive: &value}
+}
+
+func (StringFilters) In(values ...string) *StringFilter {
 	return &StringFilter{In: values}
 }
 
-func StringNotIn(values ...string) *StringFilter {
+func (StringFilters) NotIn(values ...string) *StringFilter {
 	return &StringFilter{NotIn: values}
 }
 
+func (StringFilters) IsNull() *StringFilter {
+	return &StringFilter{IsNull: boolPtr(true)}
+}
+
+func (StringFilters) IsNotNull() *StringFilter {
+	return &StringFilter{IsNotNull: boolPtr(true)}
+}

@@ -127,6 +127,8 @@ func generateFiltersHelpersFile(filtersDir string, schema *parser.Schema) error 
 		templateNames = append(templateNames, "bytes.tmpl")
 	}
 
+	templateNames = append(templateNames, "globals.tmpl")
+
 	return executeFiltersHelpersTemplates(helpersFile, templateNames, data)
 }
 
