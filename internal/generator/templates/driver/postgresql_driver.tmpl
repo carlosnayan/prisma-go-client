@@ -115,14 +115,37 @@ func (r *PgxRows) Scan(dest ...interface{}) error {
 	return r.rows.Scan(dest...)
 }
 
+// Columns returns the column names from the query result
+func (r *PgxRows) Columns() ([]string, error) {
+	fds := r.rows.FieldDescriptions()
+	columns := make([]string, len(fds))
+	for i, fd := range fds {
+		columns[i] = fd.Name
+	}
+	return columns, nil
+}
+
 // PgxRow wraps pgx.Row
 type PgxRow struct {
 	row pgx.Row
+	fds []pgconn.FieldDescription
 }
 
 // Scan copies the columns in the current row into the values pointed at by dest
 func (r *PgxRow) Scan(dest ...interface{}) error {
 	return r.row.Scan(dest...)
+}
+
+// Columns returns the column names (not available for single row queries in pgx)
+func (r *PgxRow) Columns() ([]string, error) {
+	if r.fds == nil {
+		return nil, fmt.Errorf("column information not available for single row query - use Query() instead of QueryRow()")
+	}
+	columns := make([]string, len(r.fds))
+	for i, fd := range r.fds {
+		columns[i] = fd.Name
+	}
+	return columns, nil
 }
 
 // PgxTx wraps pgx.Tx

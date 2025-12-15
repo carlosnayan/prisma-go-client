@@ -78,12 +78,7 @@ func scanRows(rows Rows, dest interface{}) error {
 		return fmt.Errorf("slice element must be a struct or pointer to struct")
 	}
 	
-	colRows, ok := rows.(interface{ Columns() ([]string, error) })
-	if !ok {
-		return fmt.Errorf("rows does not support Columns()")
-	}
-	
-	columns, err := colRows.Columns()
+	columns, err := rows.Columns()
 	if err != nil {
 		return fmt.Errorf("failed to get columns: %w", err)
 	}
@@ -158,12 +153,7 @@ func scanRow(row Row, dest interface{}) error {
 	elemVal := destVal.Elem()
 	elemType := elemVal.Type()
 	
-	colRow, ok := row.(interface{ Columns() ([]string, error) })
-	if !ok {
-		return fmt.Errorf("row does not support Columns() - use Scan with individual fields")
-	}
-	
-	columns, err := colRow.Columns()
+	columns, err := row.Columns()
 	if err != nil {
 		return fmt.Errorf("failed to get columns: %w", err)
 	}

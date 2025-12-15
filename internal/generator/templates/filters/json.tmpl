@@ -1,6 +1,18 @@
-// Json helper functions for JsonFilter
 
-func Json(value json.RawMessage) *JsonFilter {
+type JsonFilters struct{}
+
+func (JsonFilters) Equals(value json.RawMessage) *JsonFilter {
 	return &JsonFilter{Equals: &value}
 }
 
+func (JsonFilters) NotEquals(value json.RawMessage) *JsonFilter {
+	return &JsonFilter{NotEquals: &value}
+}
+
+func (JsonFilters) IsNull() *JsonFilter {
+	return &JsonFilter{IsNull: boolPtr(true)}
+}
+
+func (JsonFilters) IsNotNull() *JsonFilter {
+	return &JsonFilter{IsNotNull: boolPtr(true)}
+}

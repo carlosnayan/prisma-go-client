@@ -42,10 +42,106 @@ func (r *rowsAdapter) Scan(dest ...interface{}) error {
 }
 
 func (r *rowsAdapter) Columns() ([]string, error) {
+	// Try standard database/sql Columns() method first
 	if cols, ok := r.rows.(interface{ Columns() ([]string, error) }); ok {
 		return cols.Columns()
 	}
-	return nil, fmt.Errorf("rows does not implement Columns")
+	
+	// Try pgx FieldDescriptions() method on the main object
+	if pgxRows, ok := r.rows.(interface{ FieldDescriptions() []interface{ Name() string } }); ok {
+		fds := pgxRows.FieldDescriptions()
+		columns := make([]string, len(fds))
+		for i, fd := range fds {
+			columns[i] = fd.Name()
+		}
+		return columns, nil
+	}
+	
+	// Handle generated wrapper types (e.g., *generated.PgxRows wrapping pgx.Rows)
+	// Try to access internal "rows" field via reflection
+	rowsVal := reflect.ValueOf(r.rows)
+	if rowsVal.Kind() == reflect.Ptr {
+		rowsVal = rowsVal.Elem()
+	}
+	
+	if rowsVal.Kind() == reflect.Struct {
+		// Try to find internal "rows" field (lowercase, unexported)
+		var internalRows reflect.Value
+		for i := 0; i < rowsVal.NumField(); i++ {
+			field := rowsVal.Field(i)
+			fieldType := rowsVal.Type().Field(i)
+			// Check if field name is "rows" or "Rows"
+			if fieldType.Name == "rows" || fieldType.Name == "Rows" {
+				internalRows = field
+				break
+			}
+		}
+		
+		if internalRows.IsValid() && internalRows.CanInterface() {
+			// Get the interface{} value from the field
+			innerRows := internalRows.Interface()
+			
+			// Try type assertion on the inner rows
+			if pgxRows, ok := innerRows.(interface{ FieldDescriptions() []interface{ Name() string } }); ok {
+				fds := pgxRows.FieldDescriptions()
+				columns := make([]string, len(fds))
+				for i, fd := range fds {
+					columns[i] = fd.Name()
+				}
+				return columns, nil
+			}
+			
+			// Try reflection on inner rows
+			innerVal := reflect.ValueOf(innerRows)
+			fdMethod := innerVal.MethodByName("FieldDescriptions")
+			if fdMethod.IsValid() {
+				results := fdMethod.Call(nil)
+				if len(results) > 0 {
+					fds := results[0]
+					if fds.Kind() == reflect.Slice {
+						columns := make([]string, fds.Len())
+						for i := 0; i < fds.Len(); i++ {
+							fd := fds.Index(i)
+							nameMethod := fd.MethodByName("Name")
+							if nameMethod.IsValid() {
+								nameResults := nameMethod.Call(nil)
+								if len(nameResults) > 0 && nameResults[0].Kind() == reflect.String {
+									columns[i] = nameResults[0].String()
+								}
+							}
+						}
+						return columns, nil
+					}
+				}
+			}
+		}
+	}
+	
+	// Final fallback: try FieldDescriptions() on outer object via reflection
+	rowsVal = reflect.ValueOf(r.rows)
+	fdMethod := rowsVal.MethodByName("FieldDescriptions")
+	if fdMethod.IsValid() {
+		results := fdMethod.Call(nil)
+		if len(results) > 0 {
+			fds := results[0]
+			if fds.Kind() == reflect.Slice {
+				columns := make([]string, fds.Len())
+				for i := 0; i < fds.Len(); i++ {
+					fd := fds.Index(i)
+					nameMethod := fd.MethodByName("Name")
+					if nameMethod.IsValid() {
+						nameResults := nameMethod.Call(nil)
+						if len(nameResults) > 0 && nameResults[0].Kind() == reflect.String {
+							columns[i] = nameResults[0].String()
+						}
+					}
+				}
+				return columns, nil
+			}
+		}
+	}
+	
+	return nil, fmt.Errorf("rows does not implement Columns() or FieldDescriptions()")
 }
 
 type rowAdapter struct {
@@ -57,5 +153,52 @@ func (r *rowAdapter) Scan(dest ...interface{}) error {
 		return scanner.Scan(dest...)
 	}
 	return fmt.Errorf("row does not implement Scan")
+}
+
+func (r *rowAdapter) Columns() ([]string, error) {
+	// Try standard database/sql Columns() method first
+	if cols, ok := r.row.(interface{ Columns() ([]string, error) }); ok {
+		return cols.Columns()
+	}
+	
+	// Try pgx FieldDescriptions() method
+	if pgxRow, ok := r.row.(interface{ FieldDescriptions() []interface{ Name() string } }); ok {
+		fds := pgxRow.FieldDescriptions()
+		columns := make([]string, len(fds))
+		for i, fd := range fds {
+			columns[i] = fd.Name()
+		}
+		return columns, nil
+	}
+	
+	// Fallback: try reflection
+	rowVal := reflect.ValueOf(r.row)
+	if rowVal.Kind() == reflect.Ptr {
+		rowVal = rowVal.Elem()
+	}
+	
+	fdMethod := rowVal.MethodByName("FieldDescriptions")
+	if fdMethod.IsValid() {
+		results := fdMethod.Call(nil)
+		if len(results) > 0 {
+			fds := results[0]
+			if fds.Kind() == reflect.Slice {
+				columns := make([]string, fds.Len())
+				for i := 0; i < fds.Len(); i++ {
+					fd := fds.Index(i)
+					nameMethod := fd.MethodByName("Name")
+					if nameMethod.IsValid() {
+						nameResults := nameMethod.Call(nil)
+						if len(nameResults) > 0 && nameResults[0].Kind() == reflect.String {
+							columns[i] = nameResults[0].String()
+						}
+					}
+				}
+				return columns, nil
+			}
+		}
+	}
+	
+	return nil, fmt.Errorf("row does not implement Columns() or FieldDescriptions()")
 }
 

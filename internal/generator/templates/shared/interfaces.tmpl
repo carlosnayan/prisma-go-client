@@ -29,11 +29,17 @@ type Rows interface {
 
 	// Scan copies the columns in the current row into the values pointed at by dest
 	Scan(dest ...interface{}) error
+
+	// Columns returns the column names
+	Columns() ([]string, error)
 }
 
 // Row represents a single row result
 type Row interface {
 	// Scan copies the columns in the current row into the values pointed at by dest
 	Scan(dest ...interface{}) error
+
+	// Columns returns the column names
+	Columns() ([]string, error)
 }
 

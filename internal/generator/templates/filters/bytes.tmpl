@@ -1,6 +1,18 @@
-// Bytes helper functions for BytesFilter
 
-func Bytes(value []byte) *BytesFilter {
+type BytesFilters struct{}
+
+func (BytesFilters) Equals(value []byte) *BytesFilter {
 	return &BytesFilter{Equals: &value}
 }
 
+func (BytesFilters) NotEquals(value []byte) *BytesFilter {
+	return &BytesFilter{NotEquals: &value}
+}
+
+func (BytesFilters) IsNull() *BytesFilter {
+	return &BytesFilter{IsNull: boolPtr(true)}
+}
+
+func (BytesFilters) IsNotNull() *BytesFilter {
+	return &BytesFilter{IsNotNull: boolPtr(true)}
+}

@@ -226,6 +226,24 @@ fi
 
 echo ""
 
+# 4.5. Generate Prisma Client
+log_info "Generating Prisma Client..."
+if go run cmd/prisma/main.go generate; then
+    log_success "Prisma Client generated"
+    
+    # Format generated code
+    log_info "Formatting generated code..."
+    if command -v goimports &> /dev/null; then
+        goimports -w prisma/db/ > /dev/null 2>&1
+        log_success "Generated code formatted"
+    fi
+else
+    log_error "Failed to generate Prisma Client"
+    exit 1
+fi
+
+echo ""
+
 # 4. CI Workflow tests (ci.yml)
 
 ## 4.1 Linter

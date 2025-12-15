@@ -1,11 +1,11 @@
 
-var Strings StringFilters
-var Int IntFilters
-{{if .NeededFilters.Int64Filter}}var Int64 Int64Filters
-{{end}}var Float FloatFilters
-var Boolean BooleanFilters
-var DateTime DateTimeFilters
-{{if .NeededFilters.JsonFilter}}var Json JsonFilters
+{{if .NeededFilters.StringFilter}}var Strings StringFilters
+{{end}}{{if .NeededFilters.IntFilter}}var Int IntFilters
+{{end}}{{if .NeededFilters.Int64Filter}}var Int64 Int64Filters
+{{end}}{{if .NeededFilters.FloatFilter}}var Float FloatFilters
+{{end}}{{if .NeededFilters.BooleanFilter}}var Boolean BooleanFilters
+{{end}}{{if .NeededFilters.DateTimeFilter}}var DateTime DateTimeFilters
+{{end}}{{if .NeededFilters.JsonFilter}}var Json JsonFilters
 {{end}}{{if .NeededFilters.BytesFilter}}var Bytes BytesFilters
 {{end}}
 func boolPtr(b bool) *bool {
