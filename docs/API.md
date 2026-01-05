@@ -307,10 +307,10 @@ genre, err := client.Genres.Upsert().
 	}).
 	Create(inputs.GenresCreateInput{
 		Name:        "Science Fiction",
-		Description: inputs.String("Stories about futuristic science and technology"),
+		Description: inputs.String.Set("Stories about futuristic science and technology"),
 	}).
 	Update(inputs.GenresUpdateInput{
-		Description: inputs.String("Updated description for Science Fiction"),
+		Description: inputs.String.Set("Updated description for Science Fiction"),
 	}).
 	Exec(ctx)
 ```
@@ -341,10 +341,10 @@ book, err := client.Books.Upsert().
 	}).
 	Create(inputs.BooksCreateInput{
 		Title: "The Pragmatic Programmer",
-		Isbn:  inputs.String("978-0-13-468599-1"),
+		Isbn:  inputs.String.Set("978-0-13-468599-1"),
 	}).
 	Update(inputs.BooksUpdateInput{
-		Title: inputs.String("The Pragmatic Programmer (Updated)"),
+		Title: inputs.String.Set("The Pragmatic Programmer (Updated)"),
 	}).
 	ExecWithContext(ctx)
 ```
@@ -363,12 +363,12 @@ bookAuthor, err := client.BookAuthors.Upsert().
 	Create(inputs.BookAuthorsCreateInput{
 		IdBook:   bookId,
 		IdAuthor: authorId,
-		Role:     inputs.String("author"),
+		Role:     inputs.String.Set("author"),
 		Order:    0,
 	}).
 	Update(inputs.BookAuthorsUpdateInput{
-		Role:  inputs.String("co-author"),
-		Order: inputs.Int(1),
+		Role:  inputs.String.Set("co-author"),
+		Order: inputs.Int.Set(1),
 	}).
 	Exec(ctx)
 ```
@@ -453,8 +453,8 @@ for _, storeData := range externalStoreData {
 			StockQuantity: storeData.Stock,
 		}).
 		Update(inputs.BookStoresUpdateInput{
-			Price:         inputs.Decimal(storeData.Price),
-			StockQuantity: inputs.Int(storeData.Stock),
+			Price:         inputs.Decimal.Set(storeData.Price),
+			StockQuantity: inputs.Int.Set(storeData.Stock),
 		}).
 		Exec(ctx)
 
@@ -784,6 +784,153 @@ posts, err := client.Posts.FindMany().
 #### JSON Array Operators
 
 For fields with JSON array type, use these specialized operators:
+
+### Nullable Field Handling
+
+The Prisma Go Client provides a fluent API for handling nullable fields with explicit NULL support. This allows you to distinguish between "not providing a value" and "explicitly setting to NULL".
+
+#### Basic Usage
+
+Use the nullable wrapper API from the `inputs` package:
+
+```go
+// ✅ Setting non-null values
+author, err := client.Authors.Create().
+    Data(inputs.AuthorsCreateInput{
+        FirstName:   inputs.String.Set("Isaac"),
+        LastName:    inputs.String.Set("Asimov"),
+        Bio:         inputs.String.Set("Science fiction writer"),
+        Nationality: inputs.String.Set("American"),
+    }).
+    Exec(ctx)
+
+// ✅ Setting fields to explicit NULL
+author, err := client.Authors.Update().
+    Where(inputs.AuthorsWhereInput{
+        IdAuthor: filters.String.Equals(authorId),
+    }).
+    Data(inputs.AuthorsUpdateInput{
+        Website: inputs.String.SetNull(),  // Explicitly set to NULL
+        Email:   inputs.String.SetNull(),  // Explicitly set to NULL
+    }).
+    Exec(ctx)
+```
+
+#### Available Nullable Wrappers
+
+All primitive types have nullable wrappers:
+
+| Wrapper           | Set Method                | SetNull Method | Use Case             |
+| ----------------- | ------------------------- | -------------- | -------------------- |
+| `inputs.String`   | `.Set(v string)`          | `.SetNull()`   | String fields        |
+| `inputs.Int`      | `.Set(v int)`             | `.SetNull()`   | Integer fields       |
+| `inputs.Int64`    | `.Set(v int64)`           | `.SetNull()`   | Int64 fields         |
+| `inputs.Float`    | `.Set(v float64)`         | `.SetNull()`   | Float/Decimal fields |
+| `inputs.Bool`     | `.Set(v bool)`            | `.SetNull()`   | Boolean fields       |
+| `inputs.DateTime` | `.Set(v time.Time)`       | `.SetNull()`   | DateTime fields      |
+| `inputs.Json`     | `.Set(v json.RawMessage)` | `.SetNull()`   | JSON fields          |
+| `inputs.Bytes`    | `.Set(v []byte)`          | `.SetNull()`   | Bytes fields         |
+
+#### Mix of Values and NULL
+
+You can combine regular values with explicit NULLs:
+
+```go
+book, err := client.Books.Create().
+    Data(inputs.BooksCreateInput{
+        Title:       inputs.String.Set("Foundation"),
+        Subtitle:    inputs.String.SetNull(),  // No subtitle
+        Description: inputs.String.Set("First book in the Foundation series"),
+        PageCount:   inputs.Int.Set(255),
+        Price:       inputs.Float.SetNull(),  // Price not set yet
+        IsActive:    true,  // Required fields don't need wrappers
+    }).
+    Exec(ctx)
+```
+
+#### Update Operations with Partial Data
+
+In updates, you can set some fields to NULL while updating others:
+
+```go
+// Update a book: clear subtitle, update description, leave price unchanged
+err := client.Books.Update().
+    Where(inputs.BooksWhereInput{
+        IdBook: filters.String.Equals(bookId),
+    }).
+    Data(inputs.BooksUpdateInput{
+        Subtitle:    inputs.String.SetNull(),                  // Clear subtitle
+        Description: inputs.String.Set("Updated description"), // Update description
+        // Price field omitted - will not be changed
+    }).
+    Exec(ctx)
+```
+
+#### Three States of Nullable Fields
+
+Nullable fields support three distinct states:
+
+| State       | JSON Output   | Use Case                | Example                            |
+| ----------- | ------------- | ----------------------- | ---------------------------------- |
+| **Not Set** | Field omitted | Don't modify this field | Field not included in Input struct |
+| **NULL**    | `null`        | Clear the field value   | `inputs.String.SetNull()`          |
+| **Value**   | Actual value  | Set a specific value    | `inputs.String.Set("value")`       |
+
+```go
+// Example showing all three states
+client.Authors.Update().
+    Data(inputs.AuthorsUpdateInput{
+        Bio: inputs.String.Set("New bio"),     // 1. Set to value
+        Website: inputs.String.SetNull(),       // 2. Set to NULL
+        // Email is not set                      // 3. Not modified
+    }).
+    Exec(ctx)
+```
+
+#### Practical Example: User Profile Update
+
+```go
+// User wants to clear their phone number but keep email
+func UpdateUserProfile(ctx context.Context, userID string, updates ProfileUpdates) error {
+    updateData := inputs.AuthorsUpdateInput{
+        FirstName: inputs.String.Set(updates.FirstName),
+    }
+
+    // Clear phone if user requested
+    if updates.ClearPhone {
+        updateData.Phone = inputs.String.SetNull()
+    } else if updates.Phone != "" {
+        updateData.Phone = inputs.String.Set(updates.Phone)
+    }
+    // If neither condition is true, phone field is omitted and won't be modified
+
+    return client.Authors.Update().
+        Where(inputs.AuthorsWhereInput{
+            IdAuthor: filters.String.Equals(userID),
+        }).
+        Data(updateData).
+        Exec(ctx)
+}
+```
+
+#### Best Practices
+
+1. **Use `.Set()` for non-null values**: Always use `.Set()` when you have a value
+2. **Use `.SetNull()` for explicit NULL**: Use when you want to clear/nullify a field
+3. **Omit fields to leave unchanged**: Don't include fields in UpdateInput if you don't want to modify them
+4. **Type safety**: Each wrapper is type-safe - you can't pass wrong types
+
+```go
+// ✅ Correct
+inputs.String.Set("text")
+inputs.Int.Set(42)
+
+// ❌ Compile error - type mismatch
+inputs.String.Set(42)  // Cannot use int as string
+inputs.Int.Set("text") // Cannot use string as int
+```
+
+####
 
 ```go
 // Has - check if array contains a specific value

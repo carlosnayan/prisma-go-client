@@ -1,0 +1,294 @@
+// Nullable wrapper types for handling explicit NULL values
+
+// skipJSONType is a marker type for fields that should be omitted during JSON marshaling
+type skipJSONType struct{}
+
+// MarshalJSON for skipJSONType returns an error that json.Marshal interprets as "skip this field"
+func (skipJSONType) MarshalJSON() ([]byte, error) {
+	return []byte{}, nil
+}
+
+var skipJSON = skipJSONType{}
+
+// NullableString provides fluent methods to handle nullable string fields
+type NullableString struct {
+	Value  *string
+	IsSet  bool
+	IsNull bool
+}
+
+// NullableStringNamespace provides fluent constructor methods for NullableString
+type NullableStringNamespace struct{}
+
+// String is the namespace for creating NullableString values
+var String = NullableStringNamespace{}
+
+// Set creates a NullableString with a non-null value
+func (NullableStringNamespace) Set(v string) NullableString {
+	return NullableString{Value: &v, IsSet: true, IsNull: false}
+}
+
+// SetNull creates a NullableString with an explicit null value
+func (NullableStringNamespace) SetNull() NullableString {
+	return NullableString{Value: nil, IsSet: true, IsNull: true}
+}
+
+// MarshalJSON implements json.Marshaler for NullableString
+func (n NullableString) MarshalJSON() ([]byte, error) {
+	if !n.IsSet {
+		// Not set - return empty slice to signal omitempty to skip
+		// This works with omitempty tag
+		return []byte{}, nil
+	}
+	if n.IsNull {
+		// Explicitly set to NULL
+		return []byte("null"), nil
+	}
+	// Has a value
+	return json.Marshal(n.Value)
+}
+
+
+
+
+// NullableInt provides fluent methods to handle nullable int fields
+type NullableInt struct {
+	Value  *int
+	IsSet  bool
+	IsNull bool
+}
+
+// NullableIntNamespace provides fluent constructor methods for NullableInt
+type NullableIntNamespace struct{}
+
+// Int is the namespace for creating NullableInt values
+var Int = NullableIntNamespace{}
+
+// Set creates a NullableInt with a non-null value
+func (NullableIntNamespace) Set(v int) NullableInt {
+	return NullableInt{Value: &v, IsSet: true, IsNull: false}
+}
+
+// SetNull creates a NullableInt with an explicit null value
+
+
+
+func (NullableIntNamespace) SetNull() NullableInt {
+	return NullableInt{Value: nil, IsSet: true, IsNull: true}
+}
+
+// MarshalJSON implements json.Marshaler for NullableInt
+func (n NullableInt) MarshalJSON() ([]byte, error) {
+	if !n.IsSet {
+		return []byte{}, nil
+	}
+	if n.IsNull {
+		return []byte("null"), nil
+	}
+	return json.Marshal(n.Value)
+}
+
+// NullableInt64 provides fluent methods to handle nullable int64 fields
+type NullableInt64 struct {
+	Value  *int64
+	IsSet  bool
+	IsNull bool
+}
+
+// NullableInt64Namespace provides fluent constructor methods for NullableInt64
+type NullableInt64Namespace struct{}
+
+// Int64 is the namespace for creating NullableInt64 values
+var Int64 = NullableInt64Namespace{}
+
+// Set creates a NullableInt64 with a non-null value
+func (NullableInt64Namespace) Set(v int64) NullableInt64 {
+	return NullableInt64{Value: &v, IsSet: true, IsNull: false}
+}
+
+// SetNull creates a NullableInt64 with an explicit null value
+func (NullableInt64Namespace) SetNull() NullableInt64 {
+	return NullableInt64{Value: nil, IsSet: true, IsNull: true}
+}
+
+// MarshalJSON implements json.Marshaler for NullableInt64
+func (n NullableInt64) MarshalJSON() ([]byte, error) {
+	if !n.IsSet {
+		return []byte{}, nil
+	}
+	if n.IsNull {
+		return []byte("null"), nil
+	}
+	return json.Marshal(n.Value)
+}
+
+// NullableFloat provides fluent methods to handle nullable float64 fields
+type NullableFloat struct {
+	Value  *float64
+	IsSet  bool
+	IsNull bool
+}
+
+// NullableFloatNamespace provides fluent constructor methods for NullableFloat
+type NullableFloatNamespace struct{}
+
+// Float is the namespace for creating NullableFloat values
+var Float = NullableFloatNamespace{}
+
+// Set creates a NullableFloat with a non-null value
+func (NullableFloatNamespace) Set(v float64) NullableFloat {
+	return NullableFloat{Value: &v, IsSet: true, IsNull: false}
+}
+
+// SetNull creates a NullableFloat with an explicit null value
+func (NullableFloatNamespace) SetNull() NullableFloat {
+	return NullableFloat{Value: nil, IsSet: true, IsNull: true}
+}
+
+// MarshalJSON implements json.Marshaler for NullableFloat
+func (n NullableFloat) MarshalJSON() ([]byte, error) {
+	if !n.IsSet {
+		return []byte{}, nil
+	}
+	if n.IsNull {
+		return []byte("null"), nil
+	}
+	return json.Marshal(n.Value)
+}
+
+// NullableBool provides fluent methods to handle nullable bool fields
+type NullableBool struct {
+	Value  *bool
+	IsSet  bool
+	IsNull bool
+}
+
+// NullableBoolNamespace provides fluent constructor methods for NullableBool
+type NullableBoolNamespace struct{}
+
+// Bool is the namespace for creating NullableBool values
+var Bool = NullableBoolNamespace{}
+
+// Set creates a NullableBool with a non-null value
+func (NullableBoolNamespace) Set(v bool) NullableBool {
+	return NullableBool{Value: &v, IsSet: true, IsNull: false}
+}
+
+// SetNull creates a NullableBool with an explicit null value
+func (NullableBoolNamespace) SetNull() NullableBool {
+	return NullableBool{Value: nil, IsSet: true, IsNull: true}
+}
+
+// MarshalJSON implements json.Marshaler for NullableBool
+func (n NullableBool) MarshalJSON() ([]byte, error) {
+	if !n.IsSet {
+		return []byte{}, nil
+	}
+	if n.IsNull {
+		return []byte("null"), nil
+	}
+	return json.Marshal(n.Value)
+}
+{{if .NeedsDateTime}}
+// NullableDateTime provides fluent methods to handle nullable time.Time fields
+type NullableDateTime struct {
+	Value  *time.Time
+	IsSet  bool
+	IsNull bool
+}
+
+// NullableDateTimeNamespace provides fluent constructor methods for NullableDateTime
+type NullableDateTimeNamespace struct{}
+
+// DateTime is the namespace for creating NullableDateTime values
+var DateTime = NullableDateTimeNamespace{}
+
+// Set creates a NullableDateTime with a non-null value
+func (NullableDateTimeNamespace) Set(v time.Time) NullableDateTime {
+	return NullableDateTime{Value: &v, IsSet: true, IsNull: false}
+}
+
+// SetNull creates a NullableDateTime with an explicit null value
+func (NullableDateTimeNamespace) SetNull() NullableDateTime {
+	return NullableDateTime{Value: nil, IsSet: true, IsNull: true}
+}
+
+// MarshalJSON implements json.Marshaler for NullableDateTime
+func (n NullableDateTime) MarshalJSON() ([]byte, error) {
+	if !n.IsSet {
+		return []byte{}, nil
+	}
+	if n.IsNull {
+		return []byte("null"), nil
+	}
+	return json.Marshal(n.Value)
+}
+{{end}}
+{{if .NeedsJson}}
+// NullableJson provides fluent methods to handle nullable json.RawMessage fields
+type NullableJson struct {
+	Value  *json.RawMessage
+	IsSet  bool
+	IsNull bool
+}
+
+// NullableJsonNamespace provides fluent constructor methods for NullableJson
+type NullableJsonNamespace struct{}
+
+// Json is the namespace for creating NullableJson values
+var Json = NullableJsonNamespace{}
+
+// Set creates a NullableJson with a non-null value
+func (NullableJsonNamespace) Set(v json.RawMessage) NullableJson {
+	return NullableJson{Value: &v, IsSet: true, IsNull: false}
+}
+
+// SetNull creates a NullableJson with an explicit null value
+func (NullableJsonNamespace) SetNull() NullableJson {
+	return NullableJson{Value: nil, IsSet: true, IsNull: true}
+}
+
+// MarshalJSON implements json.Marshaler for NullableJson
+func (n NullableJson) MarshalJSON() ([]byte, error) {
+	if !n.IsSet {
+		return []byte{}, nil
+	}
+	if n.IsNull {
+		return []byte("null"), nil
+	}
+	return json.Marshal(n.Value)
+}
+{{end}}
+// NullableBytes provides fluent methods to handle nullable []byte fields
+type NullableBytes struct {
+	Value  *[]byte
+	IsSet  bool
+	IsNull bool
+}
+
+// NullableBytesNamespace provides fluent constructor methods for NullableBytes
+type NullableBytesNamespace struct{}
+
+// Bytes is the namespace for creating NullableBytes values
+var Bytes = NullableBytesNamespace{}
+
+// Set creates a NullableBytes with a non-null value
+func (NullableBytesNamespace) Set(v []byte) NullableBytes {
+	return NullableBytes{Value: &v, IsSet: true, IsNull: false}
+}
+
+// SetNull creates a NullableBytes with an explicit null value
+func (NullableBytesNamespace) SetNull() NullableBytes {
+	return NullableBytes{Value: nil, IsSet: true, IsNull: true}
+}
+
+// MarshalJSON implements json.Marshaler for NullableBytes
+func (n NullableBytes) MarshalJSON() ([]byte, error) {
+	if !n.IsSet {
+		return []byte{}, nil
+	}
+	if n.IsNull {
+		return []byte("null"), nil
+	}
+	return json.Marshal(n.Value)
+}

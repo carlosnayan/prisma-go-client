@@ -56,11 +56,17 @@ func (b *{{.PascalName}}CreateManyBuilder) ExecWithContext(ctx context.Context) 
 	modelSlice := make([]interface{}, 0, len(b.data))
 	for _, input := range b.data {
 		result := models.{{.PascalName}}{}
-{{range .CreateFields}}{{if .IsOptional}}		if input.{{.FieldName}} != nil {
+{{range .CreateFields}}{{if .IsOptional}}		if input.{{.FieldName}}.IsSet {
 			{{- if .IsNonPointerOptional}}
-			result.{{.FieldName}} = *input.{{.FieldName}}
+			if !input.{{.FieldName}}.IsNull && input.{{.FieldName}}.Value != nil {
+				result.{{.FieldName}} = *input.{{.FieldName}}.Value
+			}
 			{{- else}}
-			result.{{.FieldName}} = input.{{.FieldName}}
+			if input.{{.FieldName}}.IsNull {
+				result.{{.FieldName}} = nil
+			} else {
+				result.{{.FieldName}} = input.{{.FieldName}}.Value
+			}
 			{{- end}}
 		}
 {{else}}		result.{{.FieldName}} = input.{{.FieldName}}

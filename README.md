@@ -312,57 +312,60 @@ func main() {
 }
 ```
 
-### 8. Pointer Helpers for Clean Code
+### 8. Nullable Field Handling with Set() and SetNull()
 
-To simplify working with optional fields (pointers), use the generated helper functions in the `inputs` package:
+For optional fields, use the fluent nullable wrapper API that allows explicit NULL handling:
 
 ```go
-// ❌ Before: Verbose with temporary variables
-description := "My description"
-count := 42
-active := true
-
-item, err := client.Item.Create().
-    Data(inputs.ItemCreateInput{
-        Description: &description,
-        Count:       &count,
-        Active:      &active,
+// ✅ Setting non-null values
+author, err := client.Authors.Create().
+    Data(inputs.AuthorsCreateInput{
+        FirstName:   inputs.String.Set("Isaac"),
+        LastName:    inputs.String.Set("Asimov"),
+        Bio:         inputs.String.Set("Science fiction writer"),
+        Nationality: inputs.String.Set("American"),
     }).
     Exec()
 
-// ✅ After: Clean and concise with helpers
-item, err := client.Item.Create().
-    Data(inputs.ItemCreateInput{
-        Description: inputs.String("My description"),
-        Count:       inputs.Int(42),
-        Active:      inputs.Bool(true),
-    }).
-    Exec()
-```
-
-**Available helpers in `inputs` package:**
-
-- `inputs.String(v string) *string`
-- `inputs.Int(v int) *int`
-- `inputs.Int64(v int64) *int64`
-- `inputs.Float(v float64) *float64`
-- `inputs.Bool(v bool) *bool`
-- `inputs.DateTime(v time.Time) *time.Time`
-- `inputs.Json(v json.RawMessage) *json.RawMessage`
-- `inputs.Bytes(v []byte) *[]byte`
-
-**Filter helpers** are also available in the `filters` package for advanced querying:
-
-```go
-import "my-app/db/filters"
-
-users, err := query.FindMany().
+// ✅ Setting fields to explicit NULL
+author, err := client.Authors.Update().
     Where(inputs.AuthorsWhereInput{
-        Email: filters.Strings.Contains("@example.com"),
-        Name:  filters.Strings.StartsWith("John"),
+        IdAuthor: db.String(authorId),
+    }).
+    Data(inputs.AuthorsUpdateInput{
+        Website:  inputs.String.SetNull(),  // Explicitly set to NULL
+        Email:    inputs.String.SetNull(),  // Explicitly set to NULL
+    }).
+    Exec()
+
+// ✅ Mix of values and NULL
+book, err := client.Books.Create().
+    Data(inputs.BooksCreateInput{
+        Title:       inputs.String.Set("Foundation"),
+        Subtitle:    inputs.String.SetNull(),  // No subtitle
+        Description: inputs.String.Set("First book in the Foundation series"),
+        PageCount:   inputs.Int.Set(255),
+        Price:       inputs.Float.SetNull(),  // Price not set yet
     }).
     Exec()
 ```
+
+**Available nullable wrappers in `inputs` package:**
+
+- `inputs.String.Set(v)` / `inputs.String.SetNull()`
+- `inputs.Int.Set(v)` / `inputs.Int.SetNull()`
+- `inputs.Int64.Set(v)` / `inputs.Int64.SetNull()`
+- `inputs.Float.Set(v)` / `inputs.Float.SetNull()`
+- `inputs.Bool.Set(v)` / `inputs.Bool.SetNull()`
+- `inputs.DateTime.Set(v)` / `inputs.DateTime.SetNull()`
+- `inputs.Json.Set(v)` / `inputs.Json.SetNull()`
+- `inputs.Bytes.Set(v)` / `inputs.Bytes.SetNull()`
+
+**Key benefits:**
+
+- **Explicit NULL**: Distinguish between "not provided" and "explicitly NULL"
+- **Type-safe**: Each type has its own wrapper
+- **Clean syntax**: Fluent API with namespace pattern
 
 ````
 

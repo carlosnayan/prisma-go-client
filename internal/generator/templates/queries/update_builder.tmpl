@@ -45,8 +45,12 @@ func (b *{{.PascalName}}UpdateBuilder) ExecWithContext(ctx context.Context) erro
 	whereMap := Convert{{.PascalName}}WhereInputToWhere(*b.whereInput)
 	b.query.Where(whereMap)
 	updateData := make(map[string]interface{})
-{{range .UpdateFields}}	if b.data.{{.FieldName}} != nil {
-		updateData[{{printf "%q" .DBFieldName}}] = *b.data.{{.FieldName}}
+{{range .UpdateFields}}	if b.data.{{.FieldName}}.IsSet {
+		if b.data.{{.FieldName}}.IsNull {
+			updateData[{{printf "%q" .DBFieldName}}] = nil
+		} else {
+			updateData[{{printf "%q" .DBFieldName}}] = b.data.{{.FieldName}}.Value
+		}
 	}
 {{end}}	return b.query.Updates(ctx, updateData)
 }

@@ -44,11 +44,17 @@ func (b *{{.PascalName}}CreateBuilder) ExecWithContext(ctx context.Context) (*mo
 	}
 
 	result := &models.{{.PascalName}}{}
-{{range .CreateFields}}{{if .IsOptional}}	if b.data.{{.FieldName}} != nil {
+{{range .CreateFields}}{{if .IsOptional}}	if b.data.{{.FieldName}}.IsSet {
 		{{- if .IsNonPointerOptional}}
-		result.{{.FieldName}} = *b.data.{{.FieldName}}
+		if !b.data.{{.FieldName}}.IsNull && b.data.{{.FieldName}}.Value != nil {
+			result.{{.FieldName}} = *b.data.{{.FieldName}}.Value
+		}
 		{{- else}}
-		result.{{.FieldName}} = b.data.{{.FieldName}}
+		if b.data.{{.FieldName}}.IsNull {
+			result.{{.FieldName}} = nil
+		} else {
+			result.{{.FieldName}} = b.data.{{.FieldName}}.Value
+		}
 		{{- end}}
 	}
 {{else}}	result.{{.FieldName}} = b.data.{{.FieldName}}
