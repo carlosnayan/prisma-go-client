@@ -1,25 +1,25 @@
-// {{.PascalName}}UpdateBuilder is a fluent builder for updating {{.PascalName}} records
+// {{.PascalName}}UpdateBuilder is a fluent builder for updating {{.PascalName}} records with Where conditions
 type {{.PascalName}}UpdateBuilder struct {
-	query     *{{.PascalName}}Query
-	// condition *Condition // TODO: Re-enable once table package imports are added
-	fields    map[string]interface{}
+	query      *{{.PascalName}}Query
+	conditions []{{.TablePackageName}}.Condition  // ✅ Changed from builder.Condition
+	fields     map[string]interface{}
 }
 
-// Update returns a builder for updating {{.PascalName}} records (Ent-style)
-// Example: rows, err := client.User.Update().Where(user.EmailEQ("joao@email.com")).SetAge(26).Exec()
+// Update returns a builder for updating {{.PascalName}} records
+// Example: author, err := client.Authors().Update().Where(authors.EmailEQ("john@example.com")).SetFirstName("Jonathan").Exec()
 func (q *{{.PascalName}}Query) Update() *{{.PascalName}}UpdateBuilder {
 	return &{{.PascalName}}UpdateBuilder{
-		query:  q,
-		fields: make(map[string]interface{}),
+		query:      q,
+		conditions: make([]{{.TablePackageName}}.Condition, 0),  // ✅ Changed
+		fields:     make(map[string]interface{}),
 	}
 }
 
-// TODO: Temporarily disabled - will be re-enabled with table package imports
-// // Where sets the where condition using filter methods from the table package
-// func (b *{{.PascalName}}UpdateBuilder) Where(condition Condition) *{{.PascalName}}UpdateBuilder {
-// 	b.condition = &condition
-// 	return b
-// }
+// Where sets the filter conditions using table package filters
+func (b *{{.PascalName}}UpdateBuilder) Where(condition {{.TablePackageName}}.Condition) *{{.PascalName}}UpdateBuilder {  // ✅ Changed
+	b.conditions = append(b.conditions, condition)
+	return b
+}
 
 {{range .UpdateFields}}
 {{if and .IsNullable (not .IsNonPointerOptional)}}
@@ -42,40 +42,31 @@ func (b *{{$.PascalName}}UpdateBuilder) Set{{.FieldName}}(value {{.GoType}}) *{{
 {{end}}
 {{end}}
 
-// Exec executes the update operation
-func (b *{{.PascalName}}UpdateBuilder) Exec() error {
-	_, err := b.ExecWithContext(b.query.Query.GetContext())
-	return err
+// WithContext sets the context for this query
+func (b *{{.PascalName}}UpdateBuilder) WithContext(ctx context.Context) *{{.PascalName}}UpdateBuilder {
+	b.query.Query = b.query.Query.WithContext(ctx)
+	return b
 }
 
-// ExecWithContext executes the update operation with an explicit context
-func (b *{{.PascalName}}UpdateBuilder) ExecWithContext(ctx context.Context) (int64, error) {
-	// Reset query state to prevent accumulation
-	b.query.Query.Reset()
+// Exec executes the update and returns the FIRST updated record
+func (b *{{.PascalName}}UpdateBuilder) Exec() (*models.{{.PascalName}}, error) {
+	return b.ExecWithContext(b.query.Query.GetContext())
+}
 
-	// TODO: Temporarily disabled - where condition check will be re-enabled
-	// if b.condition == nil {
-	// 	return 0, fmt.Errorf("where condition is required for update")
-	// }
-
+// ExecWithContext executes the update with explicit context and returns the first updated record
+func (b *{{.PascalName}}UpdateBuilder) ExecWithContext(ctx context.Context) (*models.{{.PascalName}}, error) {
+	// Validation
+	if len(b.conditions) == 0 {
+		return nil, fmt.Errorf("where condition is required for update")
+	}
 	if len(b.fields) == 0 {
-		return 0, fmt.Errorf("at least one field must be set for update")
+		return nil, fmt.Errorf("at least one field must be set for update")
 	}
 
-	// TODO: Apply condition when table package imports are added
-	// Build where clause from condition
-	// For now, support simple conditions only
-	// TODO: Add full support for AND/OR in future iteration
-	// if !b.condition.IsLogic {
-	// 	// Simple condition
-	// 	if b.condition.Operator == "IN" || b.condition.Operator == "NOT IN" {
-	// 		b.query.Query.Where(b.condition.Column+" "+b.condition.Operator+" (?)", b.condition.Value)
-	// 	} else if b.condition.Operator == "LIKE" {
-	// 		b.query.Query.Where(b.condition.Column+" "+b.condition.Operator+" ?", b.condition.Value)
-	// 	} else {
-	// 		b.query.Query.Where(b.condition.Column+" "+b.condition.Operator+" ?", b.condition.Value)
-	// 	}
-	// }
+	// Apply conditions to build WHERE clause
+	for _, cond := range b.conditions {
+		applyCondition{{.PascalName}}(b.query.Query, cond)
+	}
 
 	// Prepare update data
 	updateData := make(map[string]interface{})
@@ -83,14 +74,14 @@ func (b *{{.PascalName}}UpdateBuilder) ExecWithContext(ctx context.Context) (int
 		updateData[k] = v
 	}
 
-	// Execute update - Updates returns only error
-	err := b.query.Updates(ctx, updateData)
+	// Execute UPDATE and get the first updated record
+	// This uses RETURNING clause on PostgreSQL or SELECT after UPDATE on MySQL/SQLite
+	var result models.{{.PascalName}}
+	err := b.query.Query.UpdatesReturning(ctx, updateData, &result)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	
-	// Since we can't get rows affected from Updates, return 0
-	// TODO: Improve this when Updates is refactored to return (int64, error)
-	return 0, nil
+
+	return &result, nil
 }
 

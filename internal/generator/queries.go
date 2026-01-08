@@ -255,6 +255,7 @@ func generateQueryFile(filePath string, model *parser.Model, schema *parser.Sche
 		"delete_builder_new.tmpl",
 		"create_builder_new.tmpl",
 		"updatemany_builder_new.tmpl",
+		"update_builder_new.tmpl",
 		"updateone_builder_new.tmpl",
 		"apply_condition_helper_new.tmpl",
 	}

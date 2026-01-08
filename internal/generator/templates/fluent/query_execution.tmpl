@@ -195,6 +195,82 @@ func (q *Query) Updates(ctx context.Context, values map[string]interface{}) erro
 	return SanitizeError(err)
 }
 
+// UpdatesReturning updates multiple columns and returns the updated record
+// This uses RETURNING clause on PostgreSQL or SELECT after UPDATE on MySQL/SQLite
+func (q *Query) UpdatesReturning(ctx context.Context, values map[string]interface{}, dest interface{}) error {
+	ctx, cancel := WithQueryTimeout(ctx)
+	defer cancel()
+
+	processStart := time.Now()
+
+	// Check if dialect supports RETURNING (PostgreSQL)
+	if q.dialect.Name() == "postgresql" || q.dialect.Name() == "postgres" {
+		// Build UPDATE with RETURNING
+		query, args := q.buildUpdatesQueryWithReturning(values)
+
+		queryStart := time.Now()
+		row := q.db.QueryRow(ctx, query, args...)
+		queryEnd := time.Now()
+		queryDuration := queryEnd.Sub(queryStart)
+
+		var err error
+		if q.modelType != nil {
+			err = q.scanRowIntoModel(row, dest)
+		} else {
+			err = row.Scan(dest)
+		}
+
+		q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
+
+		if err != nil {
+			if logger := q.getLogger(); logger != nil {
+				logger.Error("UPDATE RETURNING query failed: %v", err)
+			}
+			return SanitizeError(err)
+		}
+		return nil
+	}
+
+	// For MySQL/SQLite: UPDATE then SELECT
+	// Step 1: Execute UPDATE
+	query, args := q.buildUpdatesQuery(values)
+
+	queryStart := time.Now()
+	_, err := q.db.Exec(ctx, query, args...)
+	if err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("UPDATE query failed: %v", err)
+		}
+		return SanitizeError(err)
+	}
+
+	// Step 2: SELECT the updated record
+	// Clone query state to avoid modifying original
+	selectQuery := q.Clone()
+	selectQuery.take = intPtr(1)
+
+	selectSQL, selectArgs := selectQuery.buildSelectQuery(true)
+	row := q.db.QueryRow(ctx, selectSQL, selectArgs...)
+	queryEnd := time.Now()
+	queryDuration := queryEnd.Sub(queryStart)
+
+	if q.modelType != nil {
+		err = q.scanRowIntoModel(row, dest)
+	} else {
+		err = row.Scan(dest)
+	}
+
+	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
+
+	if err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("SELECT after UPDATE query failed: %v", err)
+		}
+		return SanitizeError(err)
+	}
+	return nil
+}
+
 // Delete removes records
 func (q *Query) Delete(ctx context.Context, value interface{}) error {
 	ctx, cancel := WithQueryTimeout(ctx)

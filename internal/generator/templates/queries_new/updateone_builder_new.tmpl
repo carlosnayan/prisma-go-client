@@ -64,6 +64,6 @@ func (b *{{.PascalName}}UpdateOneBuilder) ExecWithContext(ctx context.Context) e
 	}
 
 	// Execute update - Updates returns only error
-	return b.query.Updates(ctx, updateData)
+	return b.query.Query.Updates(ctx, updateData)
 }
 

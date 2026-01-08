@@ -420,6 +420,13 @@ func executeQueryTemplates(filePath string, templateNames []string, data QueryTe
 }
 
 func executeQueryTemplatesFromNewDir(filePath string, templateNames []string, data QueryTemplateData) error {
+	// DEBUG
+	logFile, _ := os.OpenFile("/tmp/prisma_debug.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if logFile != nil {
+		defer logFile.Close()
+		fmt.Fprintf(logFile, "\n=== %s: %d templates ===\n", filepath.Base(filePath), len(templateNames))
+	}
+
 	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open file for appending: %w", err)

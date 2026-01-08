@@ -723,3 +723,48 @@ func (q *Query) buildDeleteQuery() (string, []interface{}) {
 	return strings.Join(parts, " "), args
 
 }
+// buildUpdatesQueryWithReturning builds UPDATE query with RETURNING clause (PostgreSQL)
+func (q *Query) buildUpdatesQueryWithReturning(values map[string]interface{}) (string, []interface{}) {
+	query, args := q.buildUpdatesQuery(values)
+
+	// Add RETURNING * for PostgreSQL
+	query += " RETURNING *"
+
+	return query, args
+}
+
+//Clone creates a copy of the Query to avoid modifying the original
+func (q *Query) Clone() *Query {
+	clone := &Query{
+		db:              q.db,
+		table:           q.table,
+		columns:         q.columns,
+		primaryKey:      q.primaryKey,
+		modelType:       q.modelType,
+		logger:          q.logger,
+		dialect:         q.dialect,
+		ctx:             q.ctx,
+		whereConditions: append([]whereCondition{}, q.whereConditions...),
+		orderBy:         append([]OrderBy{}, q.orderBy...),
+		selectFields:    append([]string{}, q.selectFields...),
+		groupBy:         append([]string{}, q.groupBy...),
+		having:          append([]whereCondition{}, q.having...),
+		joins:           append([]join{}, q.joins...),
+	}
+
+	if q.take != nil {
+		take := *q.take
+		clone.take = &take
+	}
+	if q.skip != nil {
+		skip := *q.skip
+		clone.skip = &skip
+	}
+
+	return clone
+}
+
+// intPtr returns a pointer to an int
+func intPtr(i int) *int {
+	return &i
+}

@@ -20,10 +20,6 @@ func (q *{{.PascalName}}Query) Save(ctx context.Context, value *models.{{.Pascal
 	return q.Query.Save(ctx, value)
 }
 
-// Updates updates multiple columns
-// Example: q.Where("id = ?", 1).Updates(ctx, map[string]interface{}{"name": "New", "age": 30})
-func (q *{{.PascalName}}Query) Updates(ctx context.Context, values map[string]interface{}) error {
-	return q.Query.Updates(ctx, values)
-}
+// Updates() removed - use UpdateMany() or Update() from new API instead
 
 

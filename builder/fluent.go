@@ -288,7 +288,19 @@ func (q *Query) addPrismaWhereCondition(field string, op WhereOperator) {
 			args:  []interface{}{},
 			or:    false,
 		})
+	case "IS_NULL": // Support underscore variant from generated filters
+		q.whereConditions = append(q.whereConditions, whereCondition{
+			query: fmt.Sprintf("%s IS NULL", quotedField),
+			args:  []interface{}{},
+			or:    false,
+		})
 	case "IS NOT NULL":
+		q.whereConditions = append(q.whereConditions, whereCondition{
+			query: fmt.Sprintf("%s IS NOT NULL", quotedField),
+			args:  []interface{}{},
+			or:    false,
+		})
+	case "IS_NOT_NULL": // Support underscore variant from gener ated filters
 		q.whereConditions = append(q.whereConditions, whereCondition{
 			query: fmt.Sprintf("%s IS NOT NULL", quotedField),
 			args:  []interface{}{},
@@ -810,6 +822,82 @@ func (q *Query) Updates(ctx context.Context, values map[string]interface{}) erro
 	return errors.SanitizeError(err)
 }
 
+// UpdatesReturning updates multiple columns and returns the updated record
+// This uses RETURNING clause on PostgreSQL or SELECT after UPDATE on MySQL/SQLite
+func (q *Query) UpdatesReturning(ctx context.Context, values map[string]interface{}, dest interface{}) error {
+	ctx, cancel := contextutil.WithQueryTimeout(ctx)
+	defer cancel()
+
+	processStart := time.Now()
+
+	// Check if dialect supports RETURNING (PostgreSQL)
+	if q.dialect.Name() == "postgresql" || q.dialect.Name() == "postgres" {
+		// Build UPDATE with RETURNING
+		query, args := q.buildUpdatesQueryWithReturning(values)
+
+		queryStart := time.Now()
+		row := q.db.QueryRow(ctx, query, args...)
+		queryEnd := time.Now()
+		queryDuration := queryEnd.Sub(queryStart)
+
+		var err error
+		if q.modelType != nil {
+			err = q.scanRowIntoModel(row, dest)
+		} else {
+			err = row.Scan(dest)
+		}
+
+		q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
+
+		if err != nil {
+			if logger := q.getLogger(); logger != nil {
+				logger.Error("UPDATE RETURNING query failed: %v", err)
+			}
+			return errors.SanitizeError(err)
+		}
+		return nil
+	}
+
+	// For MySQL/SQLite: UPDATE then SELECT
+	// Step 1: Execute UPDATE
+	query, args := q.buildUpdatesQuery(values)
+
+	queryStart := time.Now()
+	_, err := q.db.Exec(ctx, query, args...)
+	if err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("UPDATE query failed: %v", err)
+		}
+		return errors.SanitizeError(err)
+	}
+
+	// Step 2: SELECT the updated record
+	// Clone query state to avoid modifying original
+	selectQuery := q.Clone()
+	selectQuery.take = intPtr(1)
+
+	selectSQL, selectArgs := selectQuery.buildSelectQuery(true)
+	row := q.db.QueryRow(ctx, selectSQL, selectArgs...)
+	queryEnd := time.Now()
+	queryDuration := queryEnd.Sub(queryStart)
+
+	if q.modelType != nil {
+		err = q.scanRowIntoModel(row, dest)
+	} else {
+		err = row.Scan(dest)
+	}
+
+	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
+
+	if err != nil {
+		if logger := q.getLogger(); logger != nil {
+			logger.Error("SELECT after UPDATE query failed: %v", err)
+		}
+		return errors.SanitizeError(err)
+	}
+	return nil
+}
+
 // Delete removes records
 func (q *Query) Delete(ctx context.Context, value interface{}) error {
 	ctx, cancel := contextutil.WithQueryTimeout(ctx)
@@ -1225,21 +1313,21 @@ func (q *Query) buildUpdateQuery(column string, value interface{}) (string, []in
 	return strings.Join(parts, " "), args
 }
 
-// buildUpdatesQuery builds the UPDATE query with multiple columns
+// buildUpdatesQuery builds the UPDATE query for multiple columns
 func (q *Query) buildUpdatesQuery(values map[string]interface{}) (string, []interface{}) {
-	var parts []string
+	var setParts []string
 	var args []interface{}
 	argIndex := 1
 
-	var setParts []string
-	for col, val := range values {
+	for column, value := range values {
 		setParts = append(setParts, fmt.Sprintf("%s = %s",
-			q.dialect.QuoteIdentifier(col),
+			q.dialect.QuoteIdentifier(column),
 			q.dialect.GetPlaceholder(argIndex)))
-		args = append(args, val)
+		args = append(args, value)
 		argIndex++
 	}
 
+	var parts []string
 	parts = append(parts, fmt.Sprintf("UPDATE %s SET %s",
 		q.dialect.QuoteIdentifier(q.table),
 		strings.Join(setParts, ", ")))
@@ -1252,6 +1340,52 @@ func (q *Query) buildUpdatesQuery(values map[string]interface{}) (string, []inte
 	}
 
 	return strings.Join(parts, " "), args
+}
+
+// buildUpdatesQueryWithReturning builds UPDATE query with RETURNING clause (PostgreSQL)
+func (q *Query) buildUpdatesQueryWithReturning(values map[string]interface{}) (string, []interface{}) {
+	query, args := q.buildUpdatesQuery(values)
+
+	// Add RETURNING * for PostgreSQL
+	query += " RETURNING *"
+
+	return query, args
+}
+
+// Clone creates a copy of the Query to avoid modifying the original
+func (q *Query) Clone() *Query {
+	clone := &Query{
+		db:              q.db,
+		table:           q.table,
+		columns:         q.columns,
+		primaryKey:      q.primaryKey,
+		modelType:       q.modelType,
+		logger:          q.logger,
+		dialect:         q.dialect,
+		ctx:             q.ctx,
+		whereConditions: append([]whereCondition{}, q.whereConditions...),
+		orderBy:         append([]OrderBy{}, q.orderBy...),
+		selectFields:    append([]string{}, q.selectFields...),
+		groupBy:         append([]string{}, q.groupBy...),
+		having:          append([]whereCondition{}, q.having...),
+		joins:           append([]join{}, q.joins...),
+	}
+
+	if q.take != nil {
+		take := *q.take
+		clone.take = &take
+	}
+	if q.skip != nil {
+		skip := *q.skip
+		clone.skip = &skip
+	}
+
+	return clone
+}
+
+// intPtr returns a pointer to an int
+func intPtr(i int) *int {
+	return &i
 }
 
 // buildDeleteQuery builds the DELETE query
