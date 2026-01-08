@@ -15,7 +15,7 @@ import (
 	"github.com/carlosnayan/prisma-go-client/internal/parser"
 )
 
-const version = "0.2.2"
+const version = "0.2.3"
 
 var (
 	watchFlag         bool
