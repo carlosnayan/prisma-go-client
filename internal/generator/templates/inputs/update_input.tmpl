@@ -1,5 +1,0 @@
-// {{.PascalName}}UpdateInput represents data to update a {{.ModelName}}
-type {{.PascalName}}UpdateInput struct {
-{{range .UpdateFields}}	{{.FieldName}} {{.GoType}} `json:"{{.JSONTag}},omitempty"`
-{{end}}}
-

@@ -12,7 +12,6 @@ Complete documentation for Prisma for Go.
 - [Helper Functions](HELPERS.md) - Pointer and filter helpers for cleaner code
 - [Migrations Guide](MIGRATIONS.md) - Managing database schema changes
 - [Relationships Guide](RELATIONSHIPS.md) - Working with related data
-- [Best Practices](BEST_PRACTICES.md) - Production-ready practices
 - [Testing Guide](TESTING.md) - Writing and running tests
 
 ## Examples

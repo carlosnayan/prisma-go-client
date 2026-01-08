@@ -71,9 +71,8 @@ model Profile {
 ```go
 // Include author when fetching posts (when implemented)
 posts, err := client.Post.FindMany().
-	Where(inputs.PostWhereInput{
-		// Add conditions
-	}).
+	// Add conditions with table filters as needed
+	// Example: Where(posts.PublishedEQ(true))
 	Exec(ctx)
 
 // Note: Include functionality will be added in a future version
@@ -84,12 +83,11 @@ posts, err := client.Post.FindMany().
 ```go
 // Find posts by specific author
 posts, err := client.Post.FindMany().
-	Where(inputs.PostWhereInput{
-		// Relations will be supported in future versions
-		// Author: &inputs.UserWhereInput{
-		// 	Email: db.String("user@example.com"),
-		// },
-	}).
+	// Relations will be supported in future versions
+	// Use table filters: Where(posts.TitleContains("search"))
+	// Author: &inputs.UserWhereInput{
+	// 	Email: db.String("user@example.com"),
+	// },
 	Exec(ctx)
 ```
 
@@ -98,14 +96,13 @@ posts, err := client.Post.FindMany().
 ```go
 // Find users who have posts (when relations are implemented)
 users, err := client.User.FindMany().
-	Where(inputs.UserWhereInput{
-		// Relations will be supported in future versions
-		// Posts: &inputs.PostListRelationFilter{
-		// 	Some: inputs.PostWhereInput{
-		// 		Published: db.Bool(true),
-		// 	},
-		// },
-	}).
+	// Relations will be supported in future versions
+	// Use table filters: Where(users.EmailContains("@example.com"))
+	// Posts: &inputs.PostListRelationFilter{
+	// 	Some: inputs.PostWhereInput{
+	// 		Published: db.Bool(true),
+	// 	},
+	// },
 	Exec(ctx)
 ```
 
@@ -118,10 +115,8 @@ users, err := client.User.FindMany().
 // Note: Relations will be fully supported in a future version
 // For now, use the foreign key directly
 post, err := client.Post.Create().
-	Data(inputs.PostCreateInput{
-		Title:    db.String("My Post"),
-		AuthorId: db.Int(userID),
-	}).
+	SetTitle("My Post").
+	SetAuthorId(userID).
 	Exec(ctx)
 ```
 
@@ -131,17 +126,13 @@ post, err := client.Post.Create().
 // Create post and create new user
 // First create user, then create post
 user, err := client.User.Create().
-	Data(inputs.UserCreateInput{
-		Email: "newuser@example.com",
-		Name:  db.String("New User"),
-	}).
+	SetEmail("newuser@example.com").
+	SetName(inputs.String.Set("New User")).
 	Exec(ctx)
 
 post, err := client.Post.Create().
-	Data(inputs.PostCreateInput{
-		Title:    db.String("My Post"),
-		AuthorId: db.Int(user.ID),
-	}).
+	SetTitle("My Post").
+	SetAuthorId(user.ID).
 	Exec(ctx)
 ```
 
@@ -171,18 +162,14 @@ post, err := client.Posts().Create(db.PostCreateInput{
 // Create user with multiple posts
 // First create user, then create posts
 user, err := client.User.Create().
-	Data(inputs.UserCreateInput{
-		Email: "user@example.com",
-	}).
+	SetEmail("user@example.com").
 	Exec(ctx)
 
 // Then create posts
 for _, title := range []string{"Post 1", "Post 2"} {
 	_, err := client.Post.Create().
-		Data(inputs.PostCreateInput{
-			Title:    db.String(title),
-			AuthorId: db.Int(user.ID),
-		}).
+		SetTitle(title).
+		SetAuthorId(user.ID).
 		Exec(ctx)
 }
 ```
@@ -193,20 +180,14 @@ for _, title := range []string{"Post 1", "Post 2"} {
 // Create user and connect to existing posts
 // First create user, then update posts
 user, err := client.User.Create().
-	Data(inputs.UserCreateInput{
-		Email: "user@example.com",
-	}).
+	SetEmail("user@example.com").
 	Exec(ctx)
 
 // Then update posts to connect them
 for _, postID := range []int{1, 2} {
 	err := client.Post.Update().
-		Where(inputs.PostWhereInput{
-			Id: db.Int(postID),
-		}).
-		Data(inputs.PostUpdateInput{
-			AuthorId: db.Int(user.ID),
-		}).
+		Where(posts.IdEQ(postID)).
+		SetAuthorId(user.ID).
 		Exec(ctx)
 }
 ```
@@ -316,16 +297,12 @@ user, err := client.Users().Create(db.UserCreateInput{
 // Create user with profile
 // First create user, then create profile
 user, err := client.User.Create().
-	Data(inputs.UserCreateInput{
-		Email: "user@example.com",
-	}).
+	SetEmail("user@example.com").
 	Exec(ctx)
 
 profile, err := client.Profile.Create().
-	Data(inputs.ProfileCreateInput{
-		UserId: db.Int(user.ID),
-		Bio:    db.String("My bio"),
-	}).
+	SetUserId(user.ID).
+	SetBio(inputs.String.Set("My bio")).
 	Exec(ctx)
 ```
 
@@ -334,12 +311,8 @@ profile, err := client.Profile.Create().
 ```go
 // Update user's profile
 err := client.Profile.Update().
-	Where(inputs.ProfileWhereInput{
-		UserId: db.Int(userID),
-	}).
-	Data(inputs.ProfileUpdateInput{
-		Bio: db.String("Updated bio"),
-	}).
+	Where(profiles.UserIdEQ(userID)).
+	SetBio(inputs.String.Set("Updated bio")).
 	Exec(ctx)
 ```
 
@@ -401,9 +374,8 @@ for _, user := range users {
 // Note: Relation filters will be supported in future version
 // For now, use a subquery or join with Raw SQL
 users, err := client.User.FindMany().
-	Where(inputs.UserWhereInput{
-		// Relation filters will be added in future version
-	}).
+	// Relation filters will be added in future version
+	// Use table filters: Where(users.ActiveEQ(true))
 	Exec(ctx)
 ```
 
@@ -437,9 +409,7 @@ for _, post := range posts {
 			Id:    true,
 			Email: true,
 		}).
-		Where(inputs.UserWhereInput{
-			Id: db.Int(post.AuthorId),
-		}).
+		Where(users.IdEQ(post.AuthorId)).
 		Exec(ctx)
 	// Use author data
 }
@@ -470,9 +440,7 @@ for i, post := range posts {
 posts, err := client.Post.FindMany().Exec(ctx)
 for _, post := range posts {
 	author, _ := client.User.FindFirst().
-		Where(inputs.UserWhereInput{
-			Id: db.Int(post.AuthorId),
-		}).
+		Where(users.IdEQ(post.AuthorId)).
 		Exec(ctx)
 	// This creates N+1 queries
 }
@@ -550,16 +518,14 @@ user, err := client.Users().Create(db.UserCreateInput{
 // Query with relations
 // Find posts by author
 author, err := client.User.FindFirst().
-	Where(inputs.UserWhereInput{
-		Email: db.String("author@example.com"),
-	}).
+	Where(users.EmailEQ("author@example.com")).
 	Exec(ctx)
 
 posts, err := client.Post.FindMany().
-	Where(inputs.PostWhereInput{
-		AuthorId:  db.Int(author.ID),
-		Published: db.Bool(true),
-	}).
+	Where(
+		posts.AuthorIdEQ(author.ID),
+		posts.PublishedEQ(true),
+	).
 	Exec(ctx)
 }).Exec()
 

@@ -118,7 +118,8 @@ type UpdateFieldInfo struct {
 type CreateFieldInfo struct {
 	FieldName            string // Field name in Go (e.g., "Email")
 	DBName               string // Column name in DB (e.g., "email" or "email_address" from @map)
-	GoType               string // Go type (e.g., "string", "int")
+	GoType               string // Go type (e.g., "string", "int", "NullableString")
+	BaseGoType           string // Base Go type for pointers (e.g., "string" for NullableString)
 	IsNullable           bool   // Whether the field is nullable
 	IsRequired           bool   // Whether the field is required (not auto-generated, not optional)
 	IsNonPointerOptional bool   // Whether this is Json or Bytes type (doesn't use pointers even when optional)
@@ -132,9 +133,10 @@ type FiltersTemplateData struct {
 
 // InputFieldInfo holds information about a field for input types
 type InputFieldInfo struct {
-	FieldName string // PascalCase field name
-	GoType    string // Go type (with pointer if optional)
-	JSONTag   string // JSON tag name
+	FieldName  string // PascalCase field name
+	GoType     string // Go type (with Nullable wrapper, e.g., "NullableString")
+	BaseGoType string // Base Go type for pointers (e.g., "string")
+	JSONTag    string // JSON tag name
 }
 
 // WhereInputFieldInfo holds information about a field for WhereInput

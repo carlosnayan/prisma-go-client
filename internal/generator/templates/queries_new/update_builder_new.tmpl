@@ -1,7 +1,7 @@
 // {{.PascalName}}UpdateBuilder is a fluent builder for updating {{.PascalName}} records with Where conditions
 type {{.PascalName}}UpdateBuilder struct {
 	query      *{{.PascalName}}Query
-	conditions []{{.TablePackageName}}.Condition  // ✅ Changed from builder.Condition
+	conditions []{{.TablePackageName}}.Condition  
 	fields     map[string]interface{}
 }
 
@@ -10,13 +10,13 @@ type {{.PascalName}}UpdateBuilder struct {
 func (q *{{.PascalName}}Query) Update() *{{.PascalName}}UpdateBuilder {
 	return &{{.PascalName}}UpdateBuilder{
 		query:      q,
-		conditions: make([]{{.TablePackageName}}.Condition, 0),  // ✅ Changed
+		conditions: make([]{{.TablePackageName}}.Condition, 0),  
 		fields:     make(map[string]interface{}),
 	}
 }
 
 // Where sets the filter conditions using table package filters
-func (b *{{.PascalName}}UpdateBuilder) Where(condition {{.TablePackageName}}.Condition) *{{.PascalName}}UpdateBuilder {  // ✅ Changed
+func (b *{{.PascalName}}UpdateBuilder) Where(condition {{.TablePackageName}}.Condition) *{{.PascalName}}UpdateBuilder {  
 	b.conditions = append(b.conditions, condition)
 	return b
 }

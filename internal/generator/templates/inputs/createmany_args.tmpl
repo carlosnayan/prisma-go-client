@@ -1,0 +1,30 @@
+// {{.PascalName}}CreateManyArgs represents data for CreateMany operation
+type {{.PascalName}}CreateManyArgs struct {
+{{range .CreateFields}}	{{.FieldName}} {{.GoType}} `json:"{{.JSONTag}},omitempty"`
+{{end}}}
+
+// {{.PascalName}}CreateManyBuilder is a fluent builder for CreateManyArgs
+type {{.PascalName}}CreateManyBuilder struct {
+	args {{.PascalName}}CreateManyArgs
+}
+
+// {{.PascalName}}CreateManyInput is a factory function that returns a builder
+func {{.PascalName}}CreateManyInput() *{{.PascalName}}CreateManyBuilder {
+	return &{{.PascalName}}CreateManyBuilder{
+		args: {{.PascalName}}CreateManyArgs{},
+	}
+}
+
+{{range .CreateFields}}
+// Set{{.FieldName}} sets the {{.JSONTag}} field
+func (b *{{$.PascalName}}CreateManyBuilder) Set{{.FieldName}}(value {{.GoType}}) *{{$.PascalName}}CreateManyBuilder {
+	b.args.{{.FieldName}} = value
+	return b
+}
+{{end}}
+
+// Build returns the constructed {{.PascalName}}CreateManyArgs
+func (b *{{.PascalName}}CreateManyBuilder) Build() {{.PascalName}}CreateManyArgs {
+	return b.args
+}
+

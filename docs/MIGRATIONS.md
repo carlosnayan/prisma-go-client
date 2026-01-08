@@ -495,9 +495,8 @@ cat prisma/migrations/*/migration.sql
 
 # 6. Use in code
 product, err := client.Product.Create().
-	Data(inputs.ProductCreateInput{
-		// Add product data
-	}).
+	SetName("Product Name").
+	SetPrice(19.99).
 	Exec(ctx)
 ```
 

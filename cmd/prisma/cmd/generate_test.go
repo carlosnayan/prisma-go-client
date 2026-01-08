@@ -149,8 +149,8 @@ func TestGenerate_CreatesInputFiles(t *testing.T) {
 	}
 
 	content := readFile(t, inputFile)
-	if !contains(content, "UsersCreateInput") {
-		t.Error("Input file should contain CreateInput type")
+	if !contains(content, "UsersCreateManyArgs") {
+		t.Error("Input file should contain CreateManyArgs type")
 	}
 }
 

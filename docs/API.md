@@ -114,9 +114,8 @@ If required fields are missing, a validation error is returned:
 ```go
 // Missing required field 'email'
 user, err := client.Authors.Create().
-	Data(inputs.AuthorsCreateInput{
-		FirstName: "John", LastName: "Doe",
-	}).
+	SetFirstName("John").
+	SetLastName("Doe").
 	Exec(ctx)
 // Error: validation error: required fields missing: Email
 ```
@@ -144,11 +143,9 @@ Optional fields (with `?` suffix) can be omitted or set to `nil`:
 
 ```go
 user, err := client.Authors.Create().
-	Data(inputs.AuthorsCreateInput{
-		Email: db.String("author@example.com"),
-		Name:  "John Doe",
-		Age:   nil, // Optional field
-	}).
+	SetEmail("author@example.com").
+	SetName("John Doe").
+	// Age is optional, can be omitted or set with SetAge(nil)
 	Exec(ctx)
 ```
 
@@ -450,7 +447,7 @@ The `ExecTyped()` method allows you to scan query results into custom DTOs (Data
 
 **Example with explicit context:**
 
-```go
+````go
 // Define a custom DTO
 type UserDTO struct {
 	ID    int    `json:"id" db:"id"`
@@ -491,7 +488,7 @@ authors, err := client.Authors.
 authors, err := client.Authors.
 	RightJoin("books", "books.author_id = authors.id").
 	Find(ctx, &authors)
-```
+````
 
 #### Group By and Having
 
@@ -511,7 +508,7 @@ results, err := client.Books.
 > [!NOTE]
 > Full-text search is available for PostgreSQL and MySQL databases with appropriate text search indexes.
 
-```go
+````go
 import (
 	"my-app/db"
 	"my-app/db/filters"
@@ -522,39 +519,33 @@ Use the nullable wrapper API from the `inputs` package:
 ```go
 // ✅ Setting non-null values
 author, err := client.Authors.Create().
-    Data(inputs.AuthorsCreateInput{
-        FirstName:   inputs.String.Set("Isaac"),
-        LastName:    inputs.String.Set("Asimov"),
-        Bio:         inputs.String.Set("Science fiction writer"),
-        Nationality: inputs.String.Set("American"),
-        // Email is not set                      // 3. Not modified
-    }).
+    SetFirstName("Isaac").
+    SetLastName("Asimov").
+    SetBio(inputs.String.Set("Science fiction writer")).
+    SetNationality(inputs.String.Set("American")).
+    // Email is not set - will be NULL
     Exec(ctx)
-```
+````
 
 #### Practical Example: User Profile Update
 
 ```go
 // User wants to clear their phone number but keep email
 func UpdateUserProfile(ctx context.Context, userID string, updates ProfileUpdates) error {
-    updateData := inputs.AuthorsUpdateInput{
-        FirstName: inputs.String.Set(updates.FirstName),
-    }
+    // Build update with nullable wrappers using SetX() methods
+    updateBuilder := client.Authors.Update().
+        Where(authors.IdAuthorEQ(userID)).
+        SetFirstName(inputs.String.Set(updates.FirstName))
 
     // Clear phone if user requested
     if updates.ClearPhone {
-        updateData.Phone = inputs.String.SetNull()
+        updateBuilder = updateBuilder.SetPhone(inputs.String.SetNull())
     } else if updates.Phone != "" {
-        updateData.Phone = inputs.String.Set(updates.Phone)
+        updateBuilder = updateBuilder.SetPhone(inputs.String.Set(updates.Phone))
     }
-    // If neither condition is true, phone field is omitted and won't be modified
+    // If neither condition is true, phone SetX() is omitted and field won't be modified
 
-    return client.Authors.Update().
-        Where(inputs.AuthorsWhereInput{
-            IdAuthor: authors.IdAuthorEQ(userID),
-        }).
-        Data(updateData).
-        Exec(ctx)
+    return updateBuilder.Exec(ctx)
 }
 ```
 
@@ -562,10 +553,10 @@ func UpdateUserProfile(ctx context.Context, userID string, updates ProfileUpdate
 
 1. **Use `.Set()` for non-null values**: Always use `.Set()` when you have a value
 2. **Use `.SetNull()` for explicit NULL**: Use when you want to clear/nullify a field
-3. **Omit fields to leave unchanged**: Don't include fields in UpdateInput if you don't want to modify them
+3. **Omit SetX() calls to leave unchanged**: Don't call SetX() for fields you don't want to modify
 4. **Type safety**: Each wrapper is type-safe - you can't pass wrong types
 
-```go
+````go
 // ✅ Correct
 inputs.String.Set("text")
 inputs.Int.Set(42)
@@ -589,7 +580,7 @@ posts, err := client.Books.FindMany().
 			Posts: true,
 		},
 	}).Exec()
-```
+````
 
 ## Aggregations
 
@@ -640,10 +631,8 @@ Transactions allow you to execute multiple operations atomically. If any operati
 err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 	// Create author
 	author, err := tx.Authors.Create().
-		Data(inputs.AuthorsCreateInput{
-			FirstName: "John",
-			LastName:  "Doe",
-		}).
+		SetFirstName("John").
+		SetLastName("Doe").
 		Exec(ctx)
 	if err != nil {
 		return err
@@ -651,9 +640,7 @@ err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 
 	// Create book (would need book_authors junction in real scenario)
 	_, err = tx.Books.Create().
-		Data(inputs.BooksCreateInput{
-			Title: "My Book",
-		}).
+		SetTitle("My Book").
 		Exec(ctx)
 	return err
 })
@@ -665,10 +652,8 @@ err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 	// Create author
 	author, err := tx.Authors.Create().
-		Data(inputs.AuthorsCreateInput{
-			FirstName: "John",
-			LastName:  "Doe",
-		}).
+		SetFirstName("John").
+		SetLastName("Doe").
 		Exec(ctx)
 	if err != nil {
 		return err
@@ -676,12 +661,8 @@ err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 
 	// Update author
 	err = tx.Authors.Update().
-		Where(inputs.AuthorsWhereInput{
-			IdAuthor: db.String(author.IdAuthor),
-		}).
-		Data(inputs.AuthorsUpdateInput{
-			Bio: db.String("Updated biography"),
-		}).
+		Where(authors.IdAuthorEQ(author.IdAuthor)).
+		SetBio(inputs.String.Set("Updated biography")).
 		Exec(ctx)
 	if err != nil {
 		return err
@@ -690,9 +671,7 @@ err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 	// Create related books
 	for _, title := range []string{"Book 1", "Book 2", "Book 3"} {
 		_, err = tx.Books.Create().
-			Data(inputs.BooksCreateInput{
-				Title: title,
-			}).
+			SetTitle(title).
 			Exec(ctx)
 		if err != nil {
 			return err
@@ -709,10 +688,8 @@ err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 	// Use fluent API
 	author, err := tx.Authors.Create().
-		Data(inputs.AuthorsCreateInput{
-			FirstName: "John",
-			LastName:  "Doe",
-		}).
+		SetFirstName("John").
+		SetLastName("Doe").
 		Exec(ctx)
 	if err != nil {
 		return err
@@ -735,10 +712,8 @@ If any operation returns an error, the transaction is automatically rolled back:
 ```go
 err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 	author, err := tx.Authors.Create().
-		Data(inputs.AuthorsCreateInput{
-			FirstName: "John",
-			LastName:  "Doe",
-		}).
+		SetFirstName("John").
+		SetLastName("Doe").
 		Exec(ctx)
 	if err != nil {
 		return err // Transaction will be rolled back
@@ -746,9 +721,7 @@ err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 
 	// If this fails, the author creation above will be rolled back
 	_, err = tx.Books.Create().
-		Data(inputs.BooksCreateInput{
-			Title: "My Book",
-		}).
+		SetTitle("My Book").
 		Exec(ctx)
 	return err
 })
@@ -867,14 +840,12 @@ The `Scan()` function automatically handles various column naming patterns:
 
 ```go
 // Set JSON field
-user, err := client.Authors.Update(
-	...,
-	db.UserUpdateInput{
-		Metadata: db.JSON(map[string]interface{}{
-			"key": "value",
-		}),
-	},
-).Exec()
+user, err := client.Authors.Update().
+	Where(authors.IdAuthorEQ(authorID)).
+	SetMetadata(db.JSON(map[string]interface{}{
+		"key": "value",
+	})).
+	Exec(ctx)
 
 // Get JSON field
 metadata := user.Metadata.Get("key")

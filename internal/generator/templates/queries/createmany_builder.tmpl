@@ -1,5 +1,5 @@
 // CreateMany returns a builder for creating multiple {{.PascalName}} records (Prisma-style)
-// Example: result, err := q.CreateMany().Data([]inputs.{{.PascalName}}CreateInput{...}).Exec(ctx)
+// Example: result, err := q.CreateMany().Data([]inputs.{{.PascalName}}CreateManyArgs{...}).Exec(ctx)
 func (q *{{.PascalName}}Query) CreateMany() *{{.PascalName}}CreateManyBuilder {
 	return &{{.PascalName}}CreateManyBuilder{query: q}
 }
@@ -7,12 +7,12 @@ func (q *{{.PascalName}}Query) CreateMany() *{{.PascalName}}CreateManyBuilder {
 // {{.PascalName}}CreateManyBuilder is a builder for creating multiple {{.PascalName}} records
 type {{.PascalName}}CreateManyBuilder struct {
 	query          *{{.PascalName}}Query
-	data           []inputs.{{.PascalName}}CreateInput
+	data           []inputs.{{.PascalName}}CreateManyArgs
 	skipDuplicates bool
 }
 
 // Data sets the data for creating multiple records
-func (b *{{.PascalName}}CreateManyBuilder) Data(data []inputs.{{.PascalName}}CreateInput) *{{.PascalName}}CreateManyBuilder {
+func (b *{{.PascalName}}CreateManyBuilder) Data(data []inputs.{{.PascalName}}CreateManyArgs) *{{.PascalName}}CreateManyBuilder {
 	b.data = data
 	return b
 }
@@ -52,11 +52,14 @@ func (b *{{.PascalName}}CreateManyBuilder) ExecWithContext(ctx context.Context) 
 		}
 	}
 
-	// Convert CreateInput slice to model slice
+	// Convert CreateManyArgs slice to model slice
 	modelSlice := make([]interface{}, 0, len(b.data))
 	for _, input := range b.data {
 		result := models.{{.PascalName}}{}
-{{range .CreateFields}}{{if .IsNullable}}		if input.{{.FieldName}}.IsSet {
+{{range .CreateFields}}{{if .IsNullable}}{{if .BaseGoType}}		// Pointer field (String, Int, DateTime, etc)
+		result.{{.FieldName}} = input.{{.FieldName}}
+{{else}}		// NullableWrapper field (Json, Bytes)
+		if input.{{.FieldName}}.IsSet {
 			{{- if .IsNonPointerOptional}}
 			if !input.{{.FieldName}}.IsNull && input.{{.FieldName}}.Value != nil {
 				result.{{.FieldName}} = *input.{{.FieldName}}.Value
@@ -69,7 +72,7 @@ func (b *{{.PascalName}}CreateManyBuilder) ExecWithContext(ctx context.Context) 
 			}
 			{{- end}}
 		}
-{{else}}		result.{{.FieldName}} = input.{{.FieldName}}
+{{end}}{{else}}		result.{{.FieldName}} = input.{{.FieldName}}
 {{end}}{{end}}		modelSlice = append(modelSlice, result)
 	}
 
