@@ -138,7 +138,7 @@ This creates:
 - `db/models.go` - Go structs for your models
 - `db/queries.go` - Type-safe query builders
 - `db/client.go` - Prisma client
-- `db/inputs.go` - Input types (CreateInput, UpdateInput, WhereInput)
+- `db/tables/*` - Table packages with type-safe filters
 
 ## Step 7: Create and Apply Migrations
 
@@ -168,7 +168,7 @@ import (
 	"log"
 
 	"my-prisma-app/db"
-	"my-prisma-app/db/inputs"
+	"my-prisma-app/db/users"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -197,8 +197,8 @@ func main() {
 	client := db.NewClient(dbDriver)
 
 	// Example 1: Create a user using fluent API
-	user, err := client.User.Create().
-		Data(inputs.UserCreateInput{
+	user, err := client.Users().Create().
+		Data(models.User{
 			Email: "alice@example.com",
 			Name:  db.String("Alice"),
 		}).
@@ -209,12 +209,12 @@ func main() {
 	log.Printf("Created user: %+v\n", user)
 
 	// Example 2: Find user by email with Select
-	foundUser, err := client.User.FindFirst().
-		Select(inputs.UserSelect{
+	foundUser, err := client.Users().FindFirst().
+		Select(field selection{
 			Email: true,
 			Name:  true,
 		}).
-		Where(inputs.UserWhereInput{
+		Where(users filter{
 			Email: db.String("alice@example.com"),
 		}).
 		Exec(ctx)
@@ -224,7 +224,7 @@ func main() {
 	log.Printf("Found user: %+v\n", foundUser)
 
 	// Example 3: Find all users
-	users, err := client.User.FindMany().
+	users, err := client.Users().FindMany().
 		Exec(ctx)
 	if err != nil {
 		log.Fatalf("Failed to find users: %v", err)
@@ -232,11 +232,11 @@ func main() {
 	log.Printf("Found %d users\n", len(users))
 
 	// Example 4: Update user
-	err = client.User.Update().
-		Where(inputs.UserWhereInput{
+	err = client.Users().Update().
+		Where(users filter{
 			Id: db.Int(user.ID),
 		}).
-		Data(inputs.UserUpdateInput{
+		Data(models.User{
 			Name: db.String("Alice Updated"),
 		}).
 		Exec(ctx)
@@ -274,7 +274,7 @@ import (
 	"log"
 
 	"my-prisma-app/db"
-	"my-prisma-app/db/inputs"
+	"my-prisma-app/db/users"
 	_ "github.com/go-sql-driver/mysql"
 )
 
@@ -289,8 +289,8 @@ func main() {
 	defer sqlDB.Close()
 
 	// Use the same fluent API
-	user, err := client.User.Create().
-		Data(inputs.UserCreateInput{
+	user, err := client.Users().Create().
+		Data(models.User{
 			Email: "bob@example.com",
 			Name:  db.String("Bob"),
 		}).
@@ -312,7 +312,7 @@ import (
 	"log"
 
 	"my-prisma-app/db"
-	"my-prisma-app/db/inputs"
+	"my-prisma-app/db/users"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -327,8 +327,8 @@ func main() {
 	defer sqlDB.Close()
 
 	// Use the same fluent API
-	user, err := client.User.Create().
-		Data(inputs.UserCreateInput{
+	user, err := client.Users().Create().
+		Data(models.User{
 			Email: "charlie@example.com",
 			Name:  db.String("Charlie"),
 		}).
@@ -363,19 +363,19 @@ The Query Builder provides a type-safe, fluent API:
 
 ```go
 // You can use WithContext() to set context once and reuse it
-query := client.User.WithContext(ctx)
+query := client.Users().WithContext(ctx)
 
 // Create (using stored context)
 user, err := query.Create().
-    Data(inputs.UserCreateInput{
+    Data(models.User{
         Email: "test@example.com",
         Name:  db.String("Test"),
     }).
     Exec() // Uses stored context
 
 // Or use explicit context
-user, err = client.User.Create().
-    Data(inputs.UserCreateInput{
+user, err = client.Users().Create().
+    Data(models.User{
         Email: "test@example.com",
         Name:  db.String("Test"),
     }).
@@ -383,39 +383,39 @@ user, err = client.User.Create().
 
 // Find First with Select
 user, err = query.FindFirst().
-    Select(inputs.UserSelect{
+    Select(field selection{
         Email: true,
         Name:  true,
     }).
-    Where(inputs.UserWhereInput{
+    Where(users filter{
         Email: db.String("test@example.com"),
     }).
     Exec() // Uses stored context
 
 // Find Many with Select and Where
 users, err = query.FindMany().
-    Select(inputs.UserSelect{
+    Select(field selection{
         Email: true,
         Name:  true,
     }).
-    Where(inputs.UserWhereInput{
+    Where(users filter{
         Name: db.Contains("Test"),
     }).
     Exec() // Uses stored context
 
 // Update
 err = query.Update().
-    Where(inputs.UserWhereInput{
+    Where(users filter{
         Id: db.Int(user.ID),
     }).
-    Data(inputs.UserUpdateInput{
+    Data(models.User{
         Name: db.String("Updated Name"),
     }).
     Exec() // Uses stored context
 
 // Delete
 err = query.Delete().
-    Where(inputs.UserWhereInput{
+    Where(users filter{
         Id: db.Int(user.ID),
     }).
     Exec() // Uses stored context

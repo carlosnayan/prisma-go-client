@@ -1,0 +1,69 @@
+// {{.PascalName}}UpdateOneBuilder is a fluent builder for updating a single {{.PascalName}} record by ID
+type {{.PascalName}}UpdateOneBuilder struct {
+	query  *{{.PascalName}}Query
+	id     interface{}
+	fields map[string]interface{}
+}
+
+// UpdateOneID returns a builder for updating a single {{.PascalName}} record by ID
+// Example: err := client.User.UpdateOneID(id).SetAge(26).Exec()
+func (q *{{.PascalName}}Query) UpdateOneID(id interface{}) *{{.PascalName}}UpdateOneBuilder {
+	return &{{.PascalName}}UpdateOneBuilder{
+		query:  q,
+		id:     id,
+		fields: make(map[string]interface{}),
+	}
+}
+
+{{range .UpdateFields}}
+{{if and .IsNullable (not .IsNonPointerOptional)}}
+// Set{{.FieldName}} sets the {{.DBName}} field (nullable)
+// Pass nil to set the field to NULL
+func (b *{{$.PascalName}}UpdateOneBuilder) Set{{.FieldName}}(value *{{.GoType}}) *{{$.PascalName}}UpdateOneBuilder {
+	if value == nil {
+		b.fields["{{.DBName}}"] = nil
+	} else {
+		b.fields["{{.DBName}}"] = *value
+	}
+	return b
+}
+{{else}}
+// Set{{.FieldName}} sets the {{.DBName}} field
+func (b *{{$.PascalName}}UpdateOneBuilder) Set{{.FieldName}}(value {{.GoType}}) *{{$.PascalName}}UpdateOneBuilder {
+	b.fields["{{.DBName}}"] = value
+	return b
+}
+{{end}}
+{{end}}
+
+// Exec executes the update one operation
+func (b *{{.PascalName}}UpdateOneBuilder) Exec() error {
+	return b.ExecWithContext(b.query.Query.GetContext())
+}
+
+// ExecWithContext executes the update one operation with an explicit context
+func (b *{{.PascalName}}UpdateOneBuilder) ExecWithContext(ctx context.Context) error {
+	// Reset query state to prevent accumulation
+	b.query.Query.Reset()
+
+	if len(b.fields) == 0 {
+		return fmt.Errorf("at least one field must be set for update")
+	}
+
+	// Apply ID condition
+	{{if .PrimaryKey}}
+	b.query.Query.Where({{printf "%q" .PrimaryKey}}+" = ?", b.id)
+	{{else}}
+	b.query.Query.Where("id = ?", b.id)
+	{{end}}
+
+	// Prepare update data
+	updateData := make(map[string]interface{})
+	for k, v := range b.fields {
+		updateData[k] = v
+	}
+
+	// Execute update - Updates returns only error
+	return b.query.Updates(ctx, updateData)
+}
+

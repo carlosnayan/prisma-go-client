@@ -1,0 +1,75 @@
+{{range .Fields}}{{$fieldName := .Name}}{{$dbName := .DBName}}{{$goType := .GoType}}{{range .FilterOps}}{{if eq . "EQ"}}
+// {{$fieldName}}EQ creates a condition where {{$dbName}} equals the given value
+func {{$fieldName}}EQ(value {{$goType}}) Condition {
+	return Condition{Column: "{{$dbName}}", Operator: "=", Value: value}
+}
+
+{{end}}{{if eq . "NEQ"}}
+// {{$fieldName}}NEQ creates a condition where {{$dbName}} does not equal the given value
+func {{$fieldName}}NEQ(value {{$goType}}) Condition {
+	return Condition{Column: "{{$dbName}}", Operator: "!=", Value: value}
+}
+
+{{end}}{{if eq . "GT"}}
+// {{$fieldName}}GT creates a condition where {{$dbName}} is greater than the given value
+func {{$fieldName}}GT(value {{$goType}}) Condition {
+	return Condition{Column: "{{$dbName}}", Operator: ">", Value: value}
+}
+
+{{end}}{{if eq . "GTE"}}
+// {{$fieldName}}GTE creates a condition where {{$dbName}} is greater than or equal to the given value
+func {{$fieldName}}GTE(value {{$goType}}) Condition {
+	return Condition{Column: "{{$dbName}}", Operator: ">=", Value: value}
+}
+
+{{end}}{{if eq . "LT"}}
+// {{$fieldName}}LT creates a condition where {{$dbName}} is less than the given value
+func {{$fieldName}}LT(value {{$goType}}) Condition {
+	return Condition{Column: "{{$dbName}}", Operator: "<", Value: value}
+}
+
+{{end}}{{if eq . "LTE"}}
+// {{$fieldName}}LTE creates a condition where {{$dbName}} is less than or equal to the given value
+func {{$fieldName}}LTE(value {{$goType}}) Condition {
+	return Condition{Column: "{{$dbName}}", Operator: "<=", Value: value}
+}
+
+{{end}}{{if eq . "Contains"}}
+// {{$fieldName}}Contains creates a condition where {{$dbName}} contains the given substring
+func {{$fieldName}}Contains(value string) Condition {
+	return Condition{Column: "{{$dbName}}", Operator: "LIKE", Value: "%" + value + "%"}
+}
+
+{{end}}{{if eq . "StartsWith"}}
+// {{$fieldName}}StartsWith creates a condition where {{$dbName}} starts with the given prefix
+func {{$fieldName}}StartsWith(value string) Condition {
+	return Condition{Column: "{{$dbName}}", Operator: "LIKE", Value: value + "%"}
+}
+
+{{end}}{{if eq . "EndsWith"}}
+// {{$fieldName}}EndsWith creates a condition where {{$dbName}} ends with the given suffix
+func {{$fieldName}}EndsWith(value string) Condition {
+	return Condition{Column: "{{$dbName}}", Operator: "LIKE", Value: "%" + value}
+}
+
+{{end}}{{if eq . "In"}}
+// {{$fieldName}}In creates a condition where {{$dbName}} is in the given list
+func {{$fieldName}}In(values ...{{$goType}}) Condition {
+	interfaceValues := make([]interface{}, len(values))
+	for i, v := range values {
+		interfaceValues[i] = v
+	}
+	return Condition{Column: "{{$dbName}}", Operator: "IN", Value: interfaceValues}
+}
+
+{{end}}{{if eq . "NotIn"}}
+// {{$fieldName}}NotIn creates a condition where {{$dbName}} is not in the given list
+func {{$fieldName}}NotIn(values ...{{$goType}}) Condition {
+	interfaceValues := make([]interface{}, len(values))
+	for i, v := range values {
+		interfaceValues[i] = v
+	}
+	return Condition{Column: "{{$dbName}}", Operator: "NOT IN", Value: interfaceValues}
+}
+
+{{end}}{{end}}{{end}}

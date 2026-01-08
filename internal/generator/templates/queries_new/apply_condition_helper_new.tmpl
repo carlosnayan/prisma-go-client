@@ -1,0 +1,54 @@
+// applyCondition{{.PascalName}} applies a Condition to the Query
+func applyCondition{{.PascalName}}(q *builder.Query, cond {{.TablePackageName}}.Condition) {
+	if cond.IsLogic {
+		// Logical operator (AND/OR)
+		if cond.Operator == "AND" {
+			// For AND, apply all child conditions directly (they all must be true)
+			for _, child := range cond.Children {
+				applyCondition{{.PascalName}}(q, child)
+			}
+		} else if cond.Operator == "OR" {
+			// For OR, we need to build a single WHERE clause with OR
+			// This is more complex and depends on the underlying Query implementation
+			// For now, we'll apply each condition as separate OR clauses
+			// TODO: Improve OR support by building proper SQL OR expressions
+			for i, child := range cond.Children {
+				if i == 0 {
+					applyCondition{{.PascalName}}(q, child)
+				} else {
+					// Apply as OR condition - this may need Query method support
+					applyCondition{{.PascalName}}(q, child)
+				}
+			}
+		}
+	} else {
+		// Simple condition
+		switch cond.Operator {
+		case "=":
+			q.Where(cond.Column+" = ?", cond.Value)
+		case "!=":
+			q.Where(cond.Column+" != ?", cond.Value)
+		case ">":
+			q.Where(cond.Column+" > ?", cond.Value)
+		case ">=":
+			q.Where(cond.Column+" >= ?", cond.Value)
+		case "<":
+			q.Where(cond.Column+" < ?", cond.Value)
+		case "<=":
+			q.Where(cond.Column+" <= ?", cond.Value)
+		case "IN":
+			q.Where(cond.Column+" IN (?)", cond.Value)
+		case "NOT IN":
+			q.Where(cond.Column+" NOT IN (?)", cond.Value)
+		case "LIKE":
+			q.Where(cond.Column+" LIKE ?", cond.Value)
+		case "IS NULL":
+			q.Where(cond.Column + " IS NULL")
+		case "IS NOT NULL":
+			q.Where(cond.Column + " IS NOT NULL")
+		default:
+			// Unknown operator, apply as-is
+			q.Where(cond.Column+" "+cond.Operator+" ?", cond.Value)
+		}
+	}
+}

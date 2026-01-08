@@ -80,20 +80,23 @@ type FieldFilterInfo struct {
 
 // QueryTemplateData holds data for query file template generation
 type QueryTemplateData struct {
-	ModelName         string
-	PascalName        string
-	StdlibImports     []string
-	ThirdPartyImports []string
-	BuilderPath       string
-	ModelsPath        string
-	InputsPath        string
-	Fields            []FieldFilterInfo
-	SelectFields      []SelectFieldInfo // Fields for Select operations
-	UpdateFields      []UpdateFieldInfo // Fields for Update operations
-	CreateFields      []CreateFieldInfo // Fields for Create operations
-	Columns           []string
-	PrimaryKey        string
-	TableName         string
+	ModelName          string
+	PascalName         string
+	LowerName          string // Lowercase model name (e.g., "user")
+	StdlibImports      []string
+	ThirdPartyImports  []string
+	BuilderPath        string
+	ModelsPath         string
+	InputsPath         string
+	TablePackageImport string // Import path (e.g., "myapp/db/user")
+	TablePackageName   string // Package name (e.g., "user")
+	Fields             []FieldFilterInfo
+	SelectFields       []SelectFieldInfo // Fields for Select operations
+	UpdateFields       []UpdateFieldInfo // Fields for Update operations
+	CreateFields       []CreateFieldInfo // Fields for Create operations
+	Columns            []string
+	PrimaryKey         string
+	TableName          string
 }
 
 // SelectFieldInfo holds information about a field for Select operations
@@ -104,17 +107,21 @@ type SelectFieldInfo struct {
 
 // UpdateFieldInfo holds information about a field for Update operations
 type UpdateFieldInfo struct {
-	FieldName   string // PascalCase field name
-	DBFieldName string // Actual database column name
-	IsPointer   bool   // Whether the field in the model is a pointer type
+	FieldName            string // Field name in Go (e.g., "Email")
+	DBName               string // Column name in DB (e.g., "email" or "email_address" from @map)
+	GoType               string // Go type (e.g., "string", "int")
+	IsNullable           bool   // Whether the field is nullable
+	IsNonPointerOptional bool   // Whether this is Json or Bytes type (doesn't use pointers even when optional)
 }
 
 // CreateFieldInfo holds information about a field for Create operations
 type CreateFieldInfo struct {
-	FieldName            string // PascalCase field name
-	IsOptional           bool   // Whether field is optional (pointer)
-	IsRequired           bool   // Whether field is required (not optional and no default)
-	IsNonPointerOptional bool   // Whether field doesn't use pointer in model even when optional (Json, Bytes)
+	FieldName            string // Field name in Go (e.g., "Email")
+	DBName               string // Column name in DB (e.g., "email" or "email_address" from @map)
+	GoType               string // Go type (e.g., "string", "int")
+	IsNullable           bool   // Whether the field is nullable
+	IsRequired           bool   // Whether the field is required (not auto-generated, not optional)
+	IsNonPointerOptional bool   // Whether this is Json or Bytes type (doesn't use pointers even when optional)
 }
 
 // FiltersTemplateData holds data for filters.go template generation
@@ -160,6 +167,15 @@ type InputHelpersTemplateData struct {
 	StdlibImports []string
 	NeedsDateTime bool
 	NeedsJson     bool
+}
+
+type TablePackageTemplateData struct {
+	PackageName string
+	ModelName   string
+	PascalName  string
+	TableName   string
+	Fields      []FilterFieldInfo
+	NeedsJSON   bool
 }
 
 type EnumTemplateData struct {
@@ -393,6 +409,28 @@ func executeQueryTemplates(filePath string, templateNames []string, data QueryTe
 	}
 
 	// Execute each template in order
+	for _, tmplName := range templateNames {
+		tmplPath := filepath.Join(templatesDir, tmplName)
+		if err := executeTemplate(file, tmplPath, data); err != nil {
+			return fmt.Errorf("failed to execute template %s: %w", tmplName, err)
+		}
+	}
+
+	return nil
+}
+
+func executeQueryTemplatesFromNewDir(filePath string, templateNames []string, data QueryTemplateData) error {
+	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open file for appending: %w", err)
+	}
+	defer file.Close()
+
+	_, templatesDir, err := getTemplatesDir("queries_new")
+	if err != nil {
+		return fmt.Errorf("failed to get templates directory: %w", err)
+	}
+
 	for _, tmplName := range templateNames {
 		tmplPath := filepath.Join(templatesDir, tmplName)
 		if err := executeTemplate(file, tmplPath, data); err != nil {

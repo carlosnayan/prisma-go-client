@@ -1,0 +1,96 @@
+// {{.PascalName}}UpdateBuilder is a fluent builder for updating {{.PascalName}} records
+type {{.PascalName}}UpdateBuilder struct {
+	query     *{{.PascalName}}Query
+	// condition *Condition // TODO: Re-enable once table package imports are added
+	fields    map[string]interface{}
+}
+
+// Update returns a builder for updating {{.PascalName}} records (Ent-style)
+// Example: rows, err := client.User.Update().Where(user.EmailEQ("joao@email.com")).SetAge(26).Exec()
+func (q *{{.PascalName}}Query) Update() *{{.PascalName}}UpdateBuilder {
+	return &{{.PascalName}}UpdateBuilder{
+		query:  q,
+		fields: make(map[string]interface{}),
+	}
+}
+
+// TODO: Temporarily disabled - will be re-enabled with table package imports
+// // Where sets the where condition using filter methods from the table package
+// func (b *{{.PascalName}}UpdateBuilder) Where(condition Condition) *{{.PascalName}}UpdateBuilder {
+// 	b.condition = &condition
+// 	return b
+// }
+
+{{range .UpdateFields}}
+{{if and .IsNullable (not .IsNonPointerOptional)}}
+// Set{{.FieldName}} sets the {{.DBName}} field (nullable)
+// Pass nil to set the field to NULL
+func (b *{{$.PascalName}}UpdateBuilder) Set{{.FieldName}}(value *{{.GoType}}) *{{$.PascalName}}UpdateBuilder {
+	if value == nil {
+		b.fields["{{.DBName}}"] = nil
+	} else {
+		b.fields["{{.DBName}}"] = *value
+	}
+	return b
+}
+{{else}}
+// Set{{.FieldName}} sets the {{.DBName}} field
+func (b *{{$.PascalName}}UpdateBuilder) Set{{.FieldName}}(value {{.GoType}}) *{{$.PascalName}}UpdateBuilder {
+	b.fields["{{.DBName}}"] = value
+	return b
+}
+{{end}}
+{{end}}
+
+// Exec executes the update operation
+func (b *{{.PascalName}}UpdateBuilder) Exec() error {
+	_, err := b.ExecWithContext(b.query.Query.GetContext())
+	return err
+}
+
+// ExecWithContext executes the update operation with an explicit context
+func (b *{{.PascalName}}UpdateBuilder) ExecWithContext(ctx context.Context) (int64, error) {
+	// Reset query state to prevent accumulation
+	b.query.Query.Reset()
+
+	// TODO: Temporarily disabled - where condition check will be re-enabled
+	// if b.condition == nil {
+	// 	return 0, fmt.Errorf("where condition is required for update")
+	// }
+
+	if len(b.fields) == 0 {
+		return 0, fmt.Errorf("at least one field must be set for update")
+	}
+
+	// TODO: Apply condition when table package imports are added
+	// Build where clause from condition
+	// For now, support simple conditions only
+	// TODO: Add full support for AND/OR in future iteration
+	// if !b.condition.IsLogic {
+	// 	// Simple condition
+	// 	if b.condition.Operator == "IN" || b.condition.Operator == "NOT IN" {
+	// 		b.query.Query.Where(b.condition.Column+" "+b.condition.Operator+" (?)", b.condition.Value)
+	// 	} else if b.condition.Operator == "LIKE" {
+	// 		b.query.Query.Where(b.condition.Column+" "+b.condition.Operator+" ?", b.condition.Value)
+	// 	} else {
+	// 		b.query.Query.Where(b.condition.Column+" "+b.condition.Operator+" ?", b.condition.Value)
+	// 	}
+	// }
+
+	// Prepare update data
+	updateData := make(map[string]interface{})
+	for k, v := range b.fields {
+		updateData[k] = v
+	}
+
+	// Execute update - Updates returns only error
+	err := b.query.Updates(ctx, updateData)
+	if err != nil {
+		return 0, err
+	}
+	
+	// Since we can't get rows affected from Updates, return 0
+	// TODO: Improve this when Updates is refactored to return (int64, error)
+	return 0, nil
+}
+

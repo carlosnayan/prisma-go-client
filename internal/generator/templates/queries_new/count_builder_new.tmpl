@@ -1,0 +1,37 @@
+// {{.PascalName}}CountBuilder is a fluent builder for counting records
+type {{.PascalName}}CountBuilder struct {
+	query      *{{.PascalName}}Query
+	conditions []{{.TablePackageName}}.Condition
+}
+
+// Count returns a builder for counting matching records
+// Example: client.{{.PascalName}}().Count().Where({{.LowerName}}.ActiveEQ(true)).Exec()
+func (q *{{.PascalName}}Query) Count() *{{.PascalName}}CountBuilder {
+	return &{{.PascalName}}CountBuilder{
+		query:      q,
+		conditions: make([]{{.TablePackageName}}.Condition, 0),
+	}
+}
+
+// WithContext sets the context for this operation (optional)
+func (b *{{.PascalName}}CountBuilder) WithContext(ctx context.Context) *{{.PascalName}}CountBuilder {
+	b.query.Query.WithContext(ctx)
+	return b
+}
+
+// Where adds filter conditions
+func (b *{{.PascalName}}CountBuilder) Where(condition {{.TablePackageName}}.Condition) *{{.PascalName}}CountBuilder {
+	b.conditions = append(b.conditions, condition)
+	return b
+}
+
+// Exec executes the count query
+func (b *{{.PascalName}}CountBuilder) Exec() (int64, error) {
+	// Apply WHERE conditions
+	for _, cond := range b.conditions {
+		applyCondition{{.PascalName}}(b.query.Query, cond)
+	}
+
+	// Execute count
+	return b.query.Query.Count(b.query.Query.GetContext())
+}

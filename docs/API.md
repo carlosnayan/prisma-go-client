@@ -47,56 +47,59 @@ client := db.NewClient(dbDriver)
 
 ## Fluent API
 
-Each model has fluent builders accessible through the client.
+Each model has fluent builders accessible through the client using Prisma-like method names with Ent-like fluency.
 
-### Available Builders
+### Available Methods
 
-- `client.Authors.Create()` - Returns a Create builder
-- `client.Authors.FindMany()` - Returns a FindMany builder
-- `client.Authors.FindFirst()` - Returns a FindFirst builder
-- `client.Authors.Update()` - Returns an Update builder
-- `client.Authors.Delete()` - Returns a Delete builder
-- `client.Authors.Upsert()` - Returns an Upsert builder (create or update)
-- `client.Authors.WithContext(ctx)` - Sets the context for subsequent operations
+**Query Methods:**
 
-### Context Management
+- `client.Authors().FindFirst()` - Find first matching record
+- `client.Authors().FindMany()` - Find multiple records
+- `client.Authors().Count()` - Count matching records
 
-You can set a context once and reuse it for multiple operations:
+**Mutation Methods:**
+
+- `client.Authors().Create()` - Create a single record
+- `client.Authors().CreateMany()` - Create multiple records
+- `client.Authors().UpdateMany()` - Update multiple records
+- `client.Authors().UpdateOneID(id)` - Update single record by ID
+- `client.Authors().Delete()` - Delete matching records
+
+### Context Management (Optional)
+
+Context can be added optionally using `WithContext()`. If not provided, `context.Background()` is used:
 
 ```go
-// Set context once
-query := client.Authors.WithContext(ctx)
+import (
+    "context"
+    "my-app/db"
+    "my-app/db/authors" // Table package for type-safe filters
+)
 
-// Use Exec() without passing context explicitly
-user, err := query.Create().
-    Data(inputs.AuthorsCreateInput{
-        Email: db.String("author@example.com"),
-        FirstName: "John", LastName: "Doe",
-    }).
-    Exec() // Uses stored context
+// WithContext is optional
+user, err := client.Authors().FindFirst().
+    Where(authors.EmailEQ("test@example.com")).
+    WithContext(ctx). // optional
+    Exec()
 
-// Explicit context still works and takes priority
-user, err := query.Create().
-    Data(inputs.AuthorsCreateInput{
-        Email: db.String("author@example.com"),
-    }).
-    ExecWithContext(otherCtx) // Uses otherCtx instead
+// Without WithContext - uses context.Background()
+user, err := client.Authors().FindFirst().
+    Where(authors.EmailEQ("test@example.com")).
+    Exec() // Uses context.Background()
 ```
-
-If no context is stored and `Exec()` is called without parameters, `context.Background()` is used as fallback.
 
 ## CRUD Operations
 
 ### Create
 
 ```go
-// Create a single record using fluent API
-user, err := client.Authors.Create().
-	Data(inputs.AuthorsCreateInput{
-		Email: db.String("author@example.com"),
-		FirstName: "John", LastName: "Doe",
-	}).
-	Exec(ctx)
+// Create a single record using fluent API with Set methods
+user, err := client.Authors().Create().
+    SetEmail("author@example.com").
+    SetFirstName("John").
+    SetLastName("Doe").
+    WithContext(ctx). // optional
+    Exec()
 ```
 
 #### Required Fields Validation
@@ -205,417 +208,235 @@ result, err := client.Authors.CreateMany().
 ### Read
 
 ```go
-// Find first matching record with Select
-user, err := client.Authors.FindFirst().
-	Select(inputs.AuthorsSelect{
-		Email: true,
-		Name:  true,
-	}).
-	Where(inputs.AuthorsWhereInput{
-		Email: db.String("author@example.com"),
-	}).
-	Exec(ctx)
+import (
+    "my-app/db"
+    "my-app/db/authors" // Table package for type-safe filters
+)
 
-// Find many records with Select and Where
-users, err := client.Authors.FindMany().
-	Select(inputs.AuthorsSelect{
-		Email: true,
-		Name:  true,
-	}).
-	Where(inputs.AuthorsWhereInput{
-		Email: db.Contains("author"),
-	}).
-	Exec(ctx)
+// Find first matching record
+user, err := client.Authors().FindFirst().
+    Where(authors.EmailEQ("author@example.com")).
+    WithContext(ctx). // optional
+    Exec()
+
+// Find many records with filters
+users, err := client.Authors().FindMany().
+    Where(authors.EmailContains("author")).
+    Limit(10).
+    WithContext(ctx). // optional
+    Exec()
+
+// Find with multiple conditions (AND)
+users, err := client.Authors().FindMany().
+    Where(authors.And(
+        authors.EmailContains("author"),
+        authors.ActiveEQ(true),
+    )).
+    Exec()
+
+// Find with OR conditions
+users, err := client.Authors().FindMany().
+    Where(authors.Or(
+        authors.EmailEQ("user1@example.com"),
+        authors.EmailEQ("user2@example.com"),
+    )).
+    Exec()
 ```
 
 ### Update
 
 ```go
-// Update single record
-err := client.Authors.Update().
-	Where(inputs.AuthorsWhereInput{
-		Id: db.Int(1),
-	}).
-	Data(inputs.AuthorsUpdateInput{
-		Bio: db.String("Updated biography"),
-	}).
-	Exec(ctx)
+// UpdateMany - update multiple records
+err := client.Authors().UpdateMany().
+    Where(authors.StatusEQ("inactive")).
+    SetActive(false).
+    SetUpdatedAt(time.Now()).
+    WithContext(ctx). // optional
+    Exec()
+
+// UpdateOneID - update single record by ID
+err := client.Authors().UpdateOneID(123).
+    SetBio("Updated biography").
+    SetActive(true).
+    WithContext(ctx). // optional
+    Exec()
 ```
 
 ### Delete
 
 ```go
-// Delete single record
-err := client.Authors.Delete().
-	Where(inputs.AuthorsWhereInput{
-		Id: db.Int(1),
-	}).
-	Exec()
+// Delete matching records
+err := client.Authors().Delete().
+    Where(authors.EmailEQ("old@example.com")).
+    WithContext(ctx). // optional
+    Exec()
+
+// Delete with multiple conditions
+err := client.Authors().Delete().
+    Where(authors.And(
+        authors.StatusEQ("inactive"),
+        authors.EmailContains("temp"),
+    )).
+    Exec()
 ```
 
-### DeleteMany
+### Count
 
-Delete multiple records in a single operation. Unlike `Delete`, the `Where` clause is optional.
+Count matching records:
 
 ```go
-// Delete records matching a condition
-query := client.Genres.WithContext(ctx)
-result, err := query.DeleteMany().
-	Where(inputs.GenresWhereInput{
-		Name: filters.Strings.Contains("Fiction"),
-	}).
-	Exec()
-fmt.Printf("Deleted %d genres\n", result.Count)
-```
+// Count all records
+count, err := client.Authors().Count().
+    WithContext(ctx). // optional
+    Exec()
 
-**Without Where - deletes ALL records from the table:**
+// Count with filter
+count, err := client.Authors().Count().
+    Where(authors.ActiveEQ(true)).
+    Exec()
 
-```go
-// Delete ALL records from the genres table
-result, err := client.Genres.DeleteMany().Exec()
-if err != nil {
-	log.Fatal(err)
-}
-fmt.Printf("Deleted %d records\n", result.Count)
-```
-
-**With ExecWithContext:**
-
-```go
-// Using explicit context
-result, err := client.Authors.DeleteMany().
-	Where(inputs.AuthorsWhereInput{
-		Nationality: filters.Strings.Equals("Unknown"),
-	}).
-	ExecWithContext(ctx)
-```
-
-| Method         | Where    | Returns                 |
-| -------------- | -------- | ----------------------- |
-| `Delete()`     | Required | `error`                 |
-| `DeleteMany()` | Optional | `*BatchPayload` (count) |
-
-### Upsert
-
-Upsert combines create and update into a single operation: if a matching record exists, it updates it; otherwise, it creates a new record.
-
-```go
-// Create or update a genre based on unique name
-genre, err := client.Genres.Upsert().
-	Where(inputs.GenresWhereInput{
-		Name: filters.Strings.Equals("Science Fiction"),
-	}).
-	Create(inputs.GenresCreateInput{
-		Name:        "Science Fiction",
-		Description: inputs.String.Set("Stories about futuristic science and technology"),
-	}).
-	Update(inputs.GenresUpdateInput{
-		Description: inputs.String.Set("Updated description for Science Fiction"),
-	}).
-	Exec(ctx)
-```
-
-#### How Upsert Works
-
-1. **Where** - Condition to find existing record (accepts **any column**, not just unique fields)
-2. **Create** - Data for new record if not found
-3. **Update** - Data to apply if record exists
-
-| Scenario                  | Result                     |
-| ------------------------- | -------------------------- |
-| Record **does not exist** | Creates with `Create` data |
-| Record **exists**         | Updates with `Update` data |
-
-> [!NOTE]
-> The `Where` clause accepts **any column**, not just `@unique` fields. When you use a unique index in the Where clause, the query is automatically optimized for better performance.
-
-#### Upsert with Unique Field (Recommended)
-
-For optimal performance with models that have `@unique` fields, use the unique field in Where:
-
-```go
-// books.isbn is @unique - automatically optimized
-book, err := client.Books.Upsert().
-	Where(inputs.BooksWhereInput{
-		Isbn: filters.Strings.Equals("978-0-13-468599-1"),
-	}).
-	Create(inputs.BooksCreateInput{
-		Title: "The Pragmatic Programmer",
-		Isbn:  inputs.String.Set("978-0-13-468599-1"),
-	}).
-	Update(inputs.BooksUpdateInput{
-		Title: inputs.String.Set("The Pragmatic Programmer (Updated)"),
-	}).
-	ExecWithContext(ctx)
-```
-
-#### Upsert with Composite Unique Constraint
-
-For models with `@@unique([field1, field2])`, include ALL constraint fields in Where:
-
-```go
-// book_authors has @@unique([id_book, id_author])
-bookAuthor, err := client.BookAuthors.Upsert().
-	Where(inputs.BookAuthorsWhereInput{
-		IdBook:   filters.String(bookId),
-		IdAuthor: filters.String(authorId),
-	}).
-	Create(inputs.BookAuthorsCreateInput{
-		IdBook:   bookId,
-		IdAuthor: authorId,
-		Role:     inputs.String.Set("author"),
-		Order:    0,
-	}).
-	Update(inputs.BookAuthorsUpdateInput{
-		Role:  inputs.String.Set("co-author"),
-		Order: inputs.Int.Set(1),
-	}).
-	Exec(ctx)
-```
-
-#### Unique Constraints and Upsert Behavior
-
-When using Upsert with models that have unique constraints, the behavior depends on which fields are used in the Where clause.
-
-**Example Schema (from schema.prisma):**
-
-```prisma
-model chapters {
-  id_chapter     String @id @default(dbgenerated("gen_random_uuid()"))
-  id_book        String
-  chapter_number Int
-  title          String
-  content        String?
-
-  @@unique([id_book, chapter_number], map: "chapters_unique_book_number")
-}
-```
-
-**Decision Table for `@@unique([id_book, chapter_number])`:**
-
-| Where Clause                     | Match Type      | Behavior                            |
-| -------------------------------- | --------------- | ----------------------------------- |
-| `{IdBook, ChapterNumber}`        | ✅ Exact match  | Works correctly                     |
-| `{IdBook}`                       | ❌ Incomplete   | May find/update wrong record        |
-| `{ChapterNumber}`                | ❌ Incomplete   | May find/update wrong record        |
-| `{IdBook, ChapterNumber, Title}` | ⚠️ Extra fields | Works, but Title used for filtering |
-
-**Best Practice:** When using Upsert with composite unique constraints, always include **all fields** that form the unique constraint in your Where clause.
-
-```go
-// ✅ Correct: All unique constraint fields
-client.Chapters.Upsert().
-	Where(inputs.ChaptersWhereInput{
-		IdBook:        filters.Strings.Equals(bookId),
-		ChapterNumber: filters.Int.Equals(1),
-	})
-
-// ⚠️ Incomplete: Missing ChapterNumber
-client.Chapters.Upsert().
-	Where(inputs.ChaptersWhereInput{
-		IdBook: filters.String(bookId),
-	})
-```
-
-#### Upsert Validation Errors
-
-All three methods (Where, Create, Update) are required:
-
-```go
-// ❌ Error: Missing Where
-_, err := client.Genres.Upsert().Create(...).Update(...).Exec()
-// "where is required for upsert"
-
-// ❌ Error: Missing Create
-_, err := client.Genres.Upsert().Where(...).Update(...).Exec()
-// "create is required for upsert"
-
-// ❌ Error: Missing Update
-_, err := client.Genres.Upsert().Where(...).Create(...).Exec()
-// "update is required for upsert"
-```
-
-#### Upsert in Data Sync Scenarios
-
-```go
-// Sync book-store availability from external source
-for _, storeData := range externalStoreData {
-	// book_stores has @@unique([id_book, id_store])
-	_, err := client.BookStores.Upsert().
-		Where(inputs.BookStoresWhereInput{
-			IdBook:  filters.String(storeData.BookID),
-			IdStore: filters.String(storeData.StoreID),
-		}).
-		Create(inputs.BookStoresCreateInput{
-			IdBook:        storeData.BookID,
-			IdStore:       storeData.StoreID,
-			Price:         storeData.Price,
-			StockQuantity: storeData.Stock,
-		}).
-		Update(inputs.BookStoresUpdateInput{
-			Price:         inputs.Decimal.Set(storeData.Price),
-			StockQuantity: inputs.Int.Set(storeData.Stock),
-		}).
-		Exec(ctx)
-
-	if err != nil {
-		log.Printf("Failed to sync store %s: %v", storeData.StoreID, err)
-	}
-}
+// Count with multiple conditions
+count, err := client.Authors().Count().
+    Where(authors.And(
+        authors.EmailContains("@example.com"),
+        authors.ActiveEQ(true),
+    )).
+    Exec()
 ```
 
 ## Query Options
 
-### Where Clauses
+### Where Clauses with Table Package Filters
+
+The new API uses type-safe filters from table packages:
 
 ```go
-// Simple where
-users, err := client.Authors.FindMany().
-	Where(inputs.AuthorsWhereInput{
-		Email: db.String("author@example.com"),
-	}).
-	Exec(ctx)
+import "my-app/db/authors"
+
+// Simple equality
+users, err := client.Authors().FindMany().
+    Where(authors.EmailEQ("author@example.com")).
+    Exec()
 
 // Multiple conditions (AND)
-users, err := client.Authors.FindMany().
-	Where(inputs.AuthorsWhereInput{
-		Email: db.String("author@example.com"),
-		Name:  db.String("John"),
-	}).
-	Exec(ctx)
+users, err := client.Authors().FindMany().
+    Where(authors.And(
+        authors.EmailEQ("author@example.com"),
+        authors.ActiveEQ(true),
+    )).
+    Exec()
 
 // OR conditions
-users, err := client.Authors.FindMany().
-	Where(inputs.AuthorsWhereInput{
-		Or: []inputs.AuthorsWhereInput{
-			{Email: db.String("author1@example.com")},
-			{Email: db.String("author2@example.com")},
-		},
-	}).
-	Exec(ctx)
-
-// NOT conditions
-users, err := client.Authors.FindMany().
-	Where(inputs.AuthorsWhereInput{
-		Not: &inputs.AuthorsWhereInput{
-			Email: db.String("admin@example.com"),
-		},
-	}).
-	Exec(ctx)
+users, err := client.Authors().FindMany().
+    Where(authors.Or(
+        authors.EmailEQ("author1@example.com"),
+        authors.EmailEQ("author2@example.com"),
+    )).
+    Exec()
 ```
 
 ### Text Operators
 
+Table packages provide type-safe text filter methods:
+
 ```go
 // Contains
-users, err := client.Authors.FindMany().
-	Where(inputs.AuthorsWhereInput{
-		Email: db.Contains("author"),
-	}).
-	Exec(ctx)
+users, err := client.Authors().FindMany().
+    Where(authors.EmailContains("author")).
+    Exec()
 
 // Starts with
-users, err := client.Authors.FindMany().
-	Where(inputs.AuthorsWhereInput{
-		FirstName: db.StartsWith("John"),
-	}).
-	Exec(ctx)
+users, err := client.Authors().FindMany().
+    Where(authors.FirstNameHasPrefix("John")).
+    Exec()
 
 // Ends with
-users, err := client.Authors.FindMany().
-	Where(inputs.AuthorsWhereInput{
-		LastName: db.EndsWith("son"),
-	}).
-	Exec(ctx)
+users, err := client.Authors().FindMany().
+    Where(authors.LastNameHasSuffix("son")).
+    Exec()
 ```
 
 ### Comparison Operators
 
+Table packages provide comparison operators for all field types:
+
 ```go
+import "my-app/db/books"
+
 // Greater than
-posts, err := client.Books.FindMany().
-	Where(inputs.BooksWhereInput{
-		PageCount: db.IntGt(100),
-	}).
-	Exec(ctx)
+books, err := client.Books().FindMany().
+    Where(books.PageCountGT(100)).
+    Exec()
 
 // Less than
-posts, err := client.Books.FindMany().
-	Where(inputs.BooksWhereInput{
-		PageCount: db.IntLt(10),
-	}).
-	Exec(ctx)
+books, err := client.Books().FindMany().
+    Where(books.PageCountLT(50)).
+    Exec()
 
 // Greater than or equal
-posts, err := client.Books.FindMany().
-	Where(inputs.BooksWhereInput{
-		PageCount: db.IntGte(100),
-	}).
-	Exec(ctx)
+books, err := client.Books().FindMany().
+    Where(books.PageCountGTE(100)).
+    Exec()
 
 // Less than or equal
-posts, err := client.Books.FindMany().
-	Where(inputs.BooksWhereInput{
-		PageCount: db.IntLte(10),
-	}).
-	Exec(ctx)
+books, err := client.Books().FindMany().
+    Where(books.PageCountLTE(500)).
+    Exec()
 
-// In array (using StringIn helper)
-users, err := client.Authors.FindMany().
-	Where(inputs.AuthorsWhereInput{
-		Id: db.Int(1), // For exact match, use Int()
-	}).
-	Exec(ctx)
+// Not equal
+books, err := client.Books().FindMany().
+    Where(books.StatusNEQ("draft")).
+    Exec()
 ```
 
 ### Ordering
 
 ```go
-// Order by single field
-users, err := client.Authors.FindMany().
-	OrderBy(db.AuthorsOrderByInput{
-		CreatedAt: db.SortOrderDesc,
-	}).Exec()
+import "my-app/db/authors"
 
-// Order by multiple fields
-users, err := client.Authors.FindMany().
-	OrderBy(db.AuthorsOrderByInput{
-		CreatedAt: db.SortOrderDesc,
-		Name:      db.SortOrderAsc,
-	}).Exec()
+// Order by single field (descending)
+users, err := client.Authors().FindMany().
+    OrderBy(authors.FieldCreatedAt, authors.OrderDesc).
+    Exec()
+
+// Order by single field (ascending)
+users, err := client.Authors().FindMany().
+    OrderBy(authors.FieldEmail, authors.OrderAsc).
+    Exec()
 ```
 
 ### Pagination
 
 ```go
-// Take results
-users, err := client.Authors.FindMany().
-	Take(10).Exec()
+// Limit results
+users, err := client.Authors().FindMany().
+    Limit(10).
+    Exec()
 
 // Skip results
-users, err := client.Authors.FindMany().
-	Skip(20).Exec()
+users, err := client.Authors().FindMany().
+    Skip(20).
+    Exec()
 
-// Take and skip (pagination)
+// Limit and skip (pagination)
 page := 1
 pageSize := 10
-users, err := client.Authors.FindMany().
-	Skip((page - 1) * pageSize).
-	Take(pageSize).
-	Exec()
+users, err := client.Authors().FindMany().
+    Skip((page - 1) * pageSize).
+    Limit(pageSize).
+    Exec()
 ```
 
 ### Selecting Fields
 
 ```go
-// Select specific fields using type-safe Select
-users, err := client.Authors.FindMany().
-	Select(inputs.AuthorsSelect{
-		Id:    true,
-		Email: true,
-		Name:  true,
-	}).
-	Exec(ctx)
+import "my-app/db/authors"
+
+// Select specific fields using table package constants
+users, err := client.Authors().FindMany().
+    Select(authors.FieldEmail, authors.FieldFirstName, authors.FieldLastName).
+    Where(authors.ActiveEQ(true)).
+    Exec()
 ```
 
 ### Custom Types with ExecTyped (Go 1.18+)
@@ -641,72 +462,6 @@ type UserDTO struct {
 var userDTO *UserDTO
 err := client.Authors.FindFirst().
 	Select(inputs.AuthorsSelect{
-		Id:    true,
-		Email: true,
-		Name:  true,
-	}).
-	Where(inputs.AuthorsWhereInput{
-		Email: db.String("author@example.com"),
-	}).
-	ExecTypedWithContext(ctx, &userDTO)
-if err != nil {
-	log.Fatal(err)
-}
-// userDTO is automatically of type *UserDTO, no casting needed!
-
-// Find many with custom DTO
-var usersDTO []UserDTO
-err = client.Authors.FindMany().
-	Select(inputs.AuthorsSelect{
-		Id:    true,
-		Email: true,
-		Name:  true,
-	}).
-	Where(inputs.AuthorsWhereInput{
-		Email: db.Contains("author"),
-	}).
-	ExecTypedWithContext(ctx, &usersDTO)
-if err != nil {
-	log.Fatal(err)
-}
-// usersDTO is automatically of type []UserDTO, no casting needed!
-```
-
-**Example with WithContext():**
-
-```go
-// Set context once
-query := client.Authors.WithContext(ctx)
-
-// Find first with custom DTO using stored context
-var userDTO *UserDTO
-err := query.FindFirst().
-	Select(inputs.AuthorsSelect{
-		Id:    true,
-		Email: true,
-		Name:  true,
-	}).
-	Where(inputs.AuthorsWhereInput{
-		Email: db.String("author@example.com"),
-	}).
-	ExecTyped(&userDTO) // Uses stored context
-
-// Find many with custom DTO using stored context
-var usersDTO []UserDTO
-err = query.FindMany().
-	Select(inputs.AuthorsSelect{
-		Id:    true,
-		Email: true,
-		Name:  true,
-	}).
-	Where(inputs.AuthorsWhereInput{
-		Email: db.Contains("author"),
-	}).
-	ExecTyped(&usersDTO) // Uses stored context
-```
-
-**Field Mapping:**
-
 - Fields are mapped using `json` or `db` tags
 - If a tag matches the database column name, the field will be populated
 - Fields without matching tags are ignored
@@ -761,35 +516,6 @@ import (
 	"my-app/db"
 	"my-app/db/filters"
 	"my-app/db/inputs"
-)
-
-// Basic full-text search
-posts, err := client.Posts.FindMany().
-	Where(inputs.PostsWhereInput{
-		Content: filters.FullTextSearch("golang prisma"),
-	}).
-	Exec(ctx)
-
-// With custom configuration (PostgreSQL)
-posts, err := client.Posts.FindMany().
-	Where(inputs.PostsWhereInput{
-		Content: filters.FullTextSearchConfig(map[string]interface{}{
-			"query": "golang & prisma",
-			"config": "english", // or "portuguese", "spanish", etc.
-		}),
-	}).
-	Exec(ctx)
-```
-
-#### JSON Array Operators
-
-For fields with JSON array type, use these specialized operators:
-
-### Nullable Field Handling
-
-The Prisma Go Client provides a fluent API for handling nullable fields with explicit NULL support. This allows you to distinguish between "not providing a value" and "explicitly setting to NULL".
-
-#### Basic Usage
 
 Use the nullable wrapper API from the `inputs` package:
 
@@ -801,87 +527,6 @@ author, err := client.Authors.Create().
         LastName:    inputs.String.Set("Asimov"),
         Bio:         inputs.String.Set("Science fiction writer"),
         Nationality: inputs.String.Set("American"),
-    }).
-    Exec(ctx)
-
-// ✅ Setting fields to explicit NULL
-author, err := client.Authors.Update().
-    Where(inputs.AuthorsWhereInput{
-        IdAuthor: filters.String.Equals(authorId),
-    }).
-    Data(inputs.AuthorsUpdateInput{
-        Website: inputs.String.SetNull(),  // Explicitly set to NULL
-        Email:   inputs.String.SetNull(),  // Explicitly set to NULL
-    }).
-    Exec(ctx)
-```
-
-#### Available Nullable Wrappers
-
-All primitive types have nullable wrappers:
-
-| Wrapper           | Set Method                | SetNull Method | Use Case             |
-| ----------------- | ------------------------- | -------------- | -------------------- |
-| `inputs.String`   | `.Set(v string)`          | `.SetNull()`   | String fields        |
-| `inputs.Int`      | `.Set(v int)`             | `.SetNull()`   | Integer fields       |
-| `inputs.Int64`    | `.Set(v int64)`           | `.SetNull()`   | Int64 fields         |
-| `inputs.Float`    | `.Set(v float64)`         | `.SetNull()`   | Float/Decimal fields |
-| `inputs.Bool`     | `.Set(v bool)`            | `.SetNull()`   | Boolean fields       |
-| `inputs.DateTime` | `.Set(v time.Time)`       | `.SetNull()`   | DateTime fields      |
-| `inputs.Json`     | `.Set(v json.RawMessage)` | `.SetNull()`   | JSON fields          |
-| `inputs.Bytes`    | `.Set(v []byte)`          | `.SetNull()`   | Bytes fields         |
-
-#### Mix of Values and NULL
-
-You can combine regular values with explicit NULLs:
-
-```go
-book, err := client.Books.Create().
-    Data(inputs.BooksCreateInput{
-        Title:       inputs.String.Set("Foundation"),
-        Subtitle:    inputs.String.SetNull(),  // No subtitle
-        Description: inputs.String.Set("First book in the Foundation series"),
-        PageCount:   inputs.Int.Set(255),
-        Price:       inputs.Float.SetNull(),  // Price not set yet
-        IsActive:    true,  // Required fields don't need wrappers
-    }).
-    Exec(ctx)
-```
-
-#### Update Operations with Partial Data
-
-In updates, you can set some fields to NULL while updating others:
-
-```go
-// Update a book: clear subtitle, update description, leave price unchanged
-err := client.Books.Update().
-    Where(inputs.BooksWhereInput{
-        IdBook: filters.String.Equals(bookId),
-    }).
-    Data(inputs.BooksUpdateInput{
-        Subtitle:    inputs.String.SetNull(),                  // Clear subtitle
-        Description: inputs.String.Set("Updated description"), // Update description
-        // Price field omitted - will not be changed
-    }).
-    Exec(ctx)
-```
-
-#### Three States of Nullable Fields
-
-Nullable fields support three distinct states:
-
-| State       | JSON Output   | Use Case                | Example                            |
-| ----------- | ------------- | ----------------------- | ---------------------------------- |
-| **Not Set** | Field omitted | Don't modify this field | Field not included in Input struct |
-| **NULL**    | `null`        | Clear the field value   | `inputs.String.SetNull()`          |
-| **Value**   | Actual value  | Set a specific value    | `inputs.String.Set("value")`       |
-
-```go
-// Example showing all three states
-client.Authors.Update().
-    Data(inputs.AuthorsUpdateInput{
-        Bio: inputs.String.Set("New bio"),     // 1. Set to value
-        Website: inputs.String.SetNull(),       // 2. Set to NULL
         // Email is not set                      // 3. Not modified
     }).
     Exec(ctx)
@@ -906,7 +551,7 @@ func UpdateUserProfile(ctx context.Context, userID string, updates ProfileUpdate
 
     return client.Authors.Update().
         Where(inputs.AuthorsWhereInput{
-            IdAuthor: filters.String.Equals(userID),
+            IdAuthor: authors.IdAuthorEQ(userID),
         }).
         Data(updateData).
         Exec(ctx)
@@ -927,89 +572,6 @@ inputs.Int.Set(42)
 
 // ❌ Compile error - type mismatch
 inputs.String.Set(42)  // Cannot use int as string
-inputs.Int.Set("text") // Cannot use string as int
-```
-
-####
-
-```go
-// Has - check if array contains a specific value
-users, err := client.Users.FindMany().
-	Where(inputs.UsersWhereInput{
-		Tags: filters.Has("admin"),
-	}).
-	Exec(ctx)
-
-// HasEvery - array contains all specified values
-users, err := client.Users.FindMany().
-	Where(inputs.UsersWhereInput{
-		Tags: filters.HasEvery([]interface{}{"admin", "editor"}),
-	}).
-	Exec(ctx)
-
-// HasSome - array contains any of the specified values
-users, err := client.Users.FindMany().
-	Where(inputs.UsersWhereInput{
-		Tags: filters.HasSome([]interface{}{"admin", "editor", "viewer"}),
-	}).
-	Exec(ctx)
-
-// IsEmpty - array is empty
-users, err := client.Users.FindMany().
-	Where(inputs.UsersWhereInput{
-		Tags: filters.IsEmpty(),
-	}).
-	Exec(ctx)
-```
-
-#### Null Check Operators
-
-Check for NULL values in database fields:
-
-```go
-import (
-	"my-app/db/filters"
-	"my-app/db/inputs"
-)
-
-// IS NULL - check if string field is null
-users, err := client.Users.FindMany().
-	Where(inputs.UsersWhereInput{
-		Bio: filters.Strings.IsNull(),
-	}).
-	Exec(ctx)
-
-// IS NOT NULL - check if string field is not null
-users, err := client.Users.FindMany().
-	Where(inputs.UsersWhereInput{
-		Bio: filters.Strings.IsNotNull(),
-	}).
-	Exec(ctx)
-
-// For DateTime fields
-users, err := client.Users.FindMany().
-	Where(inputs.UsersWhereInput{
-		DeletedAt: filters.DateTime.IsNull(),
-	}).
-	Exec(ctx)
-```
-
-#### Case-Insensitive Operations
-
-Perform case-insensitive string operations (uses PostgreSQL's ILIKE):
-
-```go
-// Case-insensitive contains (matches "John", "JOHN", "john", etc.)
-users, err := client.Users.FindMany().
-	Where(inputs.UsersWhereInput{
-		Name: filters.Strings.ContainsInsensitive("john"),
-	}).
-	Exec(ctx)
-
-// Other case-insensitive operators
-filters.Strings.StartsWithInsensitive("prefix")
-filters.Strings.EndsWithInsensitive("suffix")
-```
 
 ### Including Relations
 
@@ -1301,29 +863,6 @@ The `Scan()` function automatically handles various column naming patterns:
 | `ik.name as integration_key_name` | `db:"integration_key_name"` |
 | `COUNT(*) as total`               | `db:"total"`                |
 
-## Soft Deletes
-
-If your model has `deletedAt` field:
-
-```go
-// Soft delete
-err := client.Authors.Delete(...).Exec()
-
-// Restore
-err := client.Authors.Restore(...).Exec()
-
-// Force delete (permanent)
-err := client.Authors.ForceDelete(...).Exec()
-
-// Include deleted records
-users, err := client.Authors.FindMany().
-	IncludeDeleted().Exec()
-
-// Only deleted records
-users, err := client.Authors.FindMany().
-	OnlyDeleted().Exec()
-```
-
 ## JSON Fields
 
 ```go
@@ -1496,5 +1035,4 @@ err = client.Raw().QueryRow("SELECT * FROM books WHERE id = $1", 999).Exec().Sca
 4. Select only needed fields
 5. Use indexes for frequently queried fields
 6. Validate input data
-7. Use soft deletes when appropriate
-8. Monitor query performance
+7. Monitor query performance

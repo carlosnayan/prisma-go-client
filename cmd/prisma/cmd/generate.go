@@ -212,6 +212,11 @@ func runGenerateOnce(schemaPath string) error {
 		return fmt.Errorf("error generating queries: %w", err)
 	}
 
+	// Generate per-table packages with column-specific filter methods
+	if err := generator.GenerateTablePackages(schema, absoluteOutputDir); err != nil {
+		return fmt.Errorf("error generating table packages: %w", err)
+	}
+
 	if err := generator.GenerateFilters(schema, absoluteOutputDir); err != nil {
 		return fmt.Errorf("error generating filters: %w", err)
 	}

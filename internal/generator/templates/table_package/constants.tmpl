@@ -1,0 +1,15 @@
+// OrderDirection represents the direction of an ORDER BY clause
+type OrderDirection int
+
+const (
+	// OrderAsc represents ascending order
+	OrderAsc OrderDirection = iota
+	// OrderDesc represents descending order
+	OrderDesc
+)
+
+// Field names for use with OrderBy and Select
+const (
+{{range .Fields}}	Field{{.Name}} = "{{.DBName}}"
+{{end}}
+)

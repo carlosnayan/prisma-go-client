@@ -76,6 +76,9 @@ func TestGeneratedCode_Compiles(t *testing.T) {
 	if err := GenerateInputs(schema, outputDir); err != nil {
 		t.Fatalf("GenerateInputs failed: %v", err)
 	}
+	if err := GenerateTablePackages(schema, outputDir); err != nil {
+		t.Fatalf("GenerateTablePackages failed: %v", err)
+	}
 	if err := GenerateQueries(schema, outputDir); err != nil {
 		t.Fatalf("GenerateQueries failed: %v", err)
 	}
@@ -445,6 +448,9 @@ func TestGeneratedCode_OptionalFieldsPointerHandling(t *testing.T) {
 	}
 	if err := GenerateInputs(schema, outputDir); err != nil {
 		t.Fatalf("GenerateInputs failed: %v", err)
+	}
+	if err := GenerateTablePackages(schema, outputDir); err != nil {
+		t.Fatalf("GenerateTablePackages failed: %v", err)
 	}
 	if err := GenerateQueries(schema, outputDir); err != nil {
 		t.Fatalf("GenerateQueries failed: %v", err)

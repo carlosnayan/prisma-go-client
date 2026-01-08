@@ -1,0 +1,28 @@
+{{$needsTime := false}}{{range .Fields}}{{if eq .FilterType "datetime"}}{{$needsTime = true}}{{end}}{{end}}{{if $needsTime}}import "time"
+
+{{end}}// Condition represents a where condition for queries
+type Condition struct {
+	Column   string
+	Operator string
+	Value    interface{}
+	IsLogic  bool        // true for AND/OR
+	Children []Condition // for AND/OR conditions
+}
+
+// And combines multiple conditions with AND logic
+func And(conditions ...Condition) Condition {
+	return Condition{
+		Operator: "AND",
+		IsLogic:  true,
+		Children: conditions,
+	}
+}
+
+// Or combines multiple conditions with OR logic
+func Or(conditions ...Condition) Condition {
+	return Condition{
+		Operator: "OR",
+		IsLogic:  true,
+		Children: conditions,
+	}
+}

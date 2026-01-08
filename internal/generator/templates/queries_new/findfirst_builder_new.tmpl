@@ -1,0 +1,82 @@
+// {{.PascalName}}FindFirstBuilder is a fluent builder for finding the first matching record
+type {{.PascalName}}FindFirstBuilder struct {
+	query        *{{.PascalName}}Query
+	conditions   []{{.TablePackageName}}.Condition
+	orderByClauses []{{.PascalName}}OrderByClause
+	selectFields []string
+}
+
+// {{.PascalName}}OrderByClause represents an ORDER BY clause
+type {{.PascalName}}OrderByClause struct {
+	Field     string
+	Direction {{.TablePackageName}}.OrderDirection
+}
+
+// FindFirst returns a builder for finding the first matching record
+// Example: client.{{.PascalName}}().FindFirst().Where({{.LowerName}}.EmailEQ("test")).Exec()
+func (q *{{.PascalName}}Query) FindFirst() *{{.PascalName}}FindFirstBuilder {
+	return &{{.PascalName}}FindFirstBuilder{
+		query:      q,
+		conditions: make([]{{.TablePackageName}}.Condition, 0),
+	}
+}
+
+// WithContext sets the context for this query (optional)
+func (b *{{.PascalName}}FindFirstBuilder) WithContext(ctx context.Context) *{{.PascalName}}FindFirstBuilder {
+	b.query.Query.WithContext(ctx)
+	return b
+}
+
+// Where adds filter conditions
+func (b *{{.PascalName}}FindFirstBuilder) Where(condition {{.TablePackageName}}.Condition) *{{.PascalName}}FindFirstBuilder {
+	b.conditions = append(b.conditions, condition)
+	return b
+}
+
+// OrderBy adds ordering
+func (b *{{.PascalName}}FindFirstBuilder) OrderBy(field string, direction {{.TablePackageName}}.OrderDirection) *{{.PascalName}}FindFirstBuilder {
+	b.orderByClauses = append(b.orderByClauses, {{.PascalName}}OrderByClause{
+		Field:     field,
+		Direction: direction,
+	})
+	return b
+}
+
+// Select specifies which fields to return
+func (b *{{.PascalName}}FindFirstBuilder) Select(fields ...string) *{{.PascalName}}FindFirstBuilder {
+	b.selectFields = fields
+	return b
+}
+
+// Exec executes the query and returns the first matching record
+func (b *{{.PascalName}}FindFirstBuilder) Exec() (*models.{{.PascalName}}, error) {
+	// Apply WHERE conditions
+	for _, cond := range b.conditions {
+		applyCondition{{.PascalName}}(b.query.Query, cond)
+	}
+
+	// Apply LIMIT 1
+	b.query.Query.Take(1)
+
+	// Apply ORDER BY
+	for _, order := range b.orderByClauses {
+		if order.Direction == {{.TablePackageName}}.OrderDesc {
+			b.query.Query.Order(order.Field + " DESC")
+		} else {
+			b.query.Query.Order(order.Field + " ASC")
+		}
+	}
+
+	// Apply SELECT if specified
+	if len(b.selectFields) > 0 {
+		b.query.Query.Select(b.selectFields...)
+	}
+
+	// Execute
+	var result models.{{.PascalName}}
+	err := b.query.Query.First(b.query.Query.GetContext(), &result)
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}

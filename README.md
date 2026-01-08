@@ -189,7 +189,7 @@ import (
     "log"
 
     "my-app/db" // Your generated client
-    "my-app/db/inputs" // Generated input types (WhereInput, etc.)
+    "my-app/db/authors" // Table package for Authors model
     "my-app/database" // Your database setup package
 )
 
@@ -199,103 +199,69 @@ func main() {
     // Setup client (call once at application startup)
     database.SetupPrismaClient()
 
-    // Set context once and reuse it
-    query := database.Client.Authors.WithContext(ctx)
+    // New Prisma+Ent Query API with table package filters
 
-    // Create a user using fluent API (using stored context)
-    user, err := query.Create().
-        Data(inputs.AuthorsCreateInput{
-            Email: "author@example.com",
-            FirstName: "Test", LastName: "Author",
-        }).
-        Exec() // Uses stored context
+    // Create a user using fluent API
+    user, err := database.Client.Authors().Create().
+        SetEmail("author@example.com").
+        SetFirstName("Test").
+        SetLastName("Author").
+        WithContext(ctx). // optional
+        Exec()
     if err != nil {
         log.Fatal(err)
     }
     log.Printf("Created user: %+v\n", user)
 
-    // Find users using fluent API with type-safe WhereInput
-    users, err := query.FindMany().
-        Where(inputs.AuthorsWhereInput{
-            Email: db.Contains("author"),
-        }).
-        Exec() // Uses stored context
+    // Find users using fluent API with type-safe filters from table package
+    users, err := database.Client.Authors().FindMany().
+        Where(authors.EmailContains("author")).
+        Limit(10).
+        WithContext(ctx). // optional
+        Exec()
     if err != nil {
         log.Fatal(err)
     }
     log.Printf("Found %d users\n", len(users))
 
-    // Upsert: Create or Update based on Where condition
-    // Where accepts any column - automatically optimized when using unique indexes
-    query := database.Client.Genres.WithContext(ctx)
-    upsertedGenre, err := query.Upsert().
-        Where(inputs.GenresWhereInput{
-            Name: db.String("Science Fiction"),
-        }).
-        Create(inputs.GenresCreateInput{
-            Name:        "Science Fiction",
-            Description: db.String("Stories about futuristic science"),
-        }).
-        Update(inputs.GenresUpdateInput{
-            Description: db.String("Updated description for Sci-Fi"),
-        }).
+    // Order results
+    users, err = database.Client.Authors().FindMany().
+        Where(authors.ActiveEQ(true)).
+        OrderBy(authors.FieldCreatedAt, authors.OrderDesc).
+        Limit(20).
+        Skip(10).
         Exec()
     if err != nil {
         log.Fatal(err)
     }
-    log.Printf("Upserted genre: %+v\n", upsertedGenre)
+    log.Printf("Found %d active users\n", len(users))
 
 
 
-    // Find first user with Select
-    foundUser, err := query.FindFirst().
-        Select(inputs.AuthorsSelect{
-            Email: true,
-            Name:  true,
-        }).
-        Where(inputs.AuthorsWhereInput{
-            Email: db.String("author@example.com"),
-        }).
-        Exec() // Uses stored context
+    // Find first user with field selection
+    foundUser, err := database.Client.Authors().FindFirst().
+        Select(authors.FieldEmail, authors.FieldFirstName, authors.FieldLastName).
+        Where(authors.EmailEQ("author@example.com")).
+        WithContext(ctx). // optional
+        Exec()
     if err != nil {
         log.Fatal(err)
     }
     log.Printf("Found user: %+v\n", foundUser)
 
-    // Find with custom DTO using ExecTyped (requires Go 1.18+)
-    type UserDTO struct {
-        Email string `json:"email" db:"email"`
-        Name  string `json:"name" db:"name"`
-    }
-
-    var userDTO *UserDTO
-    err = query.FindFirst().
-        Select(inputs.AuthorsSelect{
-            Email: true,
-            Name:  true,
-        }).
-        Where(inputs.AuthorsWhereInput{
-            Email: db.String("author@example.com"),
-        }).
-        ExecTyped(&userDTO) // Uses stored context
+    // Count users
+    count, err := database.Client.Authors().Count().
+        Where(authors.EmailContains("@example.com")).
+        WithContext(ctx). // optional
+        Exec()
     if err != nil {
         log.Fatal(err)
     }
-    log.Printf("Found user DTO: %+v\n", userDTO)
+    log.Printf("Total users: %d\n", count)
 
-    // Find many with custom DTO
-    var usersDTO []UserDTO
-    err = query.FindMany().
-        Select(inputs.AuthorsSelect{
-            Email: true,
-            Name:  true,
-        }).
-        ExecTyped(&usersDTO) // Uses stored context
-    if err != nil {
-        log.Fatal(err)
-    }
-    log.Printf("Found %d users\n", len(usersDTO))
-
+    // Update many users
+    err = database.Client.Authors().UpdateMany().
+        Where(authors.StatusEQ("inactive")).
     // Raw SQL example (Query requires slice, QueryRow requires struct/primitive)
     type BookResult struct {
         IdBook string `db:"id_book"`
@@ -311,61 +277,6 @@ func main() {
     // Use books...
 }
 ```
-
-### 8. Nullable Field Handling with Set() and SetNull()
-
-For optional fields, use the fluent nullable wrapper API that allows explicit NULL handling:
-
-```go
-// ✅ Setting non-null values
-author, err := client.Authors.Create().
-    Data(inputs.AuthorsCreateInput{
-        FirstName:   inputs.String.Set("Isaac"),
-        LastName:    inputs.String.Set("Asimov"),
-        Bio:         inputs.String.Set("Science fiction writer"),
-        Nationality: inputs.String.Set("American"),
-    }).
-    Exec()
-
-// ✅ Setting fields to explicit NULL
-author, err := client.Authors.Update().
-    Where(inputs.AuthorsWhereInput{
-        IdAuthor: db.String(authorId),
-    }).
-    Data(inputs.AuthorsUpdateInput{
-        Website:  inputs.String.SetNull(),  // Explicitly set to NULL
-        Email:    inputs.String.SetNull(),  // Explicitly set to NULL
-    }).
-    Exec()
-
-// ✅ Mix of values and NULL
-book, err := client.Books.Create().
-    Data(inputs.BooksCreateInput{
-        Title:       inputs.String.Set("Foundation"),
-        Subtitle:    inputs.String.SetNull(),  // No subtitle
-        Description: inputs.String.Set("First book in the Foundation series"),
-        PageCount:   inputs.Int.Set(255),
-        Price:       inputs.Float.SetNull(),  // Price not set yet
-    }).
-    Exec()
-```
-
-**Available nullable wrappers in `inputs` package:**
-
-- `inputs.String.Set(v)` / `inputs.String.SetNull()`
-- `inputs.Int.Set(v)` / `inputs.Int.SetNull()`
-- `inputs.Int64.Set(v)` / `inputs.Int64.SetNull()`
-- `inputs.Float.Set(v)` / `inputs.Float.SetNull()`
-- `inputs.Bool.Set(v)` / `inputs.Bool.SetNull()`
-- `inputs.DateTime.Set(v)` / `inputs.DateTime.SetNull()`
-- `inputs.Json.Set(v)` / `inputs.Json.SetNull()`
-- `inputs.Bytes.Set(v)` / `inputs.Bytes.SetNull()`
-
-**Key benefits:**
-
-- **Explicit NULL**: Distinguish between "not provided" and "explicitly NULL"
-- **Type-safe**: Each type has its own wrapper
-- **Clean syntax**: Fluent API with namespace pattern
 
 ````
 
