@@ -56,9 +56,9 @@ func (b *{{.PascalName}}CreateManyBuilder) ExecWithContext(ctx context.Context) 
 	modelSlice := make([]interface{}, 0, len(b.data))
 	for _, input := range b.data {
 		result := models.{{.PascalName}}{}
-{{range .CreateFields}}{{if .IsNullable}}{{if .BaseGoType}}		// Pointer field (String, Int, DateTime, etc)
+{{range .CreateFields}}{{if .IsNullable}}{{if .BaseGoType}}		// Pointer field (primitives: String, Int, DateTime, etc)
 		result.{{.FieldName}} = input.{{.FieldName}}
-{{else}}		// NullableWrapper field (Json, Bytes)
+{{else}}		// NullableWrapper field (Json, Bytes - not using pointers)
 		if input.{{.FieldName}}.IsSet {
 			{{- if .IsNonPointerOptional}}
 			if !input.{{.FieldName}}.IsNull && input.{{.FieldName}}.Value != nil {

@@ -1,6 +1,6 @@
 // {{.PascalName}}CreateManyArgs represents data for CreateMany operation
 type {{.PascalName}}CreateManyArgs struct {
-{{range .CreateFields}}	{{.FieldName}} {{.GoType}} `json:"{{.JSONTag}},omitempty"`
+{{range .CreateFields}}	{{.FieldName}} {{if .BaseGoType}}*{{.BaseGoType}}{{else}}{{.GoType}}{{end}} `json:"{{.JSONTag}},omitempty"`
 {{end}}}
 
 // {{.PascalName}}CreateManyBuilder is a fluent builder for CreateManyArgs
@@ -17,7 +17,7 @@ func {{.PascalName}}CreateManyInput() *{{.PascalName}}CreateManyBuilder {
 
 {{range .CreateFields}}
 // Set{{.FieldName}} sets the {{.JSONTag}} field
-func (b *{{$.PascalName}}CreateManyBuilder) Set{{.FieldName}}(value {{.GoType}}) *{{$.PascalName}}CreateManyBuilder {
+func (b *{{$.PascalName}}CreateManyBuilder) Set{{.FieldName}}(value {{if .BaseGoType}}*{{.BaseGoType}}{{else}}{{.GoType}}{{end}}) *{{$.PascalName}}CreateManyBuilder {
 	b.args.{{.FieldName}} = value
 	return b
 }

@@ -185,21 +185,24 @@ func generateQueryFile(filePath string, model *parser.Model, schema *parser.Sche
 		// Calculate BaseGoType for nullable fields (for CreateMany pointers)
 		baseGoType := ""
 		if isOptional {
-			// Map Nullable wrappers to actual Go types (primitives only, not Json/Bytes)
+			// Map base types to themselves for pointer generation in CreateManyArgs
+			// mapPrismaTypeToGo returns base types (string, not *string) for CreateFields
 			switch goType {
-			case "*string":
+			case "string":
 				baseGoType = "string"
-			case "*int":
+			case "int":
 				baseGoType = "int"
-			case "*int64":
+			case "int64":
 				baseGoType = "int64"
-			case "*float64":
+			case "float64":
 				baseGoType = "float64"
-			case "*bool":
+			case "bool":
 				baseGoType = "bool"
-			case "*time.Time":
+			case "time.Time":
 				baseGoType = "time.Time"
-				// Json and Bytes don't get BaseGoType - they stay as non-pointer types
+			// Json and Bytes don't get BaseGoType - they stay as non-pointer types
+			case "json.RawMessage", "[]byte":
+				baseGoType = "" // Keep empty to use NullableWrapper
 			}
 		}
 
