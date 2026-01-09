@@ -75,12 +75,12 @@ func {{$fieldName}}NotIn(values ...{{$goType}}) Condition {
 {{end}}{{end}}{{if $isNullable}}
 // {{$fieldName}}IsNull creates a condition where {{$dbName}} IS NULL
 func {{$fieldName}}IsNull() Condition {
-	return Condition{Column: "{{$dbName}}", Operator: "IS_NULL", Value: nil}
+	return Condition{Column: "{{$dbName}}", Operator: "IS NULL", Value: nil}
 }
 
 // {{$fieldName}}IsNotNull creates a condition where {{$dbName}} IS NOT NULL
 func {{$fieldName}}IsNotNull() Condition {
-	return Condition{Column: "{{$dbName}}", Operator: "IS_NOT_NULL", Value: nil}
+	return Condition{Column: "{{$dbName}}", Operator: "IS NOT NULL", Value: nil}
 }
 
 {{end}}{{end}}

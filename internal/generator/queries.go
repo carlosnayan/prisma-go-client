@@ -249,44 +249,27 @@ func generateQueryFile(filePath string, model *parser.Model, schema *parser.Sche
 		TableName:          tableName,
 	}
 
-	// Define template order (using old templates that don't conflict)
-	templateNames := []string{
+	// Define all templates in correct order
+	allTemplateNames := []string{
+		// Base templates
 		"imports.tmpl",
 		"query_struct.tmpl",
 		"basic_methods.tmpl",
-		"where_input_converter.tmpl",
-		"apply_where_helper.tmpl",
-		// Old query builders removed - using new ones from queries_new
-		// "findfirst_builder.tmpl",
-		// "findmany_builder.tmpl",
-		// "count_builder.tmpl",
-		// "delete_builder.tmpl",
-		// "deletemany_builder.tmpl",
-		// Old templates removed: "update_builder.tmpl", "updatemany_builder.tmpl", "create_builder.tmpl"
-		// Temporarily removed until redesigned for new API: "upsert_builder.tmpl"
-		// Using new Ent-like API templates from queries_new:
 		"createmany_builder.tmpl",
+		// Ent-style API builders
+		"findfirst_builder.tmpl",
+		"findmany_builder.tmpl",
+		"count_builder.tmpl",
+		"delete_builder.tmpl",
+		"create_builder.tmpl",
+		"updatemany_builder.tmpl",
+		"update_builder.tmpl",
+		"updateone_builder.tmpl",
+		"apply_condition_helper.tmpl",
 	}
 
-	// Generate query file using old templates first
-	if err := executeQueryTemplates(filePath, templateNames, data); err != nil {
-		return err
-	}
-
-	// Generate new Prisma+Ent-like API builders from queries_new templates
-	newTemplateNames := []string{
-		"findfirst_builder_new.tmpl",
-		"findmany_builder_new.tmpl",
-		"count_builder_new.tmpl",
-		"delete_builder_new.tmpl",
-		"create_builder_new.tmpl",
-		"updatemany_builder_new.tmpl",
-		"update_builder_new.tmpl",
-		"updateone_builder_new.tmpl",
-		"apply_condition_helper_new.tmpl",
-	}
-
-	return executeQueryTemplatesFromNewDir(filePath, newTemplateNames, data)
+	// Generate all templates in single call to avoid file overwrite
+	return executeQueryTemplates(filePath, allTemplateNames, data)
 }
 
 // isNonPointerOptionalType checks if a field type doesn't use pointers in models

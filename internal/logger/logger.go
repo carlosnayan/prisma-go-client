@@ -103,9 +103,19 @@ func (l *Logger) Query(query string, args []interface{}, duration time.Duration)
 	// Formatar query com argumentos
 	formattedQuery := formatQuery(query, args)
 
+	// Formatar argumentos com tipos para debug
+	argsDebug := ""
+	if len(args) > 0 {
+		argParts := make([]string, len(args))
+		for i, arg := range args {
+			argParts[i] = fmt.Sprintf("%v(%T)", arg, arg)
+		}
+		argsDebug = fmt.Sprintf(" | ARGS: [%s]", strings.Join(argParts, ", "))
+	}
+
 	// Logar com timestamp e duração
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
-	fmt.Fprintf(l.writer, "[%s] [QUERY] %s (took %v)\n", timestamp, formattedQuery, duration)
+	fmt.Fprintf(l.writer, "[%s] [QUERY] %s%s (took %v)\n", timestamp, formattedQuery, argsDebug, duration)
 }
 
 // Info loga uma mensagem informativa

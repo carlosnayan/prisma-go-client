@@ -174,7 +174,7 @@ func runGenerateOnce(schemaPath string) error {
 	}
 
 	// Cleanup existing directories to ensure fresh generation
-	dirsToClean := []string{"inputs", "models", "queries", "filters", "enums"}
+	dirsToClean := []string{"inputs", "models", "queries", "enums"}
 	for _, dirName := range dirsToClean {
 		dirPath := filepath.Join(absoluteOutputDir, dirName)
 		if _, err := os.Stat(dirPath); err == nil {
@@ -215,10 +215,6 @@ func runGenerateOnce(schemaPath string) error {
 	// Generate per-table packages with column-specific filter methods
 	if err := generator.GenerateTablePackages(schema, absoluteOutputDir); err != nil {
 		return fmt.Errorf("error generating table packages: %w", err)
-	}
-
-	if err := generator.GenerateFilters(schema, absoluteOutputDir); err != nil {
-		return fmt.Errorf("error generating filters: %w", err)
 	}
 
 	if err := generator.GenerateClient(schema, absoluteOutputDir); err != nil {

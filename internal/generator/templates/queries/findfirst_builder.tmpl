@@ -1,107 +1,85 @@
-// FindFirst returns a builder for finding a single {{.PascalName}} record (Prisma-style)
-// Example: tenant, err := q.FindFirst().Where(inputs.{{.PascalName}}WhereInput{...}).Exec(ctx)
-func (q *{{.PascalName}}Query) FindFirst() *{{.PascalName}}FindFirstBuilder {
-	return &{{.PascalName}}FindFirstBuilder{query: q}
-}
-
-// {{.PascalName}}FindFirstBuilder is a builder for finding a single {{.PascalName}} record
+// {{.PascalName}}FindFirstBuilder is a fluent builder for finding the first matching record
 type {{.PascalName}}FindFirstBuilder struct {
-	query     *{{.PascalName}}Query
-	whereInput *inputs.{{.PascalName}}WhereInput
-	selectFields *inputs.{{.PascalName}}Select
+	query        *{{.PascalName}}Query
+	conditions   []{{.TablePackageName}}.Condition
+	orderByClauses []{{.PascalName}}OrderByClause
+	selectFields []string
 }
 
-// Where sets the where conditions
-func (b *{{.PascalName}}FindFirstBuilder) Where(where inputs.{{.PascalName}}WhereInput) *{{.PascalName}}FindFirstBuilder {
-	b.whereInput = &where
+// {{.PascalName}}OrderByClause represents an ORDER BY clause
+type {{.PascalName}}OrderByClause struct {
+	Field     string
+	Direction {{.TablePackageName}}.OrderDirection
+}
+
+// FindFirst returns a builder for finding the first matching record
+// Example: client.{{.PascalName}}().FindFirst().Where({{.LowerName}}.EmailEQ("test")).Exec()
+func (q *{{.PascalName}}Query) FindFirst() *{{.PascalName}}FindFirstBuilder {
+	return &{{.PascalName}}FindFirstBuilder{
+		query:      q,
+		conditions: make([]{{.TablePackageName}}.Condition, 0),
+	}
+}
+
+// WithContext sets the context for this query (optional)
+func (b *{{.PascalName}}FindFirstBuilder) WithContext(ctx context.Context) *{{.PascalName}}FindFirstBuilder {
+	b.query.Query.WithContext(ctx)
 	return b
 }
 
-// Select sets which fields to return
-func (b *{{.PascalName}}FindFirstBuilder) Select(selectFields inputs.{{.PascalName}}Select) *{{.PascalName}}FindFirstBuilder {
-	b.selectFields = &selectFields
+// Where adds filter conditions
+func (b *{{.PascalName}}FindFirstBuilder) Where(condition {{.TablePackageName}}.Condition) *{{.PascalName}}FindFirstBuilder {
+	b.conditions = append(b.conditions, condition)
 	return b
 }
 
-// Exec executes the find first operation and returns the default model
-// Uses the stored context (if set via WithContext) or context.Background() as fallback.
-// Returns (*models.{{.PascalName}}, error)
-// For custom types, use ExecTyped[T]() instead
-// Example: user, err := builder.FindFirst().Where(...).Exec()
+// OrderBy adds ordering
+func (b *{{.PascalName}}FindFirstBuilder) OrderBy(field string, direction {{.TablePackageName}}.OrderDirection) *{{.PascalName}}FindFirstBuilder {
+	b.orderByClauses = append(b.orderByClauses, {{.PascalName}}OrderByClause{
+		Field:     field,
+		Direction: direction,
+	})
+	return b
+}
+
+// Select specifies which fields to return
+func (b *{{.PascalName}}FindFirstBuilder) Select(fields ...string) *{{.PascalName}}FindFirstBuilder {
+	b.selectFields = fields
+	return b
+}
+
+// Exec executes the query and returns the first matching record
 func (b *{{.PascalName}}FindFirstBuilder) Exec() (*models.{{.PascalName}}, error) {
-	return b.ExecWithContext(b.query.Query.GetContext())
-}
-
-// ExecWithContext executes the find first operation with an explicit context.
-// If a context was set via WithContext(), the explicit context takes priority.
-// Returns (*models.{{.PascalName}}, error)
-// Example: user, err := builder.FindFirst().Where(...).ExecWithContext(ctx)
-func (b *{{.PascalName}}FindFirstBuilder) ExecWithContext(ctx context.Context) (*models.{{.PascalName}}, error) {
-	// Reset query state to prevent accumulation of conditions from previous operations
+	// Reset query state to prevent accumulation from previous operations
 	b.query.Query.Reset()
-	if b.whereInput != nil {
-		apply{{.PascalName}}WhereInput(b.query.Query, *b.whereInput)
+	
+	// Apply WHERE conditions
+	for _, cond := range b.conditions {
+		applyCondition{{.PascalName}}(b.query.Query, cond)
 	}
-	if b.selectFields != nil {
-		var selectedFields []string
-{{range .SelectFields}}		if b.selectFields.{{.FieldName}} {
-			selectedFields = append(selectedFields, {{printf "%q" .ColumnName}})
-		}
-{{end}}		if len(selectedFields) > 0 {
-			b.query.Select(selectedFields...)
+
+	// Apply LIMIT 1
+	b.query.Query.Take(1)
+
+	// Apply ORDER BY
+	for _, order := range b.orderByClauses {
+		if order.Direction == {{.TablePackageName}}.OrderDesc {
+			b.query.Query.Order(order.Field + " DESC")
+		} else {
+			b.query.Query.Order(order.Field + " ASC")
 		}
 	}
+
+	// Apply SELECT if specified
+	if len(b.selectFields) > 0 {
+		b.query.Query.Select(b.selectFields...)
+	}
+
+	// Execute
 	var result models.{{.PascalName}}
-	err := b.query.First(ctx, &result)
+	err := b.query.Query.First(b.query.Query.GetContext(), &result)
 	if err != nil {
 		return nil, err
 	}
 	return &result, nil
 }
-
-// ExecTyped executes the find first operation and scans the result into the provided type
-// Uses the stored context (if set via WithContext) or context.Background() as fallback.
-// dest must be a pointer to a struct with json or db tags for field mapping
-// Example: var dto *TenantsDTO; err := builder.ExecTyped(&dto)
-func (b *{{.PascalName}}FindFirstBuilder) ExecTyped(dest interface{}) error {
-	return b.ExecTypedWithContext(b.query.Query.GetContext(), dest)
-}
-
-// ExecTypedWithContext executes the find first operation with an explicit context
-// and scans the result into the provided type.
-// If a context was set via WithContext(), the explicit context takes priority.
-// dest must be a pointer to a struct with json or db tags for field mapping
-// Example: var dto *TenantsDTO; err := builder.ExecTypedWithContext(ctx, &dto)
-func (b *{{.PascalName}}FindFirstBuilder) ExecTypedWithContext(ctx context.Context, dest interface{}) error {
-	// Reset query state to prevent accumulation of conditions from previous operations
-	b.query.Query.Reset()
-	if b.whereInput != nil {
-		whereMap := Convert{{.PascalName}}WhereInputToWhere(*b.whereInput)
-		b.query.Where(whereMap)
-	}
-	if b.selectFields != nil {
-		var selectedFields []string
-{{range .SelectFields}}		if b.selectFields.{{.FieldName}} {
-			selectedFields = append(selectedFields, {{printf "%q" .ColumnName}})
-		}
-{{end}}		if len(selectedFields) > 0 {
-			b.query.Select(selectedFields...)
-		}
-	}
-	// Validate dest is a pointer
-	destVal := reflect.ValueOf(dest)
-	if destVal.Kind() != reflect.Ptr {
-		return fmt.Errorf("ExecTyped: dest must be a pointer (e.g., *TenantsDTO), got %v", destVal.Kind())
-	}
-	elemType := destVal.Elem().Type()
-	if elemType.Kind() != reflect.Struct {
-		return fmt.Errorf("ExecTyped: dest must be a pointer to struct, got %v", elemType.Kind())
-	}
-	// Scan into dest
-	err := b.query.ScanFirst(ctx, dest, elemType)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-

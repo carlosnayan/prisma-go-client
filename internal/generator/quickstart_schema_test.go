@@ -170,21 +170,8 @@ func TestQuickstartSchema(t *testing.T) {
 
 	queryContentStr := string(queryContent)
 
-	// Verify WhereInput converter uses mapped column names
-	if !strings.Contains(queryContentStr, `result["created_at"]`) {
-		t.Error("WhereInput converter should use 'created_at' (from @map) for createdAt field")
-	}
-
-	if !strings.Contains(queryContentStr, `result["updated_at"]`) {
-		t.Error("WhereInput converter should use 'updated_at' (from @map) for updatedAt field")
-	}
-
-	// Verify that exact field names are used for fields without @map
-	if !strings.Contains(queryContentStr, `result["email"]`) {
-		t.Error("WhereInput converter should use 'email' (exact field name) for email field")
-	}
-
-	if !strings.Contains(queryContentStr, `result["name"]`) {
-		t.Error("WhereInput converter should use 'name' (exact field name) for name field")
+	// Verify column names are used correctly in generated code
+	if !strings.Contains(queryContentStr, `"created_at"`) {
+		t.Error("Query should use 'created_at' (from @map) for createdAt field")
 	}
 }

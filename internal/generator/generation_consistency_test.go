@@ -82,9 +82,6 @@ func TestGeneratedCode_Compiles(t *testing.T) {
 	if err := GenerateQueries(schema, outputDir); err != nil {
 		t.Fatalf("GenerateQueries failed: %v", err)
 	}
-	if err := GenerateFilters(schema, outputDir); err != nil {
-		t.Fatalf("GenerateFilters failed: %v", err)
-	}
 	if err := GenerateClient(schema, outputDir); err != nil {
 		t.Fatalf("GenerateClient failed: %v", err)
 	}
@@ -457,9 +454,6 @@ func TestGeneratedCode_OptionalFieldsPointerHandling(t *testing.T) {
 	}
 	if err := GenerateBuilder(schema, outputDir); err != nil {
 		t.Fatalf("GenerateBuilder failed: %v", err)
-	}
-	if err := GenerateFilters(schema, outputDir); err != nil {
-		t.Fatalf("GenerateFilters failed: %v", err)
 	}
 	if err := GenerateClient(schema, outputDir); err != nil {
 		t.Fatalf("GenerateClient failed: %v", err)

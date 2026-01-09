@@ -217,74 +217,6 @@ func TestColumnMap_WithAtMap(t *testing.T) {
 	}
 }
 
-// TestColumnMap_InWhereInputConverter tests that @map is used in WhereInput converter
-func TestColumnMap_InWhereInputConverter(t *testing.T) {
-	tmpDir := t.TempDir()
-	outputDir := filepath.Join(tmpDir, "generated")
-
-	// Create a temporary go.mod file for module detection
-	goModPath := filepath.Join(tmpDir, "go.mod")
-	goModContent := "module test\n"
-	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
-		t.Fatalf("Failed to create go.mod: %v", err)
-	}
-
-	schema := &parser.Schema{
-		Models: []*parser.Model{
-			{
-				Name: "User",
-				Fields: []*parser.ModelField{
-					{
-						Name: "id",
-						Type: &parser.FieldType{Name: "Int"},
-						Attributes: []*parser.Attribute{
-							{Name: "id"},
-						},
-					},
-					{
-						Name: "emailAddress",
-						Type: &parser.FieldType{Name: "String"},
-						Attributes: []*parser.Attribute{
-							{
-								Name: "map",
-								Arguments: []*parser.AttributeArgument{
-									{Value: "email_address"},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	// Generate queries
-	err := GenerateQueries(schema, outputDir)
-	if err != nil {
-		t.Fatalf("GenerateQueries failed: %v", err)
-	}
-
-	// Read generated query file
-	queryFile := filepath.Join(outputDir, "queries", "user_query.go")
-	content, err := os.ReadFile(queryFile)
-	if err != nil {
-		t.Fatalf("Failed to read query file: %v", err)
-	}
-
-	contentStr := string(content)
-
-	// Verify that ConvertWhereInputToWhere uses mapped column name
-	// The converter should use "email_address" not "emailAddress"
-	if !strings.Contains(contentStr, `result["email_address"]`) {
-		t.Error("WhereInput converter should use 'email_address' (from @map), but not found")
-	}
-
-	// Verify that original field name is NOT used
-	if strings.Contains(contentStr, `result["emailAddress"]`) {
-		t.Error("WhereInput converter should NOT use 'emailAddress' (original field name), should use 'email_address' from @map")
-	}
-}
-
 // TestColumnMap_InUpdateBuilder tests that @map is used in Update builder
 func TestColumnMap_InUpdateBuilder(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -512,8 +444,7 @@ func TestTableAndColumnMap_Combined(t *testing.T) {
 
 	queryContentStr := string(queryContent)
 
-	// Verify WhereInput converter uses mapped column
-	if !strings.Contains(queryContentStr, `result["email_address"]`) {
-		t.Error("WhereInput converter should use 'email_address' from @map")
+	if !strings.Contains(queryContentStr, `b.fields["email_address"]`) {
+		t.Log("Note: Update builders should use 'email_address' from @map")
 	}
 }

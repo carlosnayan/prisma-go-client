@@ -198,7 +198,6 @@ func generateInputFile(filePath string, model *parser.Model, schema *parser.Sche
 	templateNames := []string{
 		"model_imports.tmpl",
 		"createmany_args.tmpl",
-		"where_input.tmpl",
 		"select_input.tmpl",
 	}
 

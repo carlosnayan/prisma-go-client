@@ -1,79 +1,88 @@
-// Create returns a builder for creating {{.PascalName}} records (Prisma-style)
-// Example: tenant, err := q.Create().Data(inputs.{{.PascalName}}CreateInput{...}).Exec(ctx)
-func (q *{{.PascalName}}Query) Create() *{{.PascalName}}CreateBuilder {
-	return &{{.PascalName}}CreateBuilder{query: q}
-}
-
-// {{.PascalName}}CreateBuilder is a builder for creating {{.PascalName}} records
+// {{.PascalName}}CreateBuilder is a fluent builder for creating {{.PascalName}} records
 type {{.PascalName}}CreateBuilder struct {
-	query *{{.PascalName}}Query
-	data  *inputs.{{.PascalName}}CreateInput
+	query  *{{.PascalName}}Query
+	fields map[string]interface{}
 }
 
-// Data sets the data for creating
-func (b *{{.PascalName}}CreateBuilder) Data(data inputs.{{.PascalName}}CreateInput) *{{.PascalName}}CreateBuilder {
-	b.data = &data
+// Create returns a builder for creating {{.PascalName}} records (Ent-style)
+// Example: user, err := client.User.Create().SetName("João").SetEmail("joao@email.com").Exec()
+func (q *{{.PascalName}}Query) Create() *{{.PascalName}}CreateBuilder {
+	return &{{.PascalName}}CreateBuilder{
+		query:  q,
+		fields: make(map[string]interface{}),
+	}
+}
+
+{{range .CreateFields}}
+{{if and .IsNullable (not .IsNonPointerOptional)}}
+// Set{{.FieldName}} sets the {{.DBName}} field (nullable)
+// Pass nil to set the field to NULL
+func (b *{{$.PascalName}}CreateBuilder) Set{{.FieldName}}(value *{{.GoType}}) *{{$.PascalName}}CreateBuilder {
+	if value == nil {
+		b.fields["{{.DBName}}"] = nil
+	} else {
+		b.fields["{{.DBName}}"] = *value
+	}
 	return b
 }
+{{else}}
+// Set{{.FieldName}} sets the {{.DBName}} field
+func (b *{{$.PascalName}}CreateBuilder) Set{{.FieldName}}(value {{.GoType}}) *{{$.PascalName}}CreateBuilder {
+	b.fields["{{.DBName}}"] = value
+	return b
+}
+{{end}}
+{{end}}
 
-// Exec executes the create operation using the stored context (if set via WithContext)
-// or context.Background() as fallback.
-// Example: user, err := builder.Create().Data(...).Exec()
+// Exec executes the create operation
 func (b *{{.PascalName}}CreateBuilder) Exec() (*models.{{.PascalName}}, error) {
 	return b.ExecWithContext(b.query.Query.GetContext())
 }
 
-// ExecWithContext executes the create operation with an explicit context.
-// If a context was set via WithContext(), the explicit context takes priority.
-// Example: user, err := builder.Create().Data(...).ExecWithContext(ctx)
+// ExecWithContext executes the create operation with an explicit context
 func (b *{{.PascalName}}CreateBuilder) ExecWithContext(ctx context.Context) (*models.{{.PascalName}}, error) {
-	if b.data == nil {
-		return nil, fmt.Errorf("data is required for create")
-	}
-
 	// Validate required fields
-	var missingFields []string
-{{range .CreateFields}}{{if .IsRequired}}
-	// Required fields are never optional (not pointers), so check zero value directly
-	if reflect.ValueOf(b.data.{{.FieldName}}).IsZero() {
-		missingFields = append(missingFields, "{{.FieldName}}")
+	{{range .CreateFields}}{{if .IsRequired}}
+	if _, ok := b.fields["{{.DBName}}"]; !ok {
+		return nil, fmt.Errorf("required field {{.DBName}} is missing")
 	}
-{{end}}{{end}}
-	if len(missingFields) > 0 {
-		return nil, fmt.Errorf("validation error: required fields missing: %s", strings.Join(missingFields, ", "))
-	}
+	{{end}}{{end}}
 
+	// Build the model
 	result := &models.{{.PascalName}}{}
-{{range .CreateFields}}{{if .IsOptional}}	if b.data.{{.FieldName}}.IsSet {
-		{{- if .IsNonPointerOptional}}
-		if !b.data.{{.FieldName}}.IsNull && b.data.{{.FieldName}}.Value != nil {
-			result.{{.FieldName}} = *b.data.{{.FieldName}}.Value
-		}
-		{{- else}}
-		if b.data.{{.FieldName}}.IsNull {
+	{{range .CreateFields}}
+	if val, ok := b.fields["{{.DBName}}"]; ok {
+		{{if and .IsNullable (not .IsNonPointerOptional)}}
+		if val == nil {
 			result.{{.FieldName}} = nil
 		} else {
-			result.{{.FieldName}} = b.data.{{.FieldName}}.Value
+			typed := val.({{.GoType}})
+			result.{{.FieldName}} = &typed
 		}
-		{{- end}}
+		{{else}}
+		result.{{.FieldName}} = val.({{.GoType}})
+		{{end}}
 	}
-{{else}}	result.{{.FieldName}} = b.data.{{.FieldName}}
-{{end}}{{end}}	// Use TableQueryBuilder to get the actual result from database
+	{{end}}
+
+	// Use TableQueryBuilder to insert into database
 	columns := []string{ {{- range $i, $col := .Columns}}{{if $i}}, {{end}}{{printf "%q" $col}}{{end}} }
 	tableBuilder := builder.NewTableQueryBuilder(b.query.Query.GetDB(), {{printf "%q" .TableName}}, columns)
-{{if .PrimaryKey}}	tableBuilder.SetPrimaryKey({{printf "%q" .PrimaryKey}})
-{{end}}	tableBuilder.SetDialect(b.query.Query.GetDialect())
+	{{if .PrimaryKey}}tableBuilder.SetPrimaryKey({{printf "%q" .PrimaryKey}})
+	{{end}}tableBuilder.SetDialect(b.query.Query.GetDialect())
 	tableBuilder.SetModelType(reflect.TypeOf(models.{{.PascalName}}{}))
+	
 	created, err := tableBuilder.Create(ctx, result)
 	if err != nil {
 		return nil, err
 	}
+	
 	// Convert the result from interface{} to *models.{{.PascalName}}
 	if createdModel, ok := created.(models.{{.PascalName}}); ok {
 		return &createdModel, nil
 	}
-	// Fallback: if conversion fails, return the result we prepared
-	// This should not happen, but provides a safety net
+	
+	// Fallback: return the result we prepared
 	return result, nil
 }
 

@@ -1050,20 +1050,34 @@ func (q *Query) buildWhereClause(argIndex *int) (string, []interface{}) {
 		for i := 0; i < len(query); i++ {
 			if query[i] == '?' && argPos < len(cond.args) {
 				arg := cond.args[argPos]
-				if reflect.TypeOf(arg).Kind() == reflect.Slice {
+
+				// Safety: Check for nil before calling reflect.TypeOf
+				// This prevents panic when conditions like IsNull() pass nil arguments
+				if arg == nil {
+					queryBuilder.WriteString(q.dialect.GetPlaceholder(*argIndex))
+					args = append(args, nil)
+					(*argIndex)++
+				} else if reflect.TypeOf(arg).Kind() == reflect.Slice {
 					slice := reflect.ValueOf(arg)
-					placeholders := make([]string, slice.Len())
-					for j := 0; j < slice.Len(); j++ {
-						placeholders[j] = q.dialect.GetPlaceholder(*argIndex)
-						args = append(args, slice.Index(j).Interface())
-						(*argIndex)++
+
+					// Safety: Handle empty slices gracefully
+					if slice.Len() == 0 {
+						queryBuilder.WriteString("()")
+					} else {
+						placeholders := make([]string, slice.Len())
+						for j := 0; j < slice.Len(); j++ {
+							placeholders[j] = q.dialect.GetPlaceholder(*argIndex)
+							args = append(args, slice.Index(j).Interface())
+							(*argIndex)++
+						}
+						queryBuilder.WriteString(fmt.Sprintf("(%s)", strings.Join(placeholders, ", ")))
 					}
-					queryBuilder.WriteString(fmt.Sprintf("(%s)", strings.Join(placeholders, ", ")))
 				} else {
 					queryBuilder.WriteString(q.dialect.GetPlaceholder(*argIndex))
 					args = append(args, arg)
 					(*argIndex)++
 				}
+
 				argPos++
 			} else {
 				queryBuilder.WriteByte(query[i])

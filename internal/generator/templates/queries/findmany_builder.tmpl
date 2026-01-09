@@ -1,116 +1,100 @@
-// FindMany returns a builder for finding multiple {{.PascalName}} records (Prisma-style)
-// Example: tenants, err := q.FindMany().Where(inputs.{{.PascalName}}WhereInput{...}).Exec(ctx)
-func (q *{{.PascalName}}Query) FindMany() *{{.PascalName}}FindManyBuilder {
-	return &{{.PascalName}}FindManyBuilder{query: q}
-}
-
-// {{.PascalName}}FindManyBuilder is a builder for finding multiple {{.PascalName}} records
+// {{.PascalName}}FindManyBuilder is a fluent builder for finding multiple matching records
 type {{.PascalName}}FindManyBuilder struct {
-	query       *{{.PascalName}}Query
-	whereInput  *inputs.{{.PascalName}}WhereInput
-	selectFields *inputs.{{.PascalName}}Select
+	query        *{{.PascalName}}Query
+	conditions   []{{.TablePackageName}}.Condition
+	limit        int
+	offset       int
+	orderByClauses []{{.PascalName}}OrderByClause
+	selectFields []string
 }
 
-// Where sets the where conditions
-func (b *{{.PascalName}}FindManyBuilder) Where(where inputs.{{.PascalName}}WhereInput) *{{.PascalName}}FindManyBuilder {
-	b.whereInput = &where
+// FindMany returns a builder for finding all matching records
+// Example: client.{{.PascalName}}().FindMany().Where({{.LowerName}}.AgeGT(18)).Limit(10).Exec()
+func (q *{{.PascalName}}Query) FindMany() *{{.PascalName}}FindManyBuilder {
+	return &{{.PascalName}}FindManyBuilder{
+		query:      q,
+		conditions: make([]{{.TablePackageName}}.Condition, 0),
+	}
+}
+
+// WithContext sets the context for this query (optional)
+func (b *{{.PascalName}}FindManyBuilder) WithContext(ctx context.Context) *{{.PascalName}}FindManyBuilder {
+	b.query.Query.WithContext(ctx)
 	return b
 }
 
-// Select sets which fields to return
-func (b *{{.PascalName}}FindManyBuilder) Select(selectFields inputs.{{.PascalName}}Select) *{{.PascalName}}FindManyBuilder {
-	b.selectFields = &selectFields
+// Where adds filter conditions
+func (b *{{.PascalName}}FindManyBuilder) Where(condition {{.TablePackageName}}.Condition) *{{.PascalName}}FindManyBuilder {
+	b.conditions = append(b.conditions, condition)
 	return b
 }
 
-// Exec executes the find many operation and returns the default model
-// Uses the stored context (if set via WithContext) or context.Background() as fallback.
-// Returns ([]models.{{.PascalName}}, error)
-// For custom types, use ExecTyped[T]() instead
-// Example: users, err := builder.FindMany().Where(...).Exec()
+// Limit sets the maximum number of records to return
+func (b *{{.PascalName}}FindManyBuilder) Limit(limit int) *{{.PascalName}}FindManyBuilder {
+	b.limit = limit
+	return b
+}
+
+// Skip sets the number of records to skip (offset/pagination)
+func (b *{{.PascalName}}FindManyBuilder) Skip(offset int) *{{.PascalName}}FindManyBuilder {
+	b.offset = offset
+	return b
+}
+
+// OrderBy adds ordering
+func (b *{{.PascalName}}FindManyBuilder) OrderBy(field string, direction {{.TablePackageName}}.OrderDirection) *{{.PascalName}}FindManyBuilder {
+	b.orderByClauses = append(b.orderByClauses, {{.PascalName}}OrderByClause{
+		Field:     field,
+		Direction: direction,
+	})
+	return b
+}
+
+// Select specifies which fields to return
+func (b *{{.PascalName}}FindManyBuilder) Select(fields ...string) *{{.PascalName}}FindManyBuilder {
+	b.selectFields = fields
+	return b
+}
+
+// Exec executes the query and returns all matching records
 func (b *{{.PascalName}}FindManyBuilder) Exec() ([]models.{{.PascalName}}, error) {
-	return b.ExecWithContext(b.query.Query.GetContext())
-}
-
-// ExecWithContext executes the find many operation with an explicit context.
-// If a context was set via WithContext(), the explicit context takes priority.
-// Returns ([]models.{{.PascalName}}, error)
-// Example: users, err := builder.FindMany().Where(...).ExecWithContext(ctx)
-func (b *{{.PascalName}}FindManyBuilder) ExecWithContext(ctx context.Context) ([]models.{{.PascalName}}, error) {
+	// Reset query state to prevent accumulation from previous operations
 	b.query.Query.Reset()
-	if b.whereInput != nil {
-		apply{{.PascalName}}WhereInput(b.query.Query, *b.whereInput)
+	
+	// Apply WHERE conditions
+	for _, cond := range b.conditions {
+		applyCondition{{.PascalName}}(b.query.Query, cond)
 	}
-	if b.selectFields != nil {
-		var selectedFields []string
-{{range .SelectFields}}		if b.selectFields.{{.FieldName}} {
-			selectedFields = append(selectedFields, {{printf "%q" .ColumnName}})
-		}
-{{end}}		if len(selectedFields) > 0 {
-			b.query.Select(selectedFields...)
+
+	// Apply LIMIT
+	if b.limit > 0 {
+		b.query.Query.Take(b.limit)
+	}
+
+	// Apply OFFSET (Skip)
+	if b.offset > 0 {
+		b.query.Query.Skip(b.offset)
+	}
+
+	// Apply ORDER BY
+	for _, order := range b.orderByClauses {
+		if order.Direction == {{.TablePackageName}}.OrderDesc {
+			b.query.Query.Order(order.Field + " DESC")
+		} else {
+			b.query.Query.Order(order.Field + " ASC")
 		}
 	}
-	var results []models.{{.PascalName}}
-	err := b.query.Find(ctx, &results)
+
+	// Apply SELECT if specified
+	if len(b.selectFields) > 0 {
+		b.query.Query.Select(b.selectFields...)
+	}
+
+	// Execute
+	results := make([]models.{{.PascalName}}, 0)
+	err := b.query.Query.Find(b.query.Query.GetContext(), &results)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return results, nil
-		}
 		return nil, err
 	}
 	return results, nil
 }
-
-// ExecTyped executes the find many operation and scans the results into the provided slice
-// Uses the stored context (if set via WithContext) or context.Background() as fallback.
-// dest must be a pointer to a slice of structs with json or db tags for field mapping
-// Example: var dtos []TenantsDTO; err := builder.ExecTyped(&dtos)
-func (b *{{.PascalName}}FindManyBuilder) ExecTyped(dest interface{}) error {
-	return b.ExecTypedWithContext(b.query.Query.GetContext(), dest)
-}
-
-// ExecTypedWithContext executes the find many operation with an explicit context
-// and scans the results into the provided slice.
-// If a context was set via WithContext(), the explicit context takes priority.
-// dest must be a pointer to a slice of structs with json or db tags for field mapping
-// Example: var dtos []TenantsDTO; err := builder.ExecTypedWithContext(ctx, &dtos)
-func (b *{{.PascalName}}FindManyBuilder) ExecTypedWithContext(ctx context.Context, dest interface{}) error {
-	b.query.Query.Reset()
-	if b.whereInput != nil {
-		whereMap := Convert{{.PascalName}}WhereInputToWhere(*b.whereInput)
-		b.query.Where(whereMap)
-	}
-	if b.selectFields != nil {
-		var selectedFields []string
-{{range .SelectFields}}		if b.selectFields.{{.FieldName}} {
-			selectedFields = append(selectedFields, {{printf "%q" .ColumnName}})
-		}
-{{end}}		if len(selectedFields) > 0 {
-			b.query.Select(selectedFields...)
-		}
-	}
-	destVal := reflect.ValueOf(dest)
-	if destVal.Kind() != reflect.Ptr {
-		return fmt.Errorf("ExecTyped: dest must be a pointer to slice (e.g., *[]TenantsDTO), got %v", destVal.Kind())
-	}
-	sliceVal := destVal.Elem()
-	if sliceVal.Kind() != reflect.Slice {
-		return fmt.Errorf("ExecTyped: dest must be a pointer to slice, got %v", sliceVal.Kind())
-	}
-	elemType := sliceVal.Type().Elem()
-	if elemType.Kind() == reflect.Ptr {
-		elemType = elemType.Elem()
-	}
-	if elemType.Kind() != reflect.Struct {
-		return fmt.Errorf("ExecTyped: dest must be a slice of structs, got %v", elemType.Kind())
-	}
-	err := b.query.ScanFind(ctx, dest, elemType)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		return err
-	}
-	return nil
-}
-

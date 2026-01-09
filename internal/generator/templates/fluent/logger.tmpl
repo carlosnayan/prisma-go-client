@@ -19,8 +19,19 @@ func (l *Logger) Query(query string, args []interface{}, duration time.Duration)
 	if !l.queryLog || !l.levels["query"] {
 		return
 	}
+	
+	// Format args with types for debugging
+	argsDebug := ""
+	if len(args) > 0 {
+		argParts := make([]string, len(args))
+		for i, arg := range args {
+			argParts[i] = fmt.Sprintf("%v(%T)", arg, arg)
+		}
+		argsDebug = fmt.Sprintf(" | ARGS: [%s]", strings.Join(argParts, ", "))
+	}
+	
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
-	fmt.Printf("[%s] [QUERY] %s (took %v)\n", timestamp, query, duration)
+	fmt.Printf("[%s] [QUERY] %s%s (took %v)\n", timestamp, query, argsDebug, duration)
 }
 
 // Info logs an info message

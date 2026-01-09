@@ -1,39 +1,46 @@
-// Delete returns a builder for deleting {{.PascalName}} records (Prisma-style)
-// Example: err := q.Delete().Where(inputs.{{.PascalName}}WhereInput{...}).Exec(ctx)
-func (q *{{.PascalName}}Query) Delete() *{{.PascalName}}DeleteBuilder {
-	return &{{.PascalName}}DeleteBuilder{query: q}
-}
-
-// {{.PascalName}}DeleteBuilder is a builder for deleting {{.PascalName}} records
+// {{.PascalName}}DeleteBuilder is a fluent builder for deleting records
 type {{.PascalName}}DeleteBuilder struct {
 	query      *{{.PascalName}}Query
-	whereInput *inputs.{{.PascalName}}WhereInput
+	conditions []{{.TablePackageName}}.Condition
 }
 
-// Where sets the where conditions
-func (b *{{.PascalName}}DeleteBuilder) Where(where inputs.{{.PascalName}}WhereInput) *{{.PascalName}}DeleteBuilder {
-	b.whereInput = &where
+// Delete returns a builder for deleting matching records
+// Example: client.{{.PascalName}}().Delete().Where({{.LowerName}}.ActiveEQ(false)).Exec()
+func (q *{{.PascalName}}Query) Delete() *{{.PascalName}}DeleteBuilder {
+	return &{{.PascalName}}DeleteBuilder{
+		query:      q,
+		conditions: make([]{{.TablePackageName}}.Condition, 0),
+	}
+}
+
+// DeleteMany is an alias for Delete (Prisma compatibility)
+func (q *{{.PascalName}}Query) DeleteMany() *{{.PascalName}}DeleteBuilder {
+	return q.Delete()
+}
+
+// WithContext sets the context for this operation (optional)
+func (b *{{.PascalName}}DeleteBuilder) WithContext(ctx context.Context) *{{.PascalName}}DeleteBuilder {
+	b.query.Query.WithContext(ctx)
 	return b
 }
 
-// Exec executes the delete operation using the stored context (if set via WithContext)
-// or context.Background() as fallback.
-// Example: err := builder.Delete().Where(...).Exec()
+// Where adds filter conditions
+func (b *{{.PascalName}}DeleteBuilder) Where(condition {{.TablePackageName}}.Condition) *{{.PascalName}}DeleteBuilder {
+	b.conditions = append(b.conditions, condition)
+	return b
+}
+
+// Exec executes the delete and returns error
 func (b *{{.PascalName}}DeleteBuilder) Exec() error {
-	return b.ExecWithContext(b.query.Query.GetContext())
-}
-
-// ExecWithContext executes the delete operation with an explicit context.
-// If a context was set via WithContext(), the explicit context takes priority.
-// Example: err := builder.Delete().Where(...).ExecWithContext(ctx)
-func (b *{{.PascalName}}DeleteBuilder) ExecWithContext(ctx context.Context) error {
-	// Reset query state to prevent accumulation of conditions from previous operations
+	// Reset query state to prevent accumulation from previous operations
 	b.query.Query.Reset()
-	if b.whereInput == nil {
-		return fmt.Errorf("where condition is required for delete")
+	
+	// Apply WHERE conditions
+	for _, cond := range b.conditions {
+		applyCondition{{.PascalName}}(b.query.Query, cond)
 	}
-	whereMap := Convert{{.PascalName}}WhereInputToWhere(*b.whereInput)
-	b.query.Where(whereMap)
-	return b.query.Query.Delete(ctx, &models.{{.PascalName}}{})
-}
 
+	// Execute delete (requires a model parameter, passing nil for all)
+	var model models.{{.PascalName}}
+	return b.query.Query.Delete(b.query.Query.GetContext(), &model)
+}
