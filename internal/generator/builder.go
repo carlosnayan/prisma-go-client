@@ -17,31 +17,6 @@ func GenerateBuilder(schema *parser.Schema, outputDir string) error {
 		return fmt.Errorf("failed to create builder directory: %w", err)
 	}
 
-	// Generate all builder files
-	if err := generateBuilderWhere(builderDir); err != nil {
-		return fmt.Errorf("failed to generate where.go: %w", err)
-	}
-
-	if err := generateBuilderOptions(builderDir); err != nil {
-		return fmt.Errorf("failed to generate options.go: %w", err)
-	}
-
-	if err := generateBuilderDialect(builderDir); err != nil {
-		return fmt.Errorf("failed to generate dialect.go: %w", err)
-	}
-
-	if err := generateBuilderErrors(builderDir); err != nil {
-		return fmt.Errorf("failed to generate errors.go: %w", err)
-	}
-
-	if err := generateBuilderLimits(builderDir); err != nil {
-		return fmt.Errorf("failed to generate limits.go: %w", err)
-	}
-
-	if err := generateBuilderContext(builderDir); err != nil {
-		return fmt.Errorf("failed to generate context.go: %w", err)
-	}
-
 	// Detect user module for utils import path
 	userModule, err := detectUserModule(outputDir)
 	if err != nil {
@@ -51,6 +26,15 @@ func GenerateBuilder(schema *parser.Schema, outputDir string) error {
 	utilsPath, err := calculateUtilsImportPath(userModule, outputDir)
 	if err != nil {
 		return fmt.Errorf("failed to calculate utils import path: %w", err)
+	}
+
+	// Generate builder foundation (consolidated utilities)
+	if err := generateBuilderFoundation(builderDir, utilsPath); err != nil {
+		return fmt.Errorf("failed to generate foundation.go: %w", err)
+	}
+
+	if err := generateBuilderDialect(builderDir); err != nil {
+		return fmt.Errorf("failed to generate dialect.go: %w", err)
 	}
 
 	// Get provider from schema to generate appropriate builder
@@ -78,4 +62,15 @@ func getProviderFromSchema(schema *parser.Schema) string {
 		}
 	}
 	return "postgresql" // default
+}
+
+// generateBuilderFoundation generates foundation.go using templates
+func generateBuilderFoundation(builderDir, utilsPath string) error {
+	data := struct {
+		UtilsPath string
+	}{
+		UtilsPath: utilsPath,
+	}
+	filePath := filepath.Join(builderDir, "foundation.go")
+	return executeModelTemplate(filePath, "builder", "builder_main", "foundation.tmpl", data)
 }

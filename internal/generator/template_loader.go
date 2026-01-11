@@ -333,25 +333,6 @@ func getTemplatesDir(templateSubdir string) (string, string, error) {
 	return generatorDir, templatesPath, nil
 }
 
-// executeSingleTemplate executes a single template without data
-func executeSingleTemplate(outputDir, filename, templateDir, templateName string) error {
-	file, err := createGeneratedFile(filepath.Join(outputDir, filename), "builder")
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	// Get the templates directory
-	_, templatesDir, err := getTemplatesDir(templateDir)
-	if err != nil {
-		return fmt.Errorf("failed to get templates directory: %w", err)
-	}
-
-	// Execute template
-	tmplPath := filepath.Join(templatesDir, templateName)
-	return executeTemplate(file, tmplPath, nil)
-}
-
 // executeModelTemplate executes a single template for a model file with data
 func executeModelTemplate(filePath, packageName, templateDir, templateName string, data interface{}) error {
 	file, err := createGeneratedFile(filePath, packageName)

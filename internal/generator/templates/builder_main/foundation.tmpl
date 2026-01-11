@@ -1,0 +1,185 @@
+import (
+	"context"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+)
+
+// --- Limits ---
+
+// Memory safety limits to prevent unbounded growth and OOM
+const (
+	// MaxScanRows is the maximum number of rows that can be scanned into memory
+	MaxScanRows = 100000
+
+	// MaxQueryConditions is the maximum number of WHERE conditions in a single query
+	MaxQueryConditions = 1000
+
+	// MaxJoins is the maximum number of JOINs in a single query
+	MaxJoins = 50
+
+	// MaxOrderByFields is the maximum number of ORDER BY fields
+	MaxOrderByFields = 20
+
+	// MaxGroupByFields is the maximum number of GROUP BY fields
+	MaxGroupByFields = 20
+
+	// MaxSelectFields is the maximum number of SELECT fields
+	MaxSelectFields = 100
+
+	// MaxRawQuerySize is the maximum size in bytes for raw SQL queries (10MB)
+	MaxRawQuerySize = 10 * 1024 * 1024
+)
+
+// --- Context ---
+
+// DefaultTimeout is the default timeout for database operations
+var DefaultTimeout = 30 * time.Second
+
+// WithTimeout creates a context with timeout, using the default timeout if not specified
+func WithTimeout(ctx context.Context, timeout ...time.Duration) (context.Context, context.CancelFunc) {
+	t := DefaultTimeout
+	if len(timeout) > 0 && timeout[0] > 0 {
+		t = timeout[0]
+	}
+	return context.WithTimeout(ctx, t)
+}
+
+// WithQueryTimeout creates a context with timeout for queries (5 seconds)
+func WithQueryTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, 5*time.Second)
+}
+
+// WithTransactionTimeout creates a context with timeout for transactions (30 segundos)
+func WithTransactionTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, 30*time.Second)
+}
+
+// WithMigrationTimeout creates a context with timeout for migrations (5 minutos)
+func WithMigrationTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, 5*time.Minute)
+}
+
+// --- Errors ---
+
+// ProductionMode indicates if we are in production mode (hides internal details)
+var ProductionMode = os.Getenv("ENV") == "production" || os.Getenv("ENV") == "prod"
+
+// SanitizeError sanitizes an error message to not expose internal information
+func SanitizeError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if !ProductionMode {
+		return err
+	}
+	errMsg := err.Error()
+	errMsg = sanitizeTableNames(errMsg)
+	errMsg = sanitizeColumnNames(errMsg)
+	errMsg = sanitizeSQLDetails(errMsg)
+	return fmt.Errorf("%s", errMsg)
+}
+
+func sanitizeTableNames(msg string) string {
+	patterns := []string{"table", "relation", "FROM", "INTO", "UPDATE", "DELETE FROM"}
+	for _, pattern := range patterns {
+		if strings.Contains(strings.ToLower(msg), strings.ToLower(pattern)) {
+			return "database operation failed"
+		}
+	}
+	return msg
+}
+
+func sanitizeColumnNames(msg string) string {
+	patterns := []string{"column", "field", "SET", "WHERE"}
+	for _, pattern := range patterns {
+		if strings.Contains(strings.ToLower(msg), strings.ToLower(pattern)) {
+			return "database operation failed"
+		}
+	}
+	return msg
+}
+
+func sanitizeSQLDetails(msg string) string {
+	if strings.Contains(strings.ToLower(msg), "sql") ||
+		strings.Contains(strings.ToLower(msg), "syntax") ||
+		strings.Contains(strings.ToLower(msg), "constraint") {
+		return "database operation failed"
+	}
+	return msg
+}
+
+// WrapError wraps an error with a generic message in production
+func WrapError(err error, genericMsg string) error {
+	if err == nil {
+		return nil
+	}
+	if ProductionMode {
+		return fmt.Errorf("%s", genericMsg)
+	}
+	return fmt.Errorf("%s: %w", genericMsg, err)
+}
+
+// --- Options ---
+
+// QueryOptions defines options for FindMany queries
+type QueryOptions struct {
+	Where   Where
+	OrderBy []OrderBy
+	Take    *int
+	Skip    *int
+}
+
+// OrderBy defines sorting for a single field
+type OrderBy struct {
+	Field string
+	Order string
+}
+
+// Ptr is a helper function to create a pointer to an int
+func Ptr(i int) *int {
+	return &i
+}
+
+// BatchPayload represents the result of batch operations
+type BatchPayload struct {
+	Count int
+}
+
+// --- Where ---
+
+// Where represents a map of field conditions for queries
+type Where map[string]interface{}
+
+// WhereOperator represents a conditional operator with its value
+type WhereOperator struct {
+	op    string
+	value interface{}
+}
+
+func Equals(value interface{}) WhereOperator { return WhereOperator{op: "=", value: value} }
+func NotEquals(value interface{}) WhereOperator { return WhereOperator{op: "!=", value: value} }
+func Gt(value interface{}) WhereOperator { return WhereOperator{op: ">", value: value} }
+func Gte(value interface{}) WhereOperator { return WhereOperator{op: ">=", value: value} }
+func Lt(value interface{}) WhereOperator { return WhereOperator{op: "<", value: value} }
+func Lte(value interface{}) WhereOperator { return WhereOperator{op: "<=", value: value} }
+func Like(value string) WhereOperator { return WhereOperator{op: "LIKE", value: value} }
+func ILike(value string) WhereOperator { return WhereOperator{op: "ILIKE", value: value} }
+func In(values ...interface{}) WhereOperator { return WhereOperator{op: "IN", value: values} }
+func NotIn(values ...interface{}) WhereOperator { return WhereOperator{op: "NOT IN", value: values} }
+func IsNull() WhereOperator { return WhereOperator{op: "IS NULL", value: nil} }
+func IsNotNull() WhereOperator { return WhereOperator{op: "IS NOT NULL", value: nil} }
+func Contains(value string) WhereOperator { return WhereOperator{op: "LIKE", value: "%" + value + "%"} }
+func StartsWith(value string) WhereOperator { return WhereOperator{op: "LIKE", value: value + "%"} }
+func EndsWith(value string) WhereOperator { return WhereOperator{op: "LIKE", value: "%" + value} }
+func ContainsInsensitive(value string) WhereOperator { return WhereOperator{op: "ILIKE", value: "%" + value + "%"} }
+func StartsWithInsensitive(value string) WhereOperator { return WhereOperator{op: "ILIKE", value: value + "%"} }
+func EndsWithInsensitive(value string) WhereOperator { return WhereOperator{op: "ILIKE", value: "%" + value} }
+func Has(value interface{}) WhereOperator { return WhereOperator{op: "HAS", value: value} }
+func HasEvery(values ...interface{}) WhereOperator { return WhereOperator{op: "HAS_EVERY", value: values} }
+func HasSome(values ...interface{}) WhereOperator { return WhereOperator{op: "HAS_SOME", value: values} }
+func IsEmpty() WhereOperator { return WhereOperator{op: "IS_EMPTY", value: nil} }
+
+func (wo WhereOperator) GetOp() string { return wo.op }
+func (wo WhereOperator) GetValue() interface{} { return wo.value }

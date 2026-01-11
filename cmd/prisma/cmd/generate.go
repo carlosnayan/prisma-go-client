@@ -174,7 +174,7 @@ func runGenerateOnce(schemaPath string) error {
 	}
 
 	// Cleanup existing directories to ensure fresh generation
-	dirsToClean := []string{"inputs", "models", "queries", "enums"}
+	dirsToClean := []string{"inputs", "models", "queries", "enums", "builder", "raw", "utils"}
 	for _, dirName := range dirsToClean {
 		dirPath := filepath.Join(absoluteOutputDir, dirName)
 		if _, err := os.Stat(dirPath); err == nil {
