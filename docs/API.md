@@ -14,20 +14,20 @@ import (
 	"log"
 	"os"
 
-	"my-app/db"
+	prisma "my-app/prisma/generated"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Option 1: Setup from prisma.conf
 // Reads DATABASE_URL from prisma.conf [datasource] url
-client, pool, err := db.SetupClient(context.Background())
+client, pool, err := prisma.SetupClient(context.Background())
 if err != nil {
 	log.Fatal(err)
 }
 defer pool.Close()
 
 // Option 2: Explicit URL parameter (overrides prisma.conf)
-client, pool, err := db.SetupClient(context.Background(), "postgresql://user:pass@localhost/db")
+client, pool, err := prisma.SetupClient(context.Background(), "postgresql://user:pass@localhost/db")
 if err != nil {
 	log.Fatal(err)
 }
@@ -35,14 +35,14 @@ defer pool.Close()
 
 // Option 3: Manual setup with more control
 databaseURL := "postgresql://user:pass@localhost/db"
-pool, err := db.NewPgxPoolFromURL(context.Background(), databaseURL)
+pool, err := prisma.NewPgxPoolFromURL(context.Background(), databaseURL)
 if err != nil {
 	log.Fatal(err)
 }
 defer pool.Close()
 
-dbDriver := db.NewPgxPoolDriver(pool)
-client := db.NewClient(dbDriver)
+dbDriver := prisma.NewPgxPoolDriver(pool)
+client := prisma.NewClient(dbDriver)
 ```
 
 ## Fluent API
@@ -53,17 +53,17 @@ Each model has fluent builders accessible through the client using Prisma-like m
 
 **Query Methods:**
 
-- `client.Authors().FindFirst()` - Find first matching record
-- `client.Authors().FindMany()` - Find multiple records
-- `client.Authors().Count()` - Count matching records
+- `client.Authors.FindFirst()` - Find first matching record
+- `client.Authors.FindMany()` - Find multiple records
+- `client.Authors.Count()` - Count matching records
 
 **Mutation Methods:**
 
-- `client.Authors().Create()` - Create a single record
-- `client.Authors().CreateMany()` - Create multiple records
-- `client.Authors().UpdateMany()` - Update multiple records
-- `client.Authors().UpdateOneID(id)` - Update single record by ID
-- `client.Authors().Delete()` - Delete matching records
+- `client.Authors.Create()` - Create a single record
+- `client.Authors.CreateMany()` - Create multiple records
+- `client.Authors.UpdateMany()` - Update multiple records
+- `client.Authors.UpdateOneID(id)` - Update single record by ID
+- `client.Authors.Delete()` - Delete matching records
 
 ### Context Management (Optional)
 
@@ -72,18 +72,18 @@ Context can be added optionally using `WithContext()`. If not provided, `context
 ```go
 import (
     "context"
-    "my-app/db"
-    "my-app/db/authors" // Table package for type-safe filters
+    prisma "my-app/prisma/generated"
+    "my-app/prisma/generated/authors" // Table package for type-safe filters
 )
 
 // WithContext is optional
-user, err := client.Authors().FindFirst().
+user, err := client.Authors.FindFirst().
     Where(authors.EmailEQ("test@example.com")).
     WithContext(ctx). // optional
     Exec()
 
 // Without WithContext - uses context.Background()
-user, err := client.Authors().FindFirst().
+user, err := client.Authors.FindFirst().
     Where(authors.EmailEQ("test@example.com")).
     Exec() // Uses context.Background()
 ```
@@ -94,7 +94,7 @@ user, err := client.Authors().FindFirst().
 
 ```go
 // Create a single record using fluent API with Set methods
-user, err := client.Authors().Create().
+user, err := client.Authors.Create().
     SetEmail("author@example.com").
     SetFirstName("John").
     SetLastName("Doe").
@@ -194,8 +194,8 @@ You can skip duplicate records using `SkipDuplicates`:
 ```go
 result, err := client.Authors.CreateMany().
 	Data([]inputs.AuthorsCreateInput{
-		{Email: db.String("author@example.com"), Name: "User", Bio: "Bio"},
-		{Email: db.String("author@example.com"), Name: "User", Bio: "Bio"}, // Duplicate
+		{Email: prisma.String("author@example.com"), Name: "User", Bio: "Bio"},
+		{Email: prisma.String("author@example.com"), Name: "User", Bio: "Bio"}, // Duplicate
 	}).
 	SkipDuplicates(true).
 	Exec(ctx)
@@ -206,25 +206,25 @@ result, err := client.Authors.CreateMany().
 
 ```go
 import (
-    "my-app/db"
-    "my-app/db/authors" // Table package for type-safe filters
+    prisma "my-app/prisma/generated"
+    "my-app/prisma/generated/authors" // Table package for type-safe filters
 )
 
 // Find first matching record
-user, err := client.Authors().FindFirst().
+user, err := client.Authors.FindFirst().
     Where(authors.EmailEQ("author@example.com")).
     WithContext(ctx). // optional
     Exec()
 
 // Find many records with filters
-users, err := client.Authors().FindMany().
+users, err := client.Authors.FindMany().
     Where(authors.EmailContains("author")).
     Limit(10).
     WithContext(ctx). // optional
     Exec()
 
 // Find with multiple conditions (AND)
-users, err := client.Authors().FindMany().
+users, err := client.Authors.FindMany().
     Where(authors.And(
         authors.EmailContains("author"),
         authors.ActiveEQ(true),
@@ -232,7 +232,7 @@ users, err := client.Authors().FindMany().
     Exec()
 
 // Find with OR conditions
-users, err := client.Authors().FindMany().
+users, err := client.Authors.FindMany().
     Where(authors.Or(
         authors.EmailEQ("user1@example.com"),
         authors.EmailEQ("user2@example.com"),
@@ -244,7 +244,7 @@ users, err := client.Authors().FindMany().
 
 ```go
 // UpdateMany - update multiple records
-err := client.Authors().UpdateMany().
+err := client.Authors.UpdateMany().
     Where(authors.StatusEQ("inactive")).
     SetActive(false).
     SetUpdatedAt(time.Now()).
@@ -252,7 +252,7 @@ err := client.Authors().UpdateMany().
     Exec()
 
 // UpdateOneID - update single record by ID
-err := client.Authors().UpdateOneID(123).
+err := client.Authors.UpdateOneID(123).
     SetBio("Updated biography").
     SetActive(true).
     WithContext(ctx). // optional
@@ -263,13 +263,13 @@ err := client.Authors().UpdateOneID(123).
 
 ```go
 // Delete matching records
-err := client.Authors().Delete().
+err := client.Authors.Delete().
     Where(authors.EmailEQ("old@example.com")).
     WithContext(ctx). // optional
     Exec()
 
 // Delete with multiple conditions
-err := client.Authors().Delete().
+err := client.Authors.Delete().
     Where(authors.And(
         authors.StatusEQ("inactive"),
         authors.EmailContains("temp"),
@@ -283,17 +283,17 @@ Count matching records:
 
 ```go
 // Count all records
-count, err := client.Authors().Count().
+count, err := client.Authors.Count().
     WithContext(ctx). // optional
     Exec()
 
 // Count with filter
-count, err := client.Authors().Count().
+count, err := client.Authors.Count().
     Where(authors.ActiveEQ(true)).
     Exec()
 
 // Count with multiple conditions
-count, err := client.Authors().Count().
+count, err := client.Authors.Count().
     Where(authors.And(
         authors.EmailContains("@example.com"),
         authors.ActiveEQ(true),
@@ -311,12 +311,12 @@ The new API uses type-safe filters from table packages:
 import "my-app/db/authors"
 
 // Simple equality
-users, err := client.Authors().FindMany().
+users, err := client.Authors.FindMany().
     Where(authors.EmailEQ("author@example.com")).
     Exec()
 
 // Multiple conditions (AND)
-users, err := client.Authors().FindMany().
+users, err := client.Authors.FindMany().
     Where(authors.And(
         authors.EmailEQ("author@example.com"),
         authors.ActiveEQ(true),
@@ -324,7 +324,7 @@ users, err := client.Authors().FindMany().
     Exec()
 
 // OR conditions
-users, err := client.Authors().FindMany().
+users, err := client.Authors.FindMany().
     Where(authors.Or(
         authors.EmailEQ("author1@example.com"),
         authors.EmailEQ("author2@example.com"),
@@ -338,17 +338,17 @@ Table packages provide type-safe text filter methods:
 
 ```go
 // Contains
-users, err := client.Authors().FindMany().
+users, err := client.Authors.FindMany().
     Where(authors.EmailContains("author")).
     Exec()
 
 // Starts with
-users, err := client.Authors().FindMany().
+users, err := client.Authors.FindMany().
     Where(authors.FirstNameHasPrefix("John")).
     Exec()
 
 // Ends with
-users, err := client.Authors().FindMany().
+users, err := client.Authors.FindMany().
     Where(authors.LastNameHasSuffix("son")).
     Exec()
 ```
@@ -361,27 +361,27 @@ Table packages provide comparison operators for all field types:
 import "my-app/db/books"
 
 // Greater than
-books, err := client.Books().FindMany().
+books, err := client.Books.FindMany().
     Where(books.PageCountGT(100)).
     Exec()
 
 // Less than
-books, err := client.Books().FindMany().
+books, err := client.Books.FindMany().
     Where(books.PageCountLT(50)).
     Exec()
 
 // Greater than or equal
-books, err := client.Books().FindMany().
+books, err := client.Books.FindMany().
     Where(books.PageCountGTE(100)).
     Exec()
 
 // Less than or equal
-books, err := client.Books().FindMany().
+books, err := client.Books.FindMany().
     Where(books.PageCountLTE(500)).
     Exec()
 
 // Not equal
-books, err := client.Books().FindMany().
+books, err := client.Books.FindMany().
     Where(books.StatusNEQ("draft")).
     Exec()
 ```
@@ -392,12 +392,12 @@ books, err := client.Books().FindMany().
 import "my-app/db/authors"
 
 // Order by single field (descending)
-users, err := client.Authors().FindMany().
+users, err := client.Authors.FindMany().
     OrderBy(authors.FieldCreatedAt, authors.OrderDesc).
     Exec()
 
 // Order by single field (ascending)
-users, err := client.Authors().FindMany().
+users, err := client.Authors.FindMany().
     OrderBy(authors.FieldEmail, authors.OrderAsc).
     Exec()
 ```
@@ -406,19 +406,19 @@ users, err := client.Authors().FindMany().
 
 ```go
 // Limit results
-users, err := client.Authors().FindMany().
+users, err := client.Authors.FindMany().
     Limit(10).
     Exec()
 
 // Skip results
-users, err := client.Authors().FindMany().
+users, err := client.Authors.FindMany().
     Skip(20).
     Exec()
 
 // Limit and skip (pagination)
 page := 1
 pageSize := 10
-users, err := client.Authors().FindMany().
+users, err := client.Authors.FindMany().
     Skip((page - 1) * pageSize).
     Limit(pageSize).
     Exec()
@@ -430,7 +430,7 @@ users, err := client.Authors().FindMany().
 import "my-app/db/authors"
 
 // Select specific fields using table package constants
-users, err := client.Authors().FindMany().
+users, err := client.Authors.FindMany().
     Select(authors.FieldEmail, authors.FieldFirstName, authors.FieldLastName).
     Where(authors.ActiveEQ(true)).
     Exec()
@@ -508,42 +508,39 @@ results, err := client.Books.
 > [!NOTE]
 > Full-text search is available for PostgreSQL and MySQL databases with appropriate text search indexes.
 
-````go
-import (
-	"my-app/db"
-	"my-app/db/filters"
-	"my-app/db/inputs"
-
-Use the nullable wrapper API from the `inputs` package:
-
 ```go
-// ✅ Setting non-null values
+import (
+	prisma "my-app/prisma/generated"
+	"my-app/prisma/generated/filters"
+	"my-app/prisma/generated/inputs"
+
+// ✅ Setting values
 author, err := client.Authors.Create().
     SetFirstName("Isaac").
     SetLastName("Asimov").
-    SetBio(inputs.String.Set("Science fiction writer")).
-    SetNationality(inputs.String.Set("American")).
+    SetBio("Science fiction writer").
+    SetNationality("American").
     // Email is not set - will be NULL
     Exec(ctx)
-````
+```
 
 #### Practical Example: User Profile Update
 
 ```go
 // User wants to clear their phone number but keep email
 func UpdateUserProfile(ctx context.Context, userID string, updates ProfileUpdates) error {
-    // Build update with nullable wrappers using SetX() methods
+    // Build update with direct values
     updateBuilder := client.Authors.Update().
         Where(authors.IdAuthorEQ(userID)).
-        SetFirstName(inputs.String.Set(updates.FirstName))
+        SetFirstName(updates.FirstName)
 
-    // Clear phone if user requested
+    // Clear phone if user requested (passing nil for NULL)
     if updates.ClearPhone {
-        updateBuilder = updateBuilder.SetPhone(inputs.String.SetNull())
+        updateBuilder = updateBuilder.SetPhone(nil)
     } else if updates.Phone != "" {
-        updateBuilder = updateBuilder.SetPhone(inputs.String.Set(updates.Phone))
+        updateBuilder = updateBuilder.SetPhone(&updates.Phone)
     }
-    // If neither condition is true, phone SetX() is omitted and field won't be modified
+    // If neither condition is true, phone Setter is omitted and field won't be modified
 
     return updateBuilder.Exec(ctx)
 }
@@ -551,36 +548,33 @@ func UpdateUserProfile(ctx context.Context, userID string, updates ProfileUpdate
 
 #### Best Practices
 
-1. **Use `.Set()` for non-null values**: Always use `.Set()` when you have a value
-2. **Use `.SetNull()` for explicit NULL**: Use when you want to clear/nullify a field
-3. **Omit SetX() calls to leave unchanged**: Don't call SetX() for fields you don't want to modify
-4. **Type safety**: Each wrapper is type-safe - you can't pass wrong types
+1.  **Use direct values for required fields**: Just pass the value directly
+2.  **Use pointers for nullable fields**: Pass nil to clear/nullify a field, or a pointer to a value
+3.  **Omit Setter calls to leave unchanged**: Don't call SetField() for fields you don't want to modify
 
-````go
+```go
 // ✅ Correct
-inputs.String.Set("text")
-inputs.Int.Set(42)
-
-// ❌ Compile error - type mismatch
-inputs.String.Set(42)  // Cannot use int as string
+SetFirstName("Isaac")
+SetBio(nil) // Explicitly clear bio
+```
 
 ### Including Relations
 
 ```go
 // Include related data
 posts, err := client.Books.FindMany().
-	Include(db.BooksIncludeInput{
+	Include(prisma.BooksIncludeInput{
 		Author: true,
 	}).Exec()
 
 // Nested includes
 posts, err := client.Books.FindMany().
-	Include(db.BooksIncludeInput{
-		Author: db.AuthorsIncludeInput{
+	Include(prisma.BooksIncludeInput{
+		Author: prisma.AuthorsIncludeInput{
 			Posts: true,
 		},
 	}).Exec()
-````
+```
 
 ## Aggregations
 
@@ -628,7 +622,7 @@ Transactions allow you to execute multiple operations atomically. If any operati
 ### Basic Transaction
 
 ```go
-err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
+err := client.Transaction(ctx, func(tx *prisma.TransactionClient) error {
 	// Create author
 	author, err := tx.Authors.Create().
 		SetFirstName("John").
@@ -649,7 +643,7 @@ err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 ### Transaction with Multiple Operations
 
 ```go
-err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
+err := client.Transaction(ctx, func(tx *prisma.TransactionClient) error {
 	// Create author
 	author, err := tx.Authors.Create().
 		SetFirstName("John").
@@ -662,7 +656,8 @@ err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 	// Update author
 	err = tx.Authors.Update().
 		Where(authors.IdAuthorEQ(author.IdAuthor)).
-		SetBio(inputs.String.Set("Updated biography")).
+		SetFirstName("Updated Name").
+		SetBio("Updated biography").
 		Exec(ctx)
 	if err != nil {
 		return err
@@ -685,7 +680,7 @@ err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 ### Transaction with Raw SQL
 
 ```go
-err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
+err := client.Transaction(ctx, func(tx *prisma.TransactionClient) error {
 	// Use fluent API
 	author, err := tx.Authors.Create().
 		SetFirstName("John").
@@ -710,7 +705,7 @@ err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
 If any operation returns an error, the transaction is automatically rolled back:
 
 ```go
-err := client.Transaction(ctx, func(tx *db.TransactionClient) error {
+err := client.Transaction(ctx, func(tx *prisma.TransactionClient) error {
 	author, err := tx.Authors.Create().
 		SetFirstName("John").
 		SetLastName("Doe").
@@ -842,7 +837,7 @@ The `Scan()` function automatically handles various column naming patterns:
 // Set JSON field
 user, err := client.Authors.Update().
 	Where(authors.IdAuthorEQ(authorID)).
-	SetMetadata(db.JSON(map[string]interface{}{
+	SetMetadata(prisma.JSON(map[string]interface{}{
 		"key": "value",
 	})).
 	Exec(ctx)
@@ -866,7 +861,7 @@ results, err := client.Books.SearchRanked("search term").Exec()
 // Search in where clause
 posts, err := client.Books.FindMany(
 	inputs.BooksWhereInput{
-		Content: db.StringSearch("term"),
+		Content: prisma.StringSearch("term"),
 	},
 ).Exec()
 ```
@@ -875,7 +870,7 @@ posts, err := client.Books.FindMany(
 
 ```go
 // Validate struct
-err := db.ValidateStruct(user)
+err := prisma.ValidateStruct(user)
 if err != nil {
 	// Handle validation errors
 }
@@ -885,13 +880,13 @@ if err != nil {
 
 ```go
 // Before create hook
-client.Authors.BeforeCreate(func(user *db.User) error {
+client.Authors.BeforeCreate(func(user *prisma.User) error {
 	// Validate or modify before creation
 	return nil
 })
 
 // After create hook
-client.Authors.AfterCreate(func(user *db.User) error {
+client.Authors.AfterCreate(func(user *prisma.User) error {
 	// Send notification, log, etc.
 	return nil
 })

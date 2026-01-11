@@ -169,7 +169,7 @@ func TestGeneratedCode_PackageNames(t *testing.T) {
 	// Check package names
 	packageRegex := regexp.MustCompile(`^package\s+(\w+)`)
 
-	// Files in root should have package "generated"
+	// Files in root should have package "prisma"
 	rootFiles := []string{"client.go", "driver.go"}
 	for _, filename := range rootFiles {
 		filePath := filepath.Join(outputDir, filename)
@@ -181,8 +181,8 @@ func TestGeneratedCode_PackageNames(t *testing.T) {
 		lines := strings.Split(string(content), "\n")
 		for _, line := range lines {
 			if matches := packageRegex.FindStringSubmatch(line); matches != nil {
-				if matches[1] != "generated" {
-					t.Errorf("%s has wrong package name: got %s, want generated", filename, matches[1])
+				if matches[1] != "prisma" {
+					t.Errorf("%s has wrong package name: got %s, want prisma", filename, matches[1])
 				}
 				break
 			}

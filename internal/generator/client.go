@@ -34,14 +34,14 @@ func GenerateClient(schema *parser.Schema, outputDir string) error {
 	// Calculate import paths
 	modelsPath, queriesPath, _, err := calculateImportPath(userModule, outputDir)
 	if err != nil {
-		modelsPath = "github.com/carlosnayan/prisma-go-client/generated/models"
-		queriesPath = "github.com/carlosnayan/prisma-go-client/generated/queries"
+		modelsPath = "github.com/carlosnayan/prisma-go-client/prisma/models"
+		queriesPath = "github.com/carlosnayan/prisma-go-client/prisma/queries"
 	}
 
 	builderPath, rawPath, err := calculateLocalImportPath(userModule, outputDir)
 	if err != nil {
-		builderPath = "github.com/carlosnayan/prisma-go-client/generated/builder"
-		rawPath = "github.com/carlosnayan/prisma-go-client/generated/raw"
+		builderPath = "github.com/carlosnayan/prisma-go-client/prisma/builder"
+		rawPath = "github.com/carlosnayan/prisma-go-client/prisma/raw"
 	}
 
 	// Prepare model names (sorted) for use in struct and NewClient
@@ -102,8 +102,8 @@ func GenerateClient(schema *parser.Schema, outputDir string) error {
 		"transaction_method.tmpl",
 	}
 
-	// Generate client.go using templates with package "generated" for root directory
-	return executeTemplatesFromDirWithPackage(outputDir, "client.go", "client", templateNames, data, "generated")
+	// Generate client.go using templates with package "prisma" for root directory
+	return executeTemplatesFromDirWithPackage(outputDir, "client.go", "client", templateNames, data, "prisma")
 }
 
 // Note: Model access is now via fields (e.g., client.Users) instead of methods (e.g., client.Users())
@@ -194,16 +194,16 @@ func determineClientImports(schema *parser.Schema, userModule, outputDir string)
 	modelsPath, queriesPath, _, err := calculateImportPath(userModule, outputDir)
 	if err != nil {
 		// Fallback to old paths if detection fails
-		modelsPath = "github.com/carlosnayan/prisma-go-client/generated/models"
-		queriesPath = "github.com/carlosnayan/prisma-go-client/generated/queries"
+		modelsPath = "github.com/carlosnayan/prisma-go-client/prisma/models"
+		queriesPath = "github.com/carlosnayan/prisma-go-client/prisma/queries"
 	}
 
 	// Calculate local import paths for builder and raw (standalone packages)
 	builderPath, rawPath, err = calculateLocalImportPath(userModule, outputDir)
 	if err != nil {
 		// Fallback to old paths if detection fails
-		builderPath = "github.com/carlosnayan/prisma-go-client/generated/builder"
-		rawPath = "github.com/carlosnayan/prisma-go-client/generated/raw"
+		builderPath = "github.com/carlosnayan/prisma-go-client/prisma/builder"
+		rawPath = "github.com/carlosnayan/prisma-go-client/prisma/raw"
 	}
 
 	// These are always needed

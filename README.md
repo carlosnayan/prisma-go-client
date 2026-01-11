@@ -150,11 +150,11 @@ import (
     "log"
     "os"
 
-    db "my-app/db" // Your generated client
+    prisma "my-app/prisma/generated" // Your generated client
 )
 
 var (
-    Client *db.Client
+    Client *prisma.Client
 )
 
 func SetupPrismaClient() {
@@ -162,7 +162,7 @@ func SetupPrismaClient() {
 
     // Automatic setup - handles pool creation, configuration, and connection
     var err error
-    Client, _, err = db.SetupClient(ctx)
+    Client, _, err = prisma.SetupClient(ctx)
     if err != nil {
         log.Fatalf("Error setting up client: %v", err)
     }
@@ -175,7 +175,7 @@ func SetupPrismaClientManual() {
     databaseURL := os.Getenv("DATABASE_URL")
 
     // NewPgxPoolFromURL creates pool with PgBouncer-compatible settings by default
-    pool, err := db.NewPgxPoolFromURL(ctx, databaseURL)
+    pool, err := prisma.NewPgxPoolFromURL(ctx, databaseURL)
     if err != nil {
         log.Fatalf("Error creating pool: %v", err)
     }
@@ -185,8 +185,8 @@ func SetupPrismaClientManual() {
     }
 
     // Use the generated driver adapter
-    dbDriver := db.NewPgxPoolDriver(pool)
-    Client = db.NewClient(dbDriver)
+    dbDriver := prisma.NewPgxPoolDriver(pool)
+    Client = prisma.NewClient(dbDriver)
 }
 ```
 
@@ -201,8 +201,8 @@ import (
     "context"
     "log"
 
-    "my-app/db" // Your generated client
-    "my-app/db/authors" // Table package for Authors model
+    prisma "my-app/prisma/generated" // Your generated client
+    "my-app/prisma/generated/authors" // Table package for Authors model
     "my-app/database" // Your database setup package
 )
 
@@ -215,7 +215,7 @@ func main() {
     // New Prisma+Ent Query API with table package filters
 
     // Create a user using fluent API
-    user, err := database.Client.Authors().Create().
+    user, err := prisma.Client.Authors.Create().
         SetEmail("author@example.com").
         SetFirstName("Test").
         SetLastName("Author").
@@ -227,7 +227,7 @@ func main() {
     log.Printf("Created user: %+v\n", user)
 
     // Find users using fluent API with type-safe filters from table package
-    users, err := database.Client.Authors().FindMany().
+    users, err := prisma.Client.Authors.FindMany().
         Where(authors.EmailContains("author")).
         Limit(10).
         WithContext(ctx). // optional
@@ -238,7 +238,7 @@ func main() {
     log.Printf("Found %d users\n", len(users))
 
     // Order results
-    users, err = database.Client.Authors().FindMany().
+    users, err = prisma.Client.Authors.FindMany().
         Where(authors.ActiveEQ(true)).
         OrderBy(authors.FieldCreatedAt, authors.OrderDesc).
         Limit(20).
@@ -252,7 +252,7 @@ func main() {
 
 
     // Find first user with field selection
-    foundUser, err := database.Client.Authors().FindFirst().
+    foundUser, err := prisma.Client.Authors.FindFirst().
         Select(authors.FieldEmail, authors.FieldFirstName, authors.FieldLastName).
         Where(authors.EmailEQ("author@example.com")).
         WithContext(ctx). // optional
@@ -263,7 +263,7 @@ func main() {
     log.Printf("Found user: %+v\n", foundUser)
 
     // Count users
-    count, err := database.Client.Authors().Count().
+    count, err := prisma.Client.Authors.Count().
         Where(authors.EmailContains("@example.com")).
         WithContext(ctx). // optional
         Exec()
@@ -273,7 +273,7 @@ func main() {
     log.Printf("Total users: %d\n", count)
 
     // Update many users
-    err = database.Client.Authors().UpdateMany().
+    err = prisma.Client.Authors.UpdateMany().
         Where(authors.StatusEQ("inactive")).
     // Raw SQL example (Query requires slice, QueryRow requires struct/primitive)
     type BookResult struct {
@@ -281,7 +281,7 @@ func main() {
         Title  string `db:"title"`
     }
     var books []BookResult
-    err = database.Client.Raw().Query("SELECT id_book, title FROM books WHERE status = $1", "PUBLISHED").
+    err = prisma.Client.Raw().Query("SELECT id_book, title FROM books WHERE status = $1", "PUBLISHED").
         Exec().
         Scan(&books)
     if err != nil {
@@ -302,11 +302,11 @@ import (
     "context"
     "log"
 
-    db "my-app/db"
+    prisma "my-app/prisma/generated"
 )
 
 var (
-    Client *db.Client
+    Client *prisma.Client
 )
 
 func SetupPrismaClient() {
@@ -314,7 +314,7 @@ func SetupPrismaClient() {
 
     // Automatic setup - handles connection and configuration
     var err error
-    Client, _, err = db.SetupClient(ctx)
+    Client, _, err = prisma.SetupClient(ctx)
     if err != nil {
         log.Fatalf("Error setting up client: %v", err)
     }
@@ -330,11 +330,11 @@ import (
     "context"
     "log"
 
-    db "my-app/db"
+    prisma "my-app/prisma/generated"
 )
 
 var (
-    Client *db.Client
+    Client *prisma.Client
 )
 
 func SetupPrismaClient() {
@@ -342,14 +342,14 @@ func SetupPrismaClient() {
 
     // Automatic setup - handles connection and configuration
     var err error
-    Client, _, err = db.SetupClient(ctx)
+    Client, _, err = prisma.SetupClient(ctx)
     if err != nil {
         log.Fatalf("Error setting up client: %v", err)
     }
 }
 
-    dbDriver := db.NewSQLDriver(sqlDB)
-    Client = db.NewClient(dbDriver)
+    dbDriver := prisma.NewSQLDriver(sqlDB)
+    Client = prisma.NewClient(dbDriver)
 }
 ```
 

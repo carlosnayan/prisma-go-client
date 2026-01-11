@@ -24,7 +24,7 @@ func GenerateDriver(schema *parser.Schema, outputDir string) error {
 	builderPath, _, err := calculateLocalImportPath(userModule, outputDir)
 	if err != nil || builderPath == "" {
 		// Fallback to old path if detection fails
-		builderPath = "github.com/carlosnayan/prisma-go-client/generated/builder"
+		builderPath = "github.com/carlosnayan/prisma-go-client/prisma/builder"
 	}
 
 	// Prepare template data
@@ -69,6 +69,6 @@ func GenerateDriver(schema *parser.Schema, outputDir string) error {
 		)
 	}
 
-	// Generate driver.go using templates with package "generated" for root directory
-	return executeTemplatesFromDirWithPackage(outputDir, "driver.go", "driver", templateNames, data, "generated")
+	// Generate driver.go using templates with package "prisma" for root directory
+	return executeTemplatesFromDirWithPackage(outputDir, "driver.go", "driver", templateNames, data, "prisma")
 }
