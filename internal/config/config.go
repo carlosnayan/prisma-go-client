@@ -25,9 +25,17 @@ type MigrationsConfig struct {
 
 // DatasourceConfig configura a fonte de dados
 type DatasourceConfig struct {
-	URL               string   `toml:"url"` // URL do banco (pode usar env("DATABASE_URL") ou ${DATABASE_URL})
-	ShadowDatabaseURL string   `toml:"shadowDatabaseUrl,omitempty"`
-	Log               []string `toml:"log,omitempty"` // Níveis de log na seção datasource
+	URL               string      `toml:"url"` // URL do banco (pode usar env("DATABASE_URL") ou ${DATABASE_URL})
+	ShadowDatabaseURL string      `toml:"shadowDatabaseUrl,omitempty"`
+	Log               []string    `toml:"log,omitempty"` // Níveis de log na seção datasource
+	Pool              *PoolConfig `toml:"pool,omitempty"`
+}
+
+// PoolConfig configura o pool de conexões
+type PoolConfig struct {
+	MaxConns        int `toml:"max_conns"`         // Número máximo de conexões
+	MinConns        int `toml:"min_conns"`         // Número mínimo de conexões (idle)
+	MaxConnLifetime int `toml:"max_conn_lifetime"` // Tempo máximo de vida em minutos
 }
 
 // DebugConfig configura opções de debug
@@ -316,6 +324,18 @@ Para resolver:
 		}
 	}
 
+	if c.Datasource.Pool != nil {
+		if c.Datasource.Pool.MaxConns < 0 {
+			return fmt.Errorf("datasource.pool.max_conns deve ser maior ou igual a 0")
+		}
+		if c.Datasource.Pool.MinConns < 0 {
+			return fmt.Errorf("datasource.pool.min_conns deve ser maior ou igual a 0")
+		}
+		if c.Datasource.Pool.MaxConnLifetime < 0 {
+			return fmt.Errorf("datasource.pool.max_conn_lifetime deve ser maior ou igual a 0")
+		}
+	}
+
 	return nil
 }
 
@@ -355,4 +375,12 @@ func (c *Config) GetDatabaseURL() string {
 		return c.Datasource.URL
 	}
 	return ""
+}
+
+// GetPoolConfig retorna a configuração do pool de conexões (se existir)
+func (c *Config) GetPoolConfig() *PoolConfig {
+	if c.Datasource != nil {
+		return c.Datasource.Pool
+	}
+	return nil
 }

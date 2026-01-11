@@ -66,6 +66,19 @@ This creates:
 - `prisma/schema.prisma`: Database schema definition
 - `prisma/migrations/`: Directory for migrations
 
+#### Connection Pool Configuration (PostgreSQL & MySQL)
+
+You can configure the database connection pool in `prisma.conf`:
+
+```toml
+[datasource.pool]
+max_conns = 15
+min_conns = 5
+max_conn_lifetime = 30 # minutes
+```
+
+When this section is present, the client will automatically apply these settings and also set a default **5-second timeout** for connection establishment.
+
 ### 2. Define Your Schema
 
 Edit `prisma/schema.prisma`:

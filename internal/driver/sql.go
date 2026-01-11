@@ -3,6 +3,7 @@ package driver
 import (
 	"context"
 	"database/sql"
+	"time"
 )
 
 // SQLDBAdapter adapts *sql.DB to the driver.DB interface
@@ -148,4 +149,17 @@ func (t *SQLTx) Query(ctx context.Context, query string, args ...interface{}) (R
 func (t *SQLTx) QueryRow(ctx context.Context, query string, args ...interface{}) Row {
 	row := t.tx.QueryRowContext(ctx, query, args...)
 	return &SQLRow{row: row}
+}
+
+// ApplyPoolSettings configura o pool de conexões para *sql.DB
+func ApplyPoolSettings(db *sql.DB, maxConns, minConns, maxLifetimeMin int) {
+	if maxConns > 0 {
+		db.SetMaxOpenConns(maxConns)
+	}
+	if minConns > 0 {
+		db.SetMaxIdleConns(minConns)
+	}
+	if maxLifetimeMin > 0 {
+		db.SetConnMaxLifetime(time.Duration(maxLifetimeMin) * time.Minute)
+	}
 }

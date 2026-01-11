@@ -198,6 +198,7 @@ Low-level operations usually called by generated code.
 - Uses Go context for query timeouts.
 - Protection against SQL Injection using placeholders.
 - Database error sanitization.
+- **Connection Pool (MySQL/Postgres):** Configurable in `prisma.conf` via `[datasource.pool]` (max_conns, min_conns, max_conn_lifetime). When present, also sets a default 5-second connection timeout.
 
 ### Extensibility
 

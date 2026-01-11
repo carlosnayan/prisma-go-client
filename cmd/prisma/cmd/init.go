@@ -191,9 +191,9 @@ url = %q
 
 # Pool configuration (only supported for PostgreSQL and MySQL)
 # [datasource.pool]
-# connection_limit = 10
-# pool_timeout = 10
-# connect_timeout = 5
+# max_conns = 15
+# min_conns = 5
+# max_conn_lifetime = 30 # minutes
 
 [debug]
 log = ["warn"]

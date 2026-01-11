@@ -195,3 +195,46 @@ func NewSQLDriver(db *sql.DB) builder.DBTX {
 	return &SQLDBAdapter{db: db}
 }
 
+// PoolConfig configura o pool de conexões pgx
+type PoolConfig struct {
+	MaxConns              int32         // Número máximo de conexões no pool
+	MinConns              int32         // Número mínimo de conexões no pool
+	MaxConnLifetime       time.Duration // Tempo máximo de vida de uma conexão
+	MaxConnIdleTime       time.Duration // Tempo máximo que uma conexão pode ficar ociosa
+	HealthCheckPeriod     time.Duration // Período entre health checks
+	MaxConnLifetimeJitter time.Duration // Jitter para MaxConnLifetime
+	ConnectTimeout        time.Duration // Timeout para conexão inicial
+}
+
+// DefaultPoolConfig retorna configuração padrão otimizada para produção
+func DefaultPoolConfig() *PoolConfig {
+	return &PoolConfig{
+		MaxConns:              25,
+		MinConns:              5,
+		MaxConnLifetime:       30 * time.Minute,
+		MaxConnIdleTime:       5 * time.Minute,
+		HealthCheckPeriod:     1 * time.Minute,
+		MaxConnLifetimeJitter: 30 * time.Second,
+	}
+}
+
+// ConfigurePgxPool configura um pool pgx com as opções especificadas
+func ConfigurePgxPool(config *pgxpool.Config, poolConfig *PoolConfig) error {
+	if poolConfig == nil {
+		poolConfig = DefaultPoolConfig()
+	}
+
+	config.MaxConns = poolConfig.MaxConns
+	config.MinConns = poolConfig.MinConns
+	config.MaxConnLifetime = poolConfig.MaxConnLifetime
+	config.MaxConnIdleTime = poolConfig.MaxConnIdleTime
+	config.HealthCheckPeriod = poolConfig.HealthCheckPeriod
+	config.MaxConnLifetimeJitter = poolConfig.MaxConnLifetimeJitter
+
+	if poolConfig.ConnectTimeout > 0 {
+		config.ConnConfig.ConnectTimeout = poolConfig.ConnectTimeout
+	}
+
+	return nil
+}
+

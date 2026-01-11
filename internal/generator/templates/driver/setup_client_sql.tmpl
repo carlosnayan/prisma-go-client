@@ -28,6 +28,13 @@ func SetupClient(ctx context.Context, databaseURL ...string) (*Client, *sql.DB, 
 		return nil, nil, fmt.Errorf("error opening database: %w", err)
 	}
 
+	// Apply pool configuration from prisma.conf if available
+	{{if ne .Provider "sqlite"}}
+	if pCfg, _ := getPoolConfigFromConfig(); pCfg != nil {
+		ApplyPoolSettings(db, pCfg.MaxConns, pCfg.MinConns, pCfg.MaxConnLifetime)
+	}
+	{{end}}
+
 	if err := db.PingContext(ctx); err != nil {
 		db.Close()
 		return nil, nil, fmt.Errorf("error pinging database: %w", err)

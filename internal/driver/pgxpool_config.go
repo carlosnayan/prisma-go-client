@@ -17,6 +17,7 @@ type PoolConfig struct {
 	MaxConnIdleTime       time.Duration // Tempo máximo que uma conexão pode ficar ociosa
 	HealthCheckPeriod     time.Duration // Período entre health checks
 	MaxConnLifetimeJitter time.Duration // Jitter para MaxConnLifetime
+	ConnectTimeout        time.Duration // Timeout para conexão inicial
 }
 
 // DefaultPoolConfig retorna configuração padrão otimizada para produção
@@ -43,6 +44,10 @@ func ConfigurePgxPool(config *pgxpool.Config, poolConfig *PoolConfig) error {
 	config.MaxConnIdleTime = poolConfig.MaxConnIdleTime
 	config.HealthCheckPeriod = poolConfig.HealthCheckPeriod
 	config.MaxConnLifetimeJitter = poolConfig.MaxConnLifetimeJitter
+
+	if poolConfig.ConnectTimeout > 0 {
+		config.ConnConfig.ConnectTimeout = poolConfig.ConnectTimeout
+	}
 
 	return nil
 }

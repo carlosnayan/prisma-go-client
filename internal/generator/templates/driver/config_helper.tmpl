@@ -86,3 +86,88 @@ func parseDatasourceURL(data string) string {
 	return ""
 }
 
+type poolConfig struct {
+	MaxConns        int
+	MinConns        int
+	MaxConnLifetime int // minutes
+}
+
+func getPoolConfigFromConfig() (*poolConfig, error) {
+	wd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+
+	dir := wd
+	for {
+		configPath := filepath.Join(dir, "prisma.conf")
+		if _, err := os.Stat(configPath); err == nil {
+			data, err := os.ReadFile(configPath)
+			if err != nil {
+				return nil, err
+			}
+
+			return parsePoolConfig(string(data)), nil
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return nil, nil
+		}
+		dir = parent
+	}
+}
+
+func parsePoolConfig(data string) *poolConfig {
+	inPool := false
+	config := &poolConfig{}
+	hasConfig := false
+
+	scanner := bufio.NewScanner(strings.NewReader(data))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if line == "[datasource.pool]" {
+			inPool = true
+			hasConfig = true
+			continue
+		}
+		if strings.HasPrefix(line, "[") {
+			inPool = false
+			continue
+		}
+		if inPool {
+			idx := strings.Index(line, "=")
+			if idx == -1 {
+				continue
+			}
+			key := strings.TrimSpace(line[:idx])
+			valueStr := strings.TrimSpace(line[idx+1:])
+			
+			// Remover comentários da linha se existirem
+			if cIdx := strings.Index(valueStr, "#"); cIdx != -1 {
+				valueStr = strings.TrimSpace(valueStr[:cIdx])
+			}
+
+			var value int
+			fmt.Sscanf(valueStr, "%d", &value)
+
+			switch key {
+			case "max_conns":
+				config.MaxConns = value
+			case "min_conns":
+				config.MinConns = value
+			case "max_conn_lifetime":
+				config.MaxConnLifetime = value
+			}
+		}
+	}
+
+	if !hasConfig {
+		return nil
+	}
+	return config
+}
+
