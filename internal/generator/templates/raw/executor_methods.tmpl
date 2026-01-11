@@ -9,24 +9,9 @@ func (e *Executor) Query(sql string, args ...interface{}) *QueryBuilder {
 	return &QueryBuilder{executor: e, sql: sql, args: args}
 }
 
-func (q *QueryBuilder) Exec() *ScanResult {
+func (q *QueryBuilder) Exec() *QueryResult {
 	rows, err := q.executor.db.Query(context.Background(), q.sql, q.args...)
-	return &ScanResult{rows: rows, err: mapQueryError(err)}
-}
-
-type QueryRowBuilder struct {
-	executor *Executor
-	sql      string
-	args     []interface{}
-}
-
-func (e *Executor) QueryRow(sql string, args ...interface{}) *QueryRowBuilder {
-	return &QueryRowBuilder{executor: e, sql: sql, args: args}
-}
-
-func (q *QueryRowBuilder) Exec() *ScanRowResult {
-	row := q.executor.db.QueryRow(context.Background(), q.sql, q.args...)
-	return &ScanRowResult{row: row}
+	return &QueryResult{rows: rows, err: mapQueryError(err)}
 }
 
 func (e *Executor) Exec(sql string, args ...interface{}) (Result, error) {

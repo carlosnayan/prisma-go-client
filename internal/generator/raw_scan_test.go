@@ -57,7 +57,7 @@ func TestRawScan_ScanResultTemplateHasRequiredFunctions(t *testing.T) {
 		{"func scanRows(rows Rows, dest interface{}) error", "scanRows for automatic slice scanning"},
 		{"func buildFieldMap(t reflect.Type) map[string]int", "buildFieldMap for db tag mapping"},
 		{"func extractColumnName(col string) string", "extractColumnName for alias handling"},
-		{"func scanRow(row Row, dest interface{}) error", "scanRow for single struct scanning"},
+		{"func scanRow(rows Rows, dest interface{}) error", "scanRow for single struct scanning"},
 	}
 
 	for _, fn := range requiredFunctions {

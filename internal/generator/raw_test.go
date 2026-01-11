@@ -248,11 +248,6 @@ func TestRawNew_ExecutorMethods(t *testing.T) {
 		t.Error("Executor should have Query method")
 	}
 
-	// Verify Executor.QueryRow method exists
-	if !strings.Contains(contentStr, "func (e *Executor) QueryRow") {
-		t.Error("Executor should have QueryRow method")
-	}
-
 	// Verify builderDBAdapter.Exec uses reflection
 	if !strings.Contains(contentStr, "func (a *builderDBAdapter) Exec") {
 		t.Error("builderDBAdapter should have Exec method")
@@ -272,27 +267,14 @@ func TestRawNew_ExecutorMethods(t *testing.T) {
 		t.Error("builderDBAdapter.Query should use MethodByName to get Query method")
 	}
 
-	// Verify builderDBAdapter.QueryRow uses reflection
-	if !strings.Contains(contentStr, "func (a *builderDBAdapter) QueryRow") {
-		t.Error("builderDBAdapter should have QueryRow method")
-	}
-	if !strings.Contains(contentStr, "MethodByName(\"QueryRow\")") {
-		t.Error("builderDBAdapter.QueryRow should use MethodByName to get QueryRow method")
-	}
-
 	// Verify resultAdapter exists for type conversion
 	if !strings.Contains(contentStr, "type resultAdapter struct") {
 		t.Error("resultAdapter should exist for converting builder.Result to raw.Result")
 	}
 
-	// Verify rowsAdapter exists
+	// Verify rowAdapter exists
 	if !strings.Contains(contentStr, "type rowsAdapter struct") {
 		t.Error("rowsAdapter should exist for converting builder.Rows to raw.Rows")
-	}
-
-	// Verify rowAdapter exists
-	if !strings.Contains(contentStr, "type rowAdapter struct") {
-		t.Error("rowAdapter should exist for converting builder.Row to raw.Row")
 	}
 }
 
@@ -470,20 +452,6 @@ func TestRawNew_WithPostgreSQLAdapter(t *testing.T) {
 	}
 	if !strings.Contains(driverContentStr, "func (a *PgxPoolAdapter) Query") {
 		t.Error("PgxPoolAdapter should implement Query method")
-	}
-	if !strings.Contains(driverContentStr, "func (a *PgxPoolAdapter) QueryRow") {
-		t.Error("PgxPoolAdapter should implement QueryRow method")
-	}
-
-	// Verify PgxPoolAdapter returns builder.Result, builder.Rows, builder.Row
-	if !strings.Contains(driverContentStr, "func (a *PgxPoolAdapter) Exec(ctx context.Context, sql string, args ...interface{}) (builder.Result, error)") {
-		t.Error("PgxPoolAdapter.Exec should return (builder.Result, error)")
-	}
-	if !strings.Contains(driverContentStr, "func (a *PgxPoolAdapter) Query(ctx context.Context, sql string, args ...interface{}) (builder.Rows, error)") {
-		t.Error("PgxPoolAdapter.Query should return (builder.Rows, error)")
-	}
-	if !strings.Contains(driverContentStr, "func (a *PgxPoolAdapter) QueryRow(ctx context.Context, sql string, args ...interface{}) builder.Row") {
-		t.Error("PgxPoolAdapter.QueryRow should return builder.Row")
 	}
 
 	// Verify SetupClient uses NewPgxPoolDriver
@@ -832,65 +800,24 @@ func TestRawQuery_FluentAPI(t *testing.T) {
 		t.Error("Executor.Query should return *QueryBuilder")
 	}
 
-	if !strings.Contains(contentStr, "func (q *QueryBuilder) Exec() *ScanResult") {
-		t.Error("QueryBuilder.Exec should return *ScanResult without ctx parameter")
+	if !strings.Contains(contentStr, "func (q *QueryBuilder) Exec() *QueryResult") {
+		t.Error("QueryBuilder.Exec should return *QueryResult without ctx parameter")
 	}
 
-	if !strings.Contains(contentStr, "type ScanResult struct") {
-		t.Error("raw.go should contain ScanResult struct")
+	if !strings.Contains(contentStr, "type QueryResult struct") {
+		t.Error("raw.go should contain QueryResult struct")
 	}
 
-	if !strings.Contains(contentStr, "func (r *ScanResult) Scan(dest interface{}) error") {
-		t.Error("ScanResult should have Scan method")
+	if !strings.Contains(contentStr, "func (r *QueryResult) Scan(dest interface{}) error") {
+		t.Error("QueryResult should have Scan method")
 	}
 
-	if !strings.Contains(contentStr, "func (r *ScanResult) Rows() (Rows, error)") {
-		t.Error("ScanResult should have Rows method for manual iteration")
-	}
-}
-
-func TestRawQueryRow_FluentAPI(t *testing.T) {
-	tmpDir := t.TempDir()
-	outputDir := filepath.Join(tmpDir, "generated")
-
-	goModPath := filepath.Join(tmpDir, "go.mod")
-	goModContent := "module test\n"
-	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
-		t.Fatalf("Failed to create go.mod: %v", err)
-	}
-
-	if err := GenerateRaw(outputDir); err != nil {
-		t.Fatalf("GenerateRaw failed: %v", err)
-	}
-
-	rawFile := filepath.Join(outputDir, "raw", "raw.go")
-	content, err := os.ReadFile(rawFile)
-	if err != nil {
-		t.Fatalf("Failed to read raw.go: %v", err)
-	}
-
-	contentStr := string(content)
-
-	if !strings.Contains(contentStr, "type QueryRowBuilder struct") {
-		t.Error("raw.go should contain QueryRowBuilder struct")
-	}
-
-	if !strings.Contains(contentStr, "func (e *Executor) QueryRow(sql string, args ...interface{}) *QueryRowBuilder") {
-		t.Error("Executor.QueryRow should return *QueryRowBuilder")
-	}
-
-	if !strings.Contains(contentStr, "func (q *QueryRowBuilder) Exec() *ScanRowResult") {
-		t.Error("QueryRowBuilder.Exec should return *ScanRowResult without ctx parameter")
-	}
-
-	if !strings.Contains(contentStr, "type ScanRowResult struct") {
-		t.Error("raw.go should contain ScanRowResult struct")
-	}
-
-	if !strings.Contains(contentStr, "func (r *ScanRowResult) Scan(dest interface{}) error") {
-		t.Error("ScanRowResult.Scan should accept single interface{} for struct scanning")
+	if !strings.Contains(contentStr, "func (r *QueryResult) Rows() (Rows, error)") {
+		t.Error("QueryResult should have Rows method for manual iteration")
 	}
 }
+
+// TestRawQueryRow_FluentAPI is removed as QueryRow was unified into Query
 
 func TestRawExec_ReturnsResult(t *testing.T) {
 	tmpDir := t.TempDir()

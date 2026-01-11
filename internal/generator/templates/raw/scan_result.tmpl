@@ -1,81 +1,51 @@
 
-type ScanResult struct {
+type QueryResult struct {
 	rows Rows
 	err  error
 }
 
-func (r *ScanResult) Scan(dest interface{}) error {
+func (r *QueryResult) Scan(dest interface{}) error {
 	if r.err != nil {
 		return r.err
 	}
 	if r.rows == nil {
-		return fmt.Errorf("no rows to scan")
+		return fmt.Errorf("QueryResult.Scan: no rows to scan")
 	}
 	defer r.rows.Close()
 
 	destVal := reflect.ValueOf(dest)
 	if destVal.Kind() != reflect.Ptr {
-		return fmt.Errorf("Query.Scan: dest must be a pointer to slice")
-	}
-	if destVal.Elem().Kind() != reflect.Slice {
-		return fmt.Errorf("Query.Scan: dest must be a pointer to slice, got pointer to %s", destVal.Elem().Kind())
+		return fmt.Errorf("QueryResult.Scan: dest must be a pointer")
 	}
 
-	return scanRows(r.rows, dest)
-}
-
-func (r *ScanResult) Rows() (Rows, error) {
-	return r.rows, r.err
-}
-
-type ScanRowResult struct {
-	row Row
-	err error
-}
-
-func (r *ScanRowResult) Scan(dest interface{}) error {
-	if r.err != nil {
-		return mapQueryRowError(r.err)
-	}
-	if r.row == nil {
-		return fmt.Errorf("no row to scan")
-	}
-
-	destVal := reflect.ValueOf(dest)
-	if destVal.Kind() != reflect.Ptr {
-		return fmt.Errorf("QueryRow.Scan: dest must be a pointer to struct")
-	}
 	elemVal := destVal.Elem()
-	if elemVal.Kind() == reflect.Slice {
-		return fmt.Errorf("QueryRow.Scan: dest must be a pointer to struct, not slice. Use Query() for multiple rows")
+	switch elemVal.Kind() {
+	case reflect.Slice:
+		return scanRows(r.rows, dest)
+	case reflect.Struct:
+		return scanRow(r.rows, dest)
+	default:
+		// Assume primitive
+		return scanPrimitive(r.rows, dest)
 	}
-	if elemVal.Kind() != reflect.Struct {
-		err := r.row.Scan(dest)
-		return mapQueryRowError(err)
-	}
+}
 
-	return mapQueryRowError(scanRow(r.row, dest))
+func (r *QueryResult) Rows() (Rows, error) {
+	return r.rows, r.err
 }
 
 func scanRows(rows Rows, dest interface{}) error {
 	destVal := reflect.ValueOf(dest)
-	if destVal.Kind() != reflect.Ptr {
-		return fmt.Errorf("dest must be a pointer to slice")
-	}
-	
 	sliceVal := destVal.Elem()
-	if sliceVal.Kind() != reflect.Slice {
-		return fmt.Errorf("dest must be a pointer to slice")
-	}
-	
 	elemType := sliceVal.Type().Elem()
+	
 	isPtr := elemType.Kind() == reflect.Ptr
 	if isPtr {
 		elemType = elemType.Elem()
 	}
 	
 	if elemType.Kind() != reflect.Struct {
-		return fmt.Errorf("slice element must be a struct or pointer to struct")
+		return fmt.Errorf("QueryResult.Scan: slice element must be a struct or pointer to struct")
 	}
 	
 	columns, err := rows.Columns()
@@ -84,8 +54,10 @@ func scanRows(rows Rows, dest interface{}) error {
 	}
 	
 	fieldMap := buildFieldMap(elemType)
+	count := 0
 	
 	for rows.Next() {
+		count++
 		elemPtr := reflect.New(elemType)
 		elem := elemPtr.Elem()
 		
@@ -115,50 +87,27 @@ func scanRows(rows Rows, dest interface{}) error {
 		return fmt.Errorf("rows error: %w", err)
 	}
 	
+	// Initialize empty slice instead of nil
+	if count == 0 && sliceVal.IsNil() {
+		sliceVal.Set(reflect.MakeSlice(sliceVal.Type(), 0, 0))
+	}
+	
 	return nil
 }
 
-func buildFieldMap(t reflect.Type) map[string]int {
-	fieldMap := make(map[string]int)
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-		if tag := field.Tag.Get("db"); tag != "" && tag != "-" {
-			fieldMap[tag] = i
-		}
-	}
-	return fieldMap
-}
-
-func extractColumnName(col string) string {
-	col = strings.TrimSpace(col)
-	
-	lowerCol := strings.ToLower(col)
-	if idx := strings.LastIndex(lowerCol, " as "); idx != -1 {
-		return strings.TrimSpace(col[idx+4:])
-	}
-	
-	if idx := strings.LastIndex(col, "."); idx != -1 {
-		return col[idx+1:]
-	}
-	
-	return col
-}
-
-func scanRow(row Row, dest interface{}) error {
-	destVal := reflect.ValueOf(dest)
-	if destVal.Kind() != reflect.Ptr {
-		return fmt.Errorf("dest must be a pointer to struct")
-	}
-	
-	elemVal := destVal.Elem()
-	elemType := elemVal.Type()
-	
-	columns, err := row.Columns()
+func scanRow(rows Rows, dest interface{}) error {
+	columns, err := rows.Columns()
 	if err != nil {
 		return fmt.Errorf("failed to get columns: %w", err)
 	}
-	
-	fieldMap := buildFieldMap(elemType)
+
+	if !rows.Next() {
+		return fmt.Errorf("QueryResult.Scan: no rows found")
+	}
+
+	destVal := reflect.ValueOf(dest)
+	elemVal := destVal.Elem()
+	fieldMap := buildFieldMap(elemVal.Type())
 	
 	scanDest := make([]interface{}, len(columns))
 	for i, col := range columns {
@@ -171,6 +120,78 @@ func scanRow(row Row, dest interface{}) error {
 		}
 	}
 	
-	return row.Scan(scanDest...)
+	if err := rows.Scan(scanDest...); err != nil {
+		return fmt.Errorf("failed to scan row: %w", err)
+	}
+
+	if rows.Next() {
+		return fmt.Errorf("QueryResult.Scan: expected exactly 1 row, but query returned more")
+	}
+
+	return rows.Err()
 }
 
+func scanPrimitive(rows Rows, dest interface{}) error {
+	columns, err := rows.Columns()
+	if err != nil {
+		return fmt.Errorf("failed to get columns: %w", err)
+	}
+
+	if len(columns) != 1 {
+		return fmt.Errorf("QueryResult.Scan: expected exactly 1 column for primitive scan, but got %d", len(columns))
+	}
+
+	if !rows.Next() {
+		return fmt.Errorf("QueryResult.Scan: no rows found")
+	}
+
+	if err := rows.Scan(dest); err != nil {
+		return fmt.Errorf("failed to scan primitive: %w", err)
+	}
+
+	if rows.Next() {
+		return fmt.Errorf("QueryResult.Scan: expected exactly 1 row for primitive scan, but query returned more")
+	}
+
+	return rows.Err()
+}
+
+func buildFieldMap(t reflect.Type) map[string]int {
+	fieldMap := make(map[string]int)
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		
+		// Priority 1: db tag
+		tag := field.Tag.Get("db")
+		if tag == "-" {
+			continue
+		}
+		if tag != "" {
+			fieldMap[tag] = i
+			continue
+		}
+
+		// Priority 2: json tag (fallback)
+		tag = field.Tag.Get("json")
+		if tag != "" && tag != "-" {
+			// Strip json options like "omitempty"
+			if idx := strings.Index(tag, ","); idx != -1 {
+				tag = tag[:idx]
+			}
+			fieldMap[tag] = i
+		}
+	}
+	return fieldMap
+}
+
+func extractColumnName(col string) string {
+	col = strings.TrimSpace(col)
+	lowerCol := strings.ToLower(col)
+	if idx := strings.LastIndex(lowerCol, " as "); idx != -1 {
+		return strings.TrimSpace(col[idx+4:])
+	}
+	if idx := strings.LastIndex(col, "."); idx != -1 {
+		return col[idx+1:]
+	}
+	return col
+}
