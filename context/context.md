@@ -157,15 +157,15 @@ To ensure stability and protect against OOM (Out of Memory):
 
 This is the modern, type-safe API used by developers. It uses specialized builders for different operations.
 
-| Builder               | Methods                                                           | Returns            |
-| :-------------------- | :---------------------------------------------------------------- | :----------------- |
-| **`FindFirst()`**     | `Where()`, `OrderBy()`, `Select()`, `Exec()`                      | `(*Model, error)`  |
-| **`FindMany()`**      | `Where()`, `OrderBy()`, `Limit()`, `Skip()`, `Select()`, `Exec()` | `([]Model, error)` |
-| **`Create()`**        | `Set[Field]()`, `Exec()`                                          | `(*Model, error)`  |
-| **`Update()`**        | `Where()`, `Set[Field]()`, `Exec()`                               | `(*Model, error)`  |
-| **`UpdateOneID(id)`** | `Set[Field]()`, `Exec()`                                          | `error`            |
-| **`UpdateMany()`**    | `Where()`, `Set[Field]()`, `Exec()`                               | `error`            |
-| **`Delete()`**        | `Where()`, `Exec()`                                               | `error`            |
+| Builder               | Methods                                                          | Returns            |
+| :-------------------- | :--------------------------------------------------------------- | :----------------- |
+| **`FindFirst()`**     | `Where()`, `OrderBy()`, `Select()`, `Exec()`                     | `(*Model, error)`  |
+| **`FindMany()`**      | `Where()`, `OrderBy()`, `Take()`, `Skip()`, `Select()`, `Exec()` | `([]Model, error)` |
+| **`Create()`**        | `Set[Field]()`, `Exec()`                                         | `(*Model, error)`  |
+| **`Update()`**        | `Where()`, `Set[Field]()`, `Exec()`                              | `(*Model, error)`  |
+| **`UpdateOneID(id)`** | `Set[Field]()`, `Exec()`                                         | `error`            |
+| **`UpdateMany()`**    | `Where()`, `Set[Field]()`, `Exec()`                              | `error`            |
+| **`Delete()`**        | `Where()`, `Exec()`                                              | `error`            |
 
 > [!NOTE]
 > All builders support `WithContext(ctx)` to explicitly pass a context. The standard `Exec()` uses the context stored in the query (usually `context.Background()` unless set via `WithContext`).
@@ -198,7 +198,7 @@ Low-level operations usually called by generated code.
 - Uses Go context for query timeouts.
 - Protection against SQL Injection using placeholders.
 - Database error sanitization.
-- **Connection Pool (MySQL/Postgres):** Configurable in `prisma.conf` via `[datasource.pool]` (max_conns, min_conns, max_conn_lifetime). When present, also sets a default 5-second connection timeout.
+- **Connection Pool Configuration:** Programmatically configured via `SetupClientWithOptions()` using `ClientOptions` and `PoolOptions` structs. This allows type-safe pool configuration with validation for MaxConns, MinConns, MaxConnLifetime, and PostgreSQL-specific settings (MaxIdleTime, HealthCheckPeriod, ConnectTimeout). The legacy `[datasource.pool]` configuration in `prisma.conf` has been removed.
 
 ### Extensibility
 
