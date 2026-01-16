@@ -1,0 +1,74 @@
+
+// PoolOptions configures the database connection pool.
+// Works for PostgreSQL (pgxpool), MySQL, and SQLite (sql.DB).
+type PoolOptions struct {
+	// MaxConns sets the maximum number of connections in the pool.
+	// Default: 25 (PostgreSQL), driver-dependent (MySQL/SQLite)
+	MaxConns int32
+
+	// MinConns sets the minimum number of idle connections in the pool.
+	// Default: 5 (PostgreSQL), driver-dependent (MySQL/SQLite)
+	MinConns int32
+
+	// MaxConnLifetime sets the maximum lifetime of a connection.
+	// After this duration, the connection is closed and a new one is created.
+	// Default: 30 minutes
+	MaxConnLifetime time.Duration
+
+	// MaxIdleTime sets the maximum time a connection can remain idle.
+	// PostgreSQL only (ignored on MySQL/SQLite).
+	// Default: 5 minutes
+	MaxIdleTime time.Duration
+
+	// HealthCheckPeriod sets the interval between connection health checks.
+	// PostgreSQL only (ignored on MySQL/SQLite).
+	// Default: 1 minute
+	HealthCheckPeriod time.Duration
+
+	// ConnectTimeout sets the timeout for establishing new connections.
+	// PostgreSQL only (ignored on MySQL/SQLite).
+	// Default: 5 seconds
+	ConnectTimeout time.Duration
+}
+
+// ClientOptions configures the Prisma client.
+type ClientOptions struct {
+	// DatabaseURL is the database connection URL (required).
+	DatabaseURL string
+
+	// Pool contains connection pool settings (optional).
+	// If nil, optimized default values are used.
+	Pool *PoolOptions
+}
+
+// DefaultPoolOptions returns production-optimized default settings.
+func DefaultPoolOptions() *PoolOptions {
+	return &PoolOptions{
+		MaxConns:          25,
+		MinConns:          5,
+		MaxConnLifetime:   30 * time.Minute,
+		MaxIdleTime:       5 * time.Minute,
+		HealthCheckPeriod: 1 * time.Minute,
+		ConnectTimeout:    5 * time.Second,
+	}
+}
+
+// Validate validates and normalizes pool configuration settings.
+func (p *PoolOptions) Validate() error {
+	if p == nil {
+		return nil
+	}
+	
+	if p.MaxConns < 0 {
+		return fmt.Errorf("MaxConns cannot be negative")
+	}
+	if p.MinConns < 0 {
+		return fmt.Errorf("MinConns cannot be negative")
+	}
+	if p.MaxConns > 0 && p.MinConns > p.MaxConns {
+		return fmt.Errorf("MinConns (%d) cannot be greater than MaxConns (%d)", 
+			p.MinConns, p.MaxConns)
+	}
+	
+	return nil
+}

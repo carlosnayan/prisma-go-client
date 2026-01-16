@@ -37,12 +37,16 @@ func GenerateDriver(schema *parser.Schema, outputDir string) error {
 	var templateNames []string
 	templateNames = append(templateNames, "imports.tmpl")
 
+	// Add client options types (common to all providers)
+	templateNames = append(templateNames, "client_options.tmpl")
+
 	switch provider {
 	case "postgresql":
 		templateNames = append(templateNames,
 			"postgresql_driver.tmpl",
 			"config_helper.tmpl",
 			"setup_client_postgresql.tmpl",
+			"setup_client_with_options_postgresql.tmpl",
 			"sqldb_adapter.tmpl",
 		)
 	case "mysql":
@@ -50,6 +54,7 @@ func GenerateDriver(schema *parser.Schema, outputDir string) error {
 			"mysql_driver.tmpl",
 			"config_helper.tmpl",
 			"setup_client_sql.tmpl",
+			"setup_client_with_options_sql.tmpl",
 			"sqldb_adapter.tmpl",
 		)
 	case "sqlite":
@@ -57,6 +62,7 @@ func GenerateDriver(schema *parser.Schema, outputDir string) error {
 			"sqlite_driver.tmpl",
 			"config_helper.tmpl",
 			"setup_client_sql.tmpl",
+			"setup_client_with_options_sql.tmpl",
 			"sqldb_adapter.tmpl",
 		)
 	default:
@@ -65,6 +71,7 @@ func GenerateDriver(schema *parser.Schema, outputDir string) error {
 			"postgresql_driver.tmpl",
 			"config_helper.tmpl",
 			"setup_client_postgresql.tmpl",
+			"setup_client_with_options_postgresql.tmpl",
 			"sqldb_adapter.tmpl",
 		)
 	}

@@ -1,0 +1,78 @@
+// SetupClientWithOptions creates a new Prisma client with custom options.
+// This function allows you to configure the database connection pool programmatically.
+// 
+// Example with default pool settings:
+//   opts := &ClientOptions{DatabaseURL: "postgresql://..."}
+//   client, pool, err := SetupClientWithOptions(ctx, opts)
+//
+// Example with custom pool settings:
+//   opts := &ClientOptions{
+//       DatabaseURL: "postgresql://...",
+//       Pool: &PoolOptions{
+//           MaxConns: 50,
+//           MinConns: 10,
+//           MaxConnLifetime: 1 * time.Hour,
+//       },
+//   }
+//   client, pool, err := SetupClientWithOptions(ctx, opts)
+func SetupClientWithOptions(ctx context.Context, opts *ClientOptions) (*Client, *pgxpool.Pool, error) {
+	if opts == nil || opts.DatabaseURL == "" {
+		return nil, nil, fmt.Errorf("ClientOptions.DatabaseURL is required")
+	}
+
+	// Parse pool config
+	poolConfig, err := pgxpool.ParseConfig(opts.DatabaseURL)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error parsing database URL: %w", err)
+	}
+
+	// Set query exec mode to simple protocol (required for Prisma compatibility)
+	poolConfig.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+
+	// Apply pool options (or use defaults)
+	poolOpts := opts.Pool
+	if poolOpts == nil {
+		poolOpts = DefaultPoolOptions()
+	} else if err := poolOpts.Validate(); err != nil {
+		return nil, nil, fmt.Errorf("invalid pool options: %w", err)
+	}
+
+	// Configure pgxpool with provided or default values
+	if poolOpts.MaxConns > 0 {
+		poolConfig.MaxConns = poolOpts.MaxConns
+	}
+	if poolOpts.MinConns > 0 {
+		poolConfig.MinConns = poolOpts.MinConns
+	}
+	if poolOpts.MaxConnLifetime > 0 {
+		poolConfig.MaxConnLifetime = poolOpts.MaxConnLifetime
+	}
+	if poolOpts.MaxIdleTime > 0 {
+		poolConfig.MaxConnIdleTime = poolOpts.MaxIdleTime
+	}
+	if poolOpts.HealthCheckPeriod > 0 {
+		poolConfig.HealthCheckPeriod = poolOpts.HealthCheckPeriod
+	}
+	if poolOpts.ConnectTimeout > 0 {
+		poolConfig.ConnConfig.ConnectTimeout = poolOpts.ConnectTimeout
+	}
+
+	// Create pool
+	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error creating pool: %w", err)
+	}
+
+	// Ping database
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, nil, fmt.Errorf("error pinging database: %w", err)
+	}
+
+	// Create client
+	dbDriver := NewPgxPoolDriver(pool)
+	client := NewClient(dbDriver)
+
+	return client, pool, nil
+}
+

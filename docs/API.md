@@ -13,6 +13,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"time"
 
 	prisma "my-app/prisma/generated"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -43,7 +44,62 @@ defer pool.Close()
 
 dbDriver := prisma.NewPgxPoolDriver(pool)
 client := prisma.NewClient(dbDriver)
+
+// Option 4: SetupClientWithOptions - Programmatic pool configuration (Recommended for Production)
+// Configure pool settings in code instead of relying on prisma.conf
+opts := &prisma.ClientOptions{
+	DatabaseURL: os.Getenv("DATABASE_URL"),
+	Pool: &prisma.PoolOptions{
+		MaxConns:          25,
+		MinConns:          5,
+		MaxConnLifetime:   30 * time.Minute,
+		MaxIdleTime:       5 * time.Minute,  // PostgreSQL only
+		HealthCheckPeriod: 1 * time.Minute,  // PostgreSQL only
+		ConnectTimeout:    5 * time.Second,  // PostgreSQL only
+	},
+}
+
+client, pool, err := prisma.SetupClientWithOptions(context.Background(), opts)
+if err != nil {
+	log.Fatal(err)
+}
+defer pool.Close()
+
+// If Pool is nil, default settings are used
+optsDefault := &prisma.ClientOptions{
+	DatabaseURL: os.Getenv("DATABASE_URL"),
+	// Pool is nil - uses defaults: MaxConns=25, MinConns=5, MaxConnLifetime=30min
+}
+
+client, pool, err = prisma.SetupClientWithOptions(context.Background(), optsDefault)
+if err != nil {
+	log.Fatal(err)
+}
+defer pool.Close()
 ```
+
+### Pool Configuration Options
+
+#### PostgreSQL
+
+Supports all pool configuration options:
+
+- `MaxConns` - Maximum number of connections (default: 25)
+- `MinConns` - Minimum number of idle connections (default: 5)
+- `MaxConnLifetime` - Maximum connection lifetime (default: 30 minutes)
+- `MaxIdleTime` - Maximum idle time for a connection (default: 5 minutes)
+- `HealthCheckPeriod` - Interval between health checks (default: 1 minute)
+- `ConnectTimeout` - Timeout for establishing connections (default: 5 seconds)
+
+#### MySQL / SQLite
+
+Supports basic pool configuration options:
+
+- `MaxConns` - Maximum number of connections
+- `MinConns` - Minimum number of idle connections
+- `MaxConnLifetime` - Maximum connection lifetime
+
+**Note:** MaxIdleTime, HealthCheckPeriod, and ConnectTimeout are ignored for MySQL and SQLite.
 
 ## Fluent API
 

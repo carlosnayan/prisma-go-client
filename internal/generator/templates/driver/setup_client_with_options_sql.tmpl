@@ -1,0 +1,63 @@
+// SetupClientWithOptions creates a new Prisma client with custom options.
+// This function allows you to configure the database connection pool programmatically.
+// 
+// Example with default pool settings:
+//   opts := &ClientOptions{DatabaseURL: "{{.Provider}}://..."}
+//   client, db, err := SetupClientWithOptions(ctx, opts)
+//
+// Example with custom pool settings:
+//   opts := &ClientOptions{
+//       DatabaseURL: "{{.Provider}}://...",
+//       Pool: &PoolOptions{
+//           MaxConns: 50,
+//           MinConns: 10,
+//           MaxConnLifetime: 1 * time.Hour,
+//       },
+//   }
+//   client, db, err := SetupClientWithOptions(ctx, opts)
+//
+// Note: MaxIdleTime, HealthCheckPeriod, and ConnectTimeout are ignored for {{.Provider}}.
+func SetupClientWithOptions(ctx context.Context, opts *ClientOptions) (*Client, *sql.DB, error) {
+	if opts == nil || opts.DatabaseURL == "" {
+		return nil, nil, fmt.Errorf("ClientOptions.DatabaseURL is required")
+	}
+
+	// Open database
+	db, err := sql.Open("{{if eq .Provider "sqlite"}}sqlite3{{else}}{{.Provider}}{{end}}", opts.DatabaseURL)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error opening database: %w", err)
+	}
+
+	// Apply pool options (or use defaults)
+	poolOpts := opts.Pool
+	if poolOpts == nil {
+		poolOpts = DefaultPoolOptions()
+	} else if err := poolOpts.Validate(); err != nil {
+		db.Close()
+		return nil, nil, fmt.Errorf("invalid pool options: %w", err)
+	}
+
+	// Configure sql.DB pool (MaxIdleTime, HealthCheckPeriod, ConnectTimeout are ignored)
+	if poolOpts.MaxConns > 0 {
+		db.SetMaxOpenConns(int(poolOpts.MaxConns))
+	}
+	if poolOpts.MinConns > 0 {
+		db.SetMaxIdleConns(int(poolOpts.MinConns))
+	}
+	if poolOpts.MaxConnLifetime > 0 {
+		db.SetConnMaxLifetime(poolOpts.MaxConnLifetime)
+	}
+
+	// Ping database
+	if err := db.PingContext(ctx); err != nil {
+		db.Close()
+		return nil, nil, fmt.Errorf("error pinging database: %w", err)
+	}
+
+	// Create client
+	dbDriver := NewSQLDriver(db)
+	client := NewClient(dbDriver)
+
+	return client, db, nil
+}
+

@@ -502,3 +502,288 @@ func TestSetupClient_ErrorHandling(t *testing.T) {
 		t.Error("SetupClient should return error when ping fails")
 	}
 }
+
+func TestSetupClientWithOptions_GeneratedForPostgreSQL(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputDir := filepath.Join(tmpDir, "generated")
+
+	// Create a temporary go.mod file for module detection
+	goModPath := filepath.Join(tmpDir, "go.mod")
+	goModContent := "module test\n"
+	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
+		t.Fatalf("Failed to create go.mod: %v", err)
+	}
+
+	schema := &parser.Schema{
+		Datasources: []*parser.Datasource{
+			{
+				Name: "db",
+				Fields: []*parser.Field{
+					{
+						Name:  "provider",
+						Value: "postgresql",
+					},
+				},
+			},
+		},
+		Models: []*parser.Model{
+			{
+				Name: "User",
+				Fields: []*parser.ModelField{
+					{
+						Name: "id",
+						Type: &parser.FieldType{Name: "Int"},
+						Attributes: []*parser.Attribute{
+							{Name: "id"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Generate all necessary files
+	if err := GenerateClient(schema, outputDir); err != nil {
+		t.Fatalf("GenerateClient failed: %v", err)
+	}
+	if err := GenerateDriver(schema, outputDir); err != nil {
+		t.Fatalf("GenerateDriver failed: %v", err)
+	}
+	if err := GenerateRaw(outputDir); err != nil {
+		t.Fatalf("GenerateRaw failed: %v", err)
+	}
+
+	// Read generated driver.go
+	driverFile := filepath.Join(outputDir, "driver.go")
+	content, err := os.ReadFile(driverFile)
+	if err != nil {
+		t.Fatalf("Failed to read driver.go: %v", err)
+	}
+
+	contentStr := string(content)
+
+	// Verify PoolOptions exists
+	if !strings.Contains(contentStr, "type PoolOptions struct") {
+		t.Error("PoolOptions type should be generated")
+	}
+
+	// Verify ClientOptions exists
+	if !strings.Contains(contentStr, "type ClientOptions struct") {
+		t.Error("ClientOptions type should be generated")
+	}
+
+	// Verify ClientOptions has DatabaseURL field
+	if !strings.Contains(contentStr, "DatabaseURL string") {
+		t.Error("ClientOptions should have DatabaseURL field")
+	}
+
+	// Verify ClientOptions has Pool field
+	if !strings.Contains(contentStr, "Pool *PoolOptions") {
+		t.Error("ClientOptions should have Pool field")
+	}
+
+	// Verify DefaultPoolOptions function exists
+	if !strings.Contains(contentStr, "func DefaultPoolOptions() *PoolOptions") {
+		t.Error("DefaultPoolOptions function should be generated")
+	}
+
+	// Verify PoolOptions.Validate function exists
+	if !strings.Contains(contentStr, "func (p *PoolOptions) Validate() error") {
+		t.Error("PoolOptions.Validate method should be generated")
+	}
+
+	// Verify SetupClientWithOptions function exists
+	if !strings.Contains(contentStr, "func SetupClientWithOptions(ctx context.Context, opts *ClientOptions)") {
+		t.Error("SetupClientWithOptions function should be generated")
+	}
+
+	// Verify it returns (*Client, *pgxpool.Pool, error) for PostgreSQL
+	if !strings.Contains(contentStr, "func SetupClientWithOptions(ctx context.Context, opts *ClientOptions) (*Client, *pgxpool.Pool, error)") {
+		t.Error("SetupClientWithOptions should return (*Client, *pgxpool.Pool, error) for PostgreSQL")
+	}
+
+	// Verify it validates ClientOptions
+	if !strings.Contains(contentStr, "DatabaseURL is required") {
+		t.Error("SetupClientWithOptions should validate DatabaseURL")
+	}
+
+	// Verify it uses DefaultPoolOptions when Pool is nil
+	if !strings.Contains(contentStr, "DefaultPoolOptions()") {
+		t.Error("SetupClientWithOptions should use DefaultPoolOptions when Pool is nil")
+	}
+
+	// Verify it calls Validate on pool options
+	if !strings.Contains(contentStr, "poolOpts.Validate()") {
+		t.Error("SetupClientWithOptions should validate pool options")
+	}
+
+	// Verify it configures pgxpool.Config
+	if !strings.Contains(contentStr, "pgxpool.ParseConfig") {
+		t.Error("SetupClientWithOptions should parse pgxpool config")
+	}
+
+	// Verify pool configuration is applied
+	if !strings.Contains(contentStr, "poolConfig.MaxConns = poolOpts.MaxConns") {
+		t.Error("SetupClientWithOptions should apply MaxConns to pool config")
+	}
+	if !strings.Contains(contentStr, "poolConfig.MinConns = poolOpts.MinConns") {
+		t.Error("SetupClientWithOptions should apply MinConns to pool config")
+	}
+
+	// Verify pgxpool is created with config
+	if !strings.Contains(contentStr, "pgxpool.NewWithConfig(ctx, poolConfig)") {
+		t.Error("SetupClientWithOptions should create pool with config")
+	}
+}
+
+func TestSetupClientWithOptions_GeneratedForMySQL(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputDir := filepath.Join(tmpDir, "generated")
+
+	// Create a temporary go.mod file for module detection
+	goModPath := filepath.Join(tmpDir, "go.mod")
+	goModContent := "module test\n"
+	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
+		t.Fatalf("Failed to create go.mod: %v", err)
+	}
+
+	schema := &parser.Schema{
+		Datasources: []*parser.Datasource{
+			{
+				Name: "db",
+				Fields: []*parser.Field{
+					{
+						Name:  "provider",
+						Value: "mysql",
+					},
+				},
+			},
+		},
+		Models: []*parser.Model{
+			{
+				Name: "User",
+				Fields: []*parser.ModelField{
+					{
+						Name: "id",
+						Type: &parser.FieldType{Name: "Int"},
+						Attributes: []*parser.Attribute{
+							{Name: "id"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Generate all necessary files
+	if err := GenerateClient(schema, outputDir); err != nil {
+		t.Fatalf("GenerateClient failed: %v", err)
+	}
+	if err := GenerateDriver(schema, outputDir); err != nil {
+		t.Fatalf("GenerateDriver failed: %v", err)
+	}
+	if err := GenerateRaw(outputDir); err != nil {
+		t.Fatalf("GenerateRaw failed: %v", err)
+	}
+
+	// Read generated driver.go
+	driverFile := filepath.Join(outputDir, "driver.go")
+	content, err := os.ReadFile(driverFile)
+	if err != nil {
+		t.Fatalf("Failed to read driver.go: %v", err)
+	}
+
+	contentStr := string(content)
+
+	// Verify SetupClientWithOptions function exists
+	if !strings.Contains(contentStr, "func SetupClientWithOptions(ctx context.Context, opts *ClientOptions)") {
+		t.Error("SetupClientWithOptions function should be generated")
+	}
+
+	// Verify it returns (*Client, *sql.DB, error) for MySQL
+	if !strings.Contains(contentStr, "func SetupClientWithOptions(ctx context.Context, opts *ClientOptions) (*Client, *sql.DB, error)") {
+		t.Error("SetupClientWithOptions should return (*Client, *sql.DB, error) for MySQL")
+	}
+
+	// Verify sql.Open is called
+	if !strings.Contains(contentStr, `sql.Open("mysql"`) {
+		t.Error("SetupClientWithOptions should call sql.Open for MySQL")
+	}
+
+	// Verify pool configuration is applied to sql.DB
+	if !strings.Contains(contentStr, "db.SetMaxOpenConns(int(poolOpts.MaxConns))") {
+		t.Error("SetupClientWithOptions should apply MaxOpenConns for MySQL")
+	}
+	if !strings.Contains(contentStr, "db.SetMaxIdleConns(int(poolOpts.MinConns))") {
+		t.Error("SetupClientWithOptions should apply MaxIdleConns for MySQL")
+	}
+}
+
+func TestPoolOptions_Validation(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputDir := filepath.Join(tmpDir, "generated")
+
+	// Create a temporary go.mod file for module detection
+	goModPath := filepath.Join(tmpDir, "go.mod")
+	goModContent := "module test\n"
+	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
+		t.Fatalf("Failed to create go.mod: %v", err)
+	}
+
+	schema := &parser.Schema{
+		Datasources: []*parser.Datasource{
+			{
+				Name: "db",
+				Fields: []*parser.Field{
+					{
+						Name:  "provider",
+						Value: "postgresql",
+					},
+				},
+			},
+		},
+		Models: []*parser.Model{
+			{
+				Name: "User",
+				Fields: []*parser.ModelField{
+					{
+						Name: "id",
+						Type: &parser.FieldType{Name: "Int"},
+						Attributes: []*parser.Attribute{
+							{Name: "id"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Generate driver
+	if err := GenerateDriver(schema, outputDir); err != nil {
+		t.Fatalf("GenerateDriver failed: %v", err)
+	}
+
+	// Read generated driver.go
+	driverFile := filepath.Join(outputDir, "driver.go")
+	content, err := os.ReadFile(driverFile)
+	if err != nil {
+		t.Fatalf("Failed to read driver.go: %v", err)
+	}
+
+	contentStr := string(content)
+
+	// Verify validation checks for negative MaxConns
+	if !strings.Contains(contentStr, "MaxConns cannot be negative") {
+		t.Error("PoolOptions.Validate should check for negative MaxConns")
+	}
+
+	// Verify validation checks for negative MinConns
+	if !strings.Contains(contentStr, "MinConns cannot be negative") {
+		t.Error("PoolOptions.Validate should check for negative MinConns")
+	}
+
+	// Verify validation checks MinConns > MaxConns
+	if !strings.Contains(contentStr, "MinConns (%d) cannot be greater than MaxConns (%d)") {
+		t.Error("PoolOptions.Validate should check MinConns <= MaxConns")
+	}
+}

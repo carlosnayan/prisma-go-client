@@ -68,16 +68,53 @@ This creates:
 
 #### Connection Pool Configuration (PostgreSQL & MySQL)
 
-You can configure the database connection pool in `prisma.conf`:
+Configure the database connection pool programmatically using `SetupClientWithOptions()`:
 
-```toml
-[datasource.pool]
-max_conns = 15
-min_conns = 5
-max_conn_lifetime = 30 # minutes
+```go
+import (
+    "context"
+    "os"
+    "strconv"
+    "time"
+
+    prisma "my-app/prisma/generated"
+)
+
+func SetupPrismaClient() {
+    ctx := context.Background()
+
+    // Read pool settings from environment variables
+    maxConns, _ := strconv.Atoi(os.Getenv("DB_POOL_MAX_CONNS"))
+    if maxConns == 0 {
+        maxConns = 25 // default
+    }
+
+    minConns, _ := strconv.Atoi(os.Getenv("DB_POOL_MIN_CONNS"))
+    if minConns == 0 {
+        minConns = 5 // default
+    }
+
+    opts := &prisma.ClientOptions{
+        DatabaseURL: os.Getenv("DATABASE_URL"),
+        Pool: &prisma.PoolOptions{
+            MaxConns:        int32(maxConns),
+            MinConns:        int32(minConns),
+            MaxConnLifetime: 30 * time.Minute,
+            // PostgreSQL-specific options (ignored on MySQL/SQLite)
+            MaxIdleTime:       5 * time.Minute,
+            HealthCheckPeriod: 1 * time.Minute,
+            ConnectTimeout:    5 * time.Second,
+        },
+    }
+
+    Client, _, err := prisma.SetupClientWithOptions(ctx, opts)
+    if err != nil {
+        log.Fatalf("Error setting up client: %v", err)
+    }
+}
 ```
 
-When this section is present, the client will automatically apply these settings and also set a default **5-second timeout** for connection establishment.
+> **Note:** If you don't specify `Pool`, default values are used (MaxConns=25, MinConns=5, MaxConnLifetime=30min).
 
 ### 2. Define Your Schema
 
