@@ -2,14 +2,14 @@
 type {{.PascalName}}FindManyBuilder struct {
 	query        *{{.PascalName}}Query
 	conditions   []{{.TablePackageName}}.Condition
-	limit        int
+	take         int
 	offset       int
 	orderByClauses []{{.PascalName}}OrderByClause
 	selectFields []string
 }
 
 // FindMany returns a builder for finding all matching records
-// Example: client.{{.PascalName}}().FindMany().Where({{.LowerName}}.AgeGT(18)).Limit(10).Exec()
+// Example: client.{{.PascalName}}().FindMany().Where({{.LowerName}}.AgeGT(18)).Take(10).Exec()
 func (q *{{.PascalName}}Query) FindMany() *{{.PascalName}}FindManyBuilder {
 	return &{{.PascalName}}FindManyBuilder{
 		query:      q,
@@ -29,9 +29,9 @@ func (b *{{.PascalName}}FindManyBuilder) Where(condition {{.TablePackageName}}.C
 	return b
 }
 
-// Limit sets the maximum number of records to return
-func (b *{{.PascalName}}FindManyBuilder) Limit(limit int) *{{.PascalName}}FindManyBuilder {
-	b.limit = limit
+// Take sets the maximum number of records to return
+func (b *{{.PascalName}}FindManyBuilder) Take(take int) *{{.PascalName}}FindManyBuilder {
+	b.take = take
 	return b
 }
 
@@ -66,9 +66,9 @@ func (b *{{.PascalName}}FindManyBuilder) Exec() ([]models.{{.PascalName}}, error
 		applyCondition{{.PascalName}}(b.query.Query, cond)
 	}
 
-	// Apply LIMIT
-	if b.limit > 0 {
-		b.query.Query.Take(b.limit)
+	// Apply TAKE
+	if b.take > 0 {
+		b.query.Query.Take(b.take)
 	}
 
 	// Apply OFFSET (Skip)

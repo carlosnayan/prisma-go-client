@@ -461,9 +461,9 @@ users, err := client.Authors.FindMany().
 ### Pagination
 
 ```go
-// Limit results
+// Take results
 users, err := client.Authors.FindMany().
-    Limit(10).
+    Take(10).
     Exec()
 
 // Skip results
@@ -471,13 +471,53 @@ users, err := client.Authors.FindMany().
     Skip(20).
     Exec()
 
-// Limit and skip (pagination)
+// Take and skip (pagination)
 page := 1
 pageSize := 10
 users, err := client.Authors.FindMany().
     Skip((page - 1) * pageSize).
-    Limit(pageSize).
+    Take(pageSize).
     Exec()
+```
+
+#### Practical Pagination Example
+
+Implementing page-based navigation with books:
+
+```go
+import (
+    "context"
+    prisma "my-app/prisma/generated"
+    "my-app/prisma/generated/books"
+)
+
+// GetBooks returns a paginated list of published books
+func GetBooks(page int, pageSize int) ([]models.Books, error) {
+    if page < 1 {
+        page = 1
+    }
+    if pageSize < 1 || pageSize > 100 {
+        pageSize = 20 // default
+    }
+
+    books, err := client.Books.FindMany().
+        Where(books.StatusEQ(books.EnumBookStatusPUBLISHED)).
+        OrderBy(books.FieldPublicationDate, books.OrderDesc).
+        Skip((page - 1) * pageSize).
+        Take(pageSize).
+        Exec()
+
+    if err != nil {
+        return nil, err
+    }
+
+    return books, nil
+}
+
+// Usage examples
+books, _ := GetBooks(1, 20)  // First page, 20 items
+books, _ := GetBooks(2, 20)  // Second page, 20 items
+books, _ := GetBooks(5, 10)  // Fifth page, 10 items
 ```
 
 ### Selecting Fields
