@@ -312,15 +312,15 @@ func main() {
     // Update many users
     err = prisma.Client.Authors.UpdateMany().
         Where(authors.StatusEQ("inactive")).
-    // Raw SQL example (Query requires slice, QueryRow requires struct/primitive)
+    // Raw SQL example
     type BookResult struct {
         IdBook string `db:"id_book"`
         Title  string `db:"title"`
     }
     var books []BookResult
     err = prisma.Client.Raw().Query("SELECT id_book, title FROM books WHERE status = $1", "PUBLISHED").
-        Exec().
-        Scan(&books)
+        Scan(&books).
+        Exec()
     if err != nil {
         log.Fatal(err)
     }

@@ -849,7 +849,7 @@ err := client.Raw().Query(`
 	INNER JOIN authors a ON ba.id_author = a.id_author
 	WHERE b.status = $1 AND b.deleted_at IS NULL
 	ORDER BY b.created_at DESC
-`, "PUBLISHED").Exec().Scan(&books)
+`, "PUBLISHED").Scan(&books).Exec()
 if err != nil {
 	log.Fatal(err)
 }
@@ -857,7 +857,7 @@ if err != nil {
 
 ### Query Single Row
 
-`QueryRow()` requires a **struct** or primitive destination for `Scan()` (not a slice):
+For single row queries, use `Query()` with a single struct or primitive:
 
 ```go
 // With struct
@@ -867,46 +867,49 @@ type BookStats struct {
 }
 
 var stats BookStats
-err := client.Raw().QueryRow(`
+err := client.Raw().Query(`
 	SELECT
 		COUNT(*) as total_books,
 		COUNT(*) FILTER (WHERE status = 'PUBLISHED') as published_books
 	FROM books
 	WHERE deleted_at IS NULL
-`).Exec().Scan(&stats)
+`).Scan(&stats).Exec()
 
 // With primitive
 var count int
-err = client.Raw().QueryRow("SELECT COUNT(*) FROM authors WHERE deleted_at IS NULL").
-	Exec().
-	Scan(&count)
+err = client.Raw().Query("SELECT COUNT(*) FROM authors WHERE deleted_at IS NULL").
+	Scan(&count).
+	Exec()
 ```
 
-### Manual Row Iteration
+### Execute (DDL, DML Without Results)
 
-If you need more control, you can iterate rows manually:
+For queries that don't return data (DDL, INSERT, UPDATE, DELETE without RETURNING), simply call `Exec()` without `Scan()`:
 
 ```go
-rows, err := client.Raw().Query("SELECT id_author, first_name, last_name FROM authors").Exec().Rows()
-if err != nil {
-	log.Fatal(err)
-}
-defer rows.Close()
+// DDL
+err := client.Raw().Query("CREATE INDEX idx_books_status ON books(status)").Exec()
 
-for rows.Next() {
-	var id, firstName, lastName string
-	if err := rows.Scan(&id, &firstName, &lastName); err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("Author: %s %s\n", firstName, lastName)
-}
+// DELETE
+err := client.Raw().Query("DELETE FROM books WHERE status = $1", "DRAFT").Exec()
 
-if err := rows.Err(); err != nil {
-	log.Fatal(err)
-}
+// UPDATE
+err := client.Raw().Query(`
+	UPDATE books
+	SET status = $1, updated_at = NOW()
+	WHERE publication_date < NOW() - INTERVAL '1 year'
+`, "ARCHIVED").Exec()
+
+// INSERT
+err := client.Raw().Query(`
+	INSERT INTO authors (first_name, last_name, email)
+	VALUES ($1, $2, $3)
+`, "John", "Doe", "john@example.com").Exec()
 ```
 
-### Execute (INSERT, UPDATE, DELETE)
+### Execute with Result Metadata
+
+Use `Exec()` directly on the executor for operations where you need the result metadata:
 
 ```go
 result, err := client.Raw().Exec("UPDATE books SET status = $1 WHERE id_book = $2", "ARCHIVED", bookId)
@@ -1080,13 +1083,13 @@ if raw.IsUniqueConstraint(err) {
 ```go
 // Query returns empty slice, no error
 var books []Book
-err := client.Raw().Query("SELECT * FROM books WHERE id = $1", 999).Exec().Scan(&books)
+err := client.Raw().Query("SELECT * FROM books WHERE id = $1", 999).Scan(&books).Exec()
 // err == nil, books == []Book{}
 
-// QueryRow returns ErrNotFound
+// Query with single struct returns error when no rows found
 var book Book
-err = client.Raw().QueryRow("SELECT * FROM books WHERE id = $1", 999).Exec().Scan(&book)
-// raw.IsNotFound(err) == true
+err = client.Raw().Query("SELECT * FROM books WHERE id = $1", 999).Scan(&book).Exec()
+// err != nil ("no rows found")
 ```
 
 ## Best Practices

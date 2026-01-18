@@ -1,37 +1,20 @@
 
-type QueryResult struct {
-	rows Rows
-	err  error
-}
-
-func (r *QueryResult) Scan(dest interface{}) error {
-	if r.err != nil {
-		return r.err
-	}
-	if r.rows == nil {
-		return fmt.Errorf("QueryResult.Scan: no rows to scan")
-	}
-	defer r.rows.Close()
-
+// scanInto handles all scanning logic (primitives, structs, slices)
+func scanInto(rows Rows, dest interface{}) error {
 	destVal := reflect.ValueOf(dest)
 	if destVal.Kind() != reflect.Ptr {
-		return fmt.Errorf("QueryResult.Scan: dest must be a pointer")
+		return fmt.Errorf("scan destination must be a pointer")
 	}
 
 	elemVal := destVal.Elem()
 	switch elemVal.Kind() {
 	case reflect.Slice:
-		return scanRows(r.rows, dest)
+		return scanRows(rows, dest)
 	case reflect.Struct:
-		return scanRow(r.rows, dest)
+		return scanSingleRow(rows, dest)
 	default:
-		// Assume primitive
-		return scanPrimitive(r.rows, dest)
+		return scanPrimitive(rows, dest)
 	}
-}
-
-func (r *QueryResult) Rows() (Rows, error) {
-	return r.rows, r.err
 }
 
 func scanRows(rows Rows, dest interface{}) error {
@@ -45,7 +28,7 @@ func scanRows(rows Rows, dest interface{}) error {
 	}
 	
 	if elemType.Kind() != reflect.Struct {
-		return fmt.Errorf("QueryResult.Scan: slice element must be a struct or pointer to struct")
+		return fmt.Errorf("slice element must be a struct or pointer to struct")
 	}
 	
 	columns, err := rows.Columns()
@@ -95,14 +78,14 @@ func scanRows(rows Rows, dest interface{}) error {
 	return nil
 }
 
-func scanRow(rows Rows, dest interface{}) error {
+func scanSingleRow(rows Rows, dest interface{}) error {
 	columns, err := rows.Columns()
 	if err != nil {
 		return fmt.Errorf("failed to get columns: %w", err)
 	}
 
 	if !rows.Next() {
-		return fmt.Errorf("QueryResult.Scan: no rows found")
+		return fmt.Errorf("no rows found")
 	}
 
 	destVal := reflect.ValueOf(dest)
@@ -125,7 +108,7 @@ func scanRow(rows Rows, dest interface{}) error {
 	}
 
 	if rows.Next() {
-		return fmt.Errorf("QueryResult.Scan: expected exactly 1 row, but query returned more")
+		return fmt.Errorf("expected exactly 1 row, but query returned more")
 	}
 
 	return rows.Err()
@@ -138,11 +121,11 @@ func scanPrimitive(rows Rows, dest interface{}) error {
 	}
 
 	if len(columns) != 1 {
-		return fmt.Errorf("QueryResult.Scan: expected exactly 1 column for primitive scan, but got %d", len(columns))
+		return fmt.Errorf("expected exactly 1 column for primitive scan, but got %d", len(columns))
 	}
 
 	if !rows.Next() {
-		return fmt.Errorf("QueryResult.Scan: no rows found")
+		return fmt.Errorf("no rows found")
 	}
 
 	if err := rows.Scan(dest); err != nil {
@@ -150,7 +133,7 @@ func scanPrimitive(rows Rows, dest interface{}) error {
 	}
 
 	if rows.Next() {
-		return fmt.Errorf("QueryResult.Scan: expected exactly 1 row for primitive scan, but query returned more")
+		return fmt.Errorf("expected exactly 1 row for primitive scan, but query returned more")
 	}
 
 	return rows.Err()

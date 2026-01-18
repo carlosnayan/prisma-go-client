@@ -3,15 +3,38 @@ type QueryBuilder struct {
 	executor *Executor
 	sql      string
 	args     []interface{}
+	scanDest interface{}
 }
 
 func (e *Executor) Query(sql string, args ...interface{}) *QueryBuilder {
 	return &QueryBuilder{executor: e, sql: sql, args: args}
 }
 
-func (q *QueryBuilder) Exec() *QueryResult {
+// Scan sets the destination for result scanning (optional)
+// Call this before Exec() if you want to scan query results
+func (q *QueryBuilder) Scan(dest interface{}) *QueryBuilder {
+	q.scanDest = dest
+	return q
+}
+
+// Exec executes the query
+// If Scan() was called, it will scan results into the destination
+// If Scan() was not called, it will execute without scanning (for DDL, DML)
+func (q *QueryBuilder) Exec() error {
+	if q.scanDest == nil {
+		// No scan needed - use Exec for non-SELECT queries
+		_, err := q.executor.db.Exec(context.Background(), q.sql, q.args...)
+		return mapExecError(err)
+	}
+	
+	// Scan needed - use Query for SELECT
 	rows, err := q.executor.db.Query(context.Background(), q.sql, q.args...)
-	return &QueryResult{rows: rows, err: mapQueryError(err)}
+	if err != nil {
+		return mapQueryError(err)
+	}
+	defer rows.Close()
+	
+	return scanInto(rows, q.scanDest)
 }
 
 func (e *Executor) Exec(sql string, args ...interface{}) (Result, error) {

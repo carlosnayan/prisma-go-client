@@ -800,20 +800,19 @@ func TestRawQuery_FluentAPI(t *testing.T) {
 		t.Error("Executor.Query should return *QueryBuilder")
 	}
 
-	if !strings.Contains(contentStr, "func (q *QueryBuilder) Exec() *QueryResult") {
-		t.Error("QueryBuilder.Exec should return *QueryResult without ctx parameter")
+	// NEW API: Scan() before Exec()
+	if !strings.Contains(contentStr, "func (q *QueryBuilder) Scan(dest interface{}) *QueryBuilder") {
+		t.Error("QueryBuilder should have Scan method for optional scanning")
 	}
 
-	if !strings.Contains(contentStr, "type QueryResult struct") {
-		t.Error("raw.go should contain QueryResult struct")
+	// NEW API: Exec() returns error, not QueryResult
+	if !strings.Contains(contentStr, "func (q *QueryBuilder) Exec() error") {
+		t.Error("QueryBuilder.Exec should return error (new API)")
 	}
 
-	if !strings.Contains(contentStr, "func (r *QueryResult) Scan(dest interface{}) error") {
-		t.Error("QueryResult should have Scan method")
-	}
-
-	if !strings.Contains(contentStr, "func (r *QueryResult) Rows() (Rows, error)") {
-		t.Error("QueryResult should have Rows method for manual iteration")
+	// Verify scanInto unified function exists
+	if !strings.Contains(contentStr, "func scanInto(rows Rows, dest interface{}) error") {
+		t.Error("raw.go should contain scanInto function for unified scanning")
 	}
 }
 

@@ -113,8 +113,9 @@ The `Dialect` interface defines how each database engine behaves:
 
 ## Raw SQL Support
 
-- **Interface:** Allows users to execute arbitrary SQL queries while still benefiting from result scanning.
-- **`QueryResult`:** Generated per-query, it provides a `Scan()` method that uses the client's internal reflection logic to map raw rows to generated models.
+- **Interface:** Allows users to execute arbitrary SQL queries with optional result scanning.
+- **Fluent API:** `Query().Scan(&dest).Exec()` for SELECT queries, `Query().Exec()` for DDL/DML without results.
+- **Scanning:** Unified `scanInto()` function automatically detects and scans primitives, single structs, or slices of structs using field reflection.
 - **Safety:** Encourages the use of parameterized queries through the `driver.DB` interface to prevent SQL injection.
 
 ## Configuration System (`internal/config`)

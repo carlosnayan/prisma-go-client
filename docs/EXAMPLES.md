@@ -234,7 +234,7 @@ err := client.Raw().Query(`
     INNER JOIN authors a ON ba.id_author = a.id_author
     WHERE b.status = $1
     ORDER BY b.created_at DESC
-`, "PUBLISHED").Exec().Scan(&books)
+`, "PUBLISHED").Scan(&books).Exec()
 
 if err != nil {
     log.Fatal(err)
@@ -251,18 +251,32 @@ type BookStats struct {
 }
 
 var stats BookStats
-err := client.Raw().QueryRow(`
+err := client.Raw().Query(`
     SELECT
         COUNT(*) as total_books,
         COUNT(*) FILTER (WHERE status = 'PUBLISHED') as published_books
     FROM books
-`).Exec().Scan(&stats)
+`).Scan(&stats).Exec()
 
 // With primitive
 var count int
-err = client.Raw().QueryRow("SELECT COUNT(*) FROM authors").
-    Exec().
-    Scan(&count)
+err = client.Raw().Query("SELECT COUNT(*) FROM authors").
+    Scan(&count).
+    Exec()
+```
+
+### Execute Without Scan (DDL, DML)
+
+```go
+// DELETE
+err := client.Raw().Query("DELETE FROM books WHERE status = $1", "DRAFT").Exec()
+
+// UPDATE
+err := client.Raw().Query(`
+    UPDATE books
+    SET status = $1
+    WHERE publication_date < NOW() - INTERVAL '1 year'
+`, "ARCHIVED").Exec()
 ```
 
 ### Execute Commands
@@ -276,27 +290,6 @@ if err != nil {
     log.Fatal(err)
 }
 fmt.Printf("Updated %d rows\n", result.RowsAffected())
-```
-
-### Manual Row Iteration
-
-```go
-rows, err := client.Raw().Query(
-    "SELECT id_author, first_name, last_name FROM authors WHERE nationality = $1",
-    "Brazilian",
-).Exec().Rows()
-if err != nil {
-    log.Fatal(err)
-}
-defer rows.Close()
-
-for rows.Next() {
-    var id, firstName, lastName string
-    if err := rows.Scan(&id, &firstName, &lastName); err != nil {
-        log.Fatal(err)
-    }
-    fmt.Printf("Author: %s %s\n", firstName, lastName)
-}
 ```
 
 ## Complete Working Example
