@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/carlosnayan/prisma-go-client/cli"
+	"github.com/carlosnayan/prisma-go-client/cmd/prisma/updatechecker"
+	"github.com/carlosnayan/prisma-go-client/cmd/prisma/version"
 	"github.com/carlosnayan/prisma-go-client/internal/generator"
 	"github.com/carlosnayan/prisma-go-client/internal/parser"
 )
-
-const version = "0.2.4"
 
 var (
 	watchFlag         bool
@@ -231,7 +231,7 @@ func runGenerateOnce(schemaPath string) error {
 
 	// Show success message
 	if !noHintsFlag {
-		fmt.Printf("\n✔ Generated Prisma Client (%s) to %s in %dms\n", version, outputDir, elapsedMs)
+		fmt.Printf("\n✔ Generated Prisma Client (%s) to %s in %dms\n", version.Version, outputDir, elapsedMs)
 	} else {
 		fmt.Printf("✔ Generated Prisma Client to %s in %dms\n", outputDir, elapsedMs)
 	}
@@ -264,7 +264,20 @@ func runGenerateOnce(schemaPath string) error {
 		fmt.Println()
 	}
 
+	// Check for updates (non-blocking, fail silently)
+	checkAndDisplayUpdate()
+
 	return nil
+}
+
+// checkAndDisplayUpdate checks for CLI updates and displays notification if available
+func checkAndDisplayUpdate() {
+	updateInfo, err := updatechecker.CheckForUpdate()
+	if err != nil || updateInfo == nil {
+		return // Fail silently - don't show errors to user
+	}
+
+	updatechecker.DisplayUpdateNotification(updateInfo)
 }
 
 // filterGenerators filters generators based on --generator flags

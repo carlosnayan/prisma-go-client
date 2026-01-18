@@ -47,6 +47,7 @@ echo ""
 # Files to update
 FILES=(
     "VERSION"
+    "cmd/prisma/version/version.go"
     "cmd/prisma/cmd/root.go"
     "cmd/prisma/cmd/generate.go"
     "prisma.go"
@@ -77,6 +78,11 @@ for file in "${FILES[@]}"; do
         "prisma.go")
             # Update: const Version = "0.1.0"
             sed -i '' -E "s/const Version = \"[0-9]+\.[0-9]+\.[0-9]+\"/const Version = \"$NEW_VERSION\"/g" "$file"
+            echo -e "${GREEN}✓${NC} Updated $file"
+            ;;
+        "cmd/prisma/version/version.go") # Added case for the new file
+            # Update: var Version = "0.1.0"
+            sed -i '' -E "s/var Version = \"[0-9]+\.[0-9]+\.[0-9]+\"/var Version = \"$NEW_VERSION\"/g" "$file"
             echo -e "${GREEN}✓${NC} Updated $file"
             ;;
     esac

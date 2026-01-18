@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/carlosnayan/prisma-go-client/cli"
+	"github.com/carlosnayan/prisma-go-client/cmd/prisma/version"
 	"github.com/carlosnayan/prisma-go-client/internal/config"
 	"github.com/carlosnayan/prisma-go-client/internal/logger"
 )
@@ -21,7 +22,7 @@ var app *cli.App
 func Execute() error {
 	app = cli.NewApp(
 		"prisma",
-		"0.2.4",
+		version.Version,
 		"Prisma CLI for Go - Type-safe and intuitive ORM",
 	)
 
