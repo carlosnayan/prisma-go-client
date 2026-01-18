@@ -41,6 +41,9 @@ func (b *{{.PascalName}}CreateBuilder) Exec() (*models.{{.PascalName}}, error) {
 
 // ExecWithContext executes the create operation with an explicit context
 func (b *{{.PascalName}}CreateBuilder) ExecWithContext(ctx context.Context) (*models.{{.PascalName}}, error) {
+	// Reset query state to ensure clean context for this operation
+	b.query.Query.Reset()
+
 	// Validate required fields
 	{{range .CreateFields}}{{if .IsRequired}}
 	if _, ok := b.fields["{{.DBName}}"]; !ok {

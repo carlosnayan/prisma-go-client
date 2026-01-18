@@ -63,6 +63,9 @@ func (b *{{.PascalName}}UpdateBuilder) ExecWithContext(ctx context.Context) (*mo
 		return nil, fmt.Errorf("at least one field must be set for update")
 	}
 
+	// CRITICAL: Reset query state to prevent accumulation between executions
+	b.query.Query.Reset()
+
 	// Apply conditions to build WHERE clause
 	for _, cond := range b.conditions {
 		applyCondition{{.PascalName}}(b.query.Query, cond)

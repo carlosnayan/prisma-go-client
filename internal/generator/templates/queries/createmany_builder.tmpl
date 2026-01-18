@@ -34,6 +34,9 @@ func (b *{{.PascalName}}CreateManyBuilder) Exec() (*builder.BatchPayload, error)
 // If a context was set via WithContext(), the explicit context takes priority.
 // Example: result, err := builder.CreateMany().Data(...).ExecWithContext(ctx)
 func (b *{{.PascalName}}CreateManyBuilder) ExecWithContext(ctx context.Context) (*builder.BatchPayload, error) {
+	// Reset query state to ensure clean context for this operation
+	b.query.Query.Reset()
+
 	if b.data == nil || len(b.data) == 0 {
 		return &builder.BatchPayload{Count: 0}, nil
 	}
