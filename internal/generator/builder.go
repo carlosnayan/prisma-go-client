@@ -68,9 +68,11 @@ func getProviderFromSchema(schema *parser.Schema) string {
 // generateBuilderFoundation generates foundation.go using templates
 func generateBuilderFoundation(builderDir, utilsPath string) error {
 	data := struct {
-		UtilsPath string
+		UtilsPath        string
+		UtilsPackageName string
 	}{
-		UtilsPath: utilsPath,
+		UtilsPath:        utilsPath,
+		UtilsPackageName: "utils",
 	}
 	filePath := filepath.Join(builderDir, "foundation.go")
 	return executeModelTemplate(filePath, "builder", "builder_main", "foundation.tmpl", data)

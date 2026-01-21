@@ -1,6 +1,6 @@
 // scanRow scans a single row into the model type
 
-func (b *TableQueryBuilder) scanRow(row Row) (interface{}, error) {
+func (b *TableQueryBuilder) scanRow(row Row, op string) (interface{}, error) {
 
 	if b.modelType == nil {
 
@@ -111,7 +111,7 @@ func (b *TableQueryBuilder) scanRow(row Row) (interface{}, error) {
 
 	if err != nil {
 
-		return nil, err
+		return nil, MapDriverError(err, op)
 
 	}
 
@@ -123,7 +123,7 @@ func (b *TableQueryBuilder) scanRow(row Row) (interface{}, error) {
 
 // scanRows scans multiple rows into a slice of models
 
-func (b *TableQueryBuilder) scanRows(rows Rows) (interface{}, error) {
+func (b *TableQueryBuilder) scanRows(rows Rows, op string) (interface{}, error) {
 
 	if b.modelType == nil {
 
@@ -249,7 +249,7 @@ func (b *TableQueryBuilder) scanRows(rows Rows) (interface{}, error) {
 
 		if err := rows.Scan(fields...); err != nil {
 
-			return nil, err
+			return nil, MapDriverError(err, op)
 
 		}
 
@@ -263,7 +263,7 @@ func (b *TableQueryBuilder) scanRows(rows Rows) (interface{}, error) {
 
 	if err := rows.Err(); err != nil {
 
-		return nil, err
+		return nil, MapDriverError(err, "FindMany")
 
 	}
 

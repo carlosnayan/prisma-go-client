@@ -404,6 +404,67 @@ dbDriver := db.NewSQLDriver(sqlDB)
 client := db.NewClient(dbDriver)
 ```
 
+## Error Handling
+
+The Prisma Go Client unifies database errors into standardized types. It is important to use `errors.Is` or helper functions for comparison.
+
+### Finding a Record (Record Not Found)
+
+When using `FindFirst()`, the client returns `prisma.ErrNotFound` if no record matches the criteria.
+
+```go
+import (
+    "errors"
+    "fmt"
+    "my-app/db"
+    "my-app/db/users"
+)
+
+func GetUser(id string) (*models.Users, error) {
+    user, err := client.Users.FindFirst().
+        Where(users.IdUserEQ(id)).
+        Exec()
+
+    if err != nil {
+        // ✅ Correct: Use prisma.IsNotFound helper
+        if prisma.IsNotFound(err) {
+            return nil, fmt.Errorf("user %s not found", id)
+        }
+
+        // ✅ Also Correct: Use errors.Is
+        if errors.Is(err, prisma.ErrNotFound) {
+             return nil, fmt.Errorf("user %s not found", id)
+        }
+
+        // ❌ Incorrect: Direct comparison will FAIL
+        // if err == prisma.ErrNotFound { ... }
+
+        return nil, err
+    }
+
+    return user, nil
+}
+```
+
+### Constraint Violations
+
+Standardized errors for common database constraints:
+
+```go
+user, err := client.Users.Create().
+    SetEmail("duplicate@example.com").
+    Exec()
+
+if err != nil {
+    if prisma.IsUniqueConstraint(err) {
+        fmt.Println("Email already exists")
+    }
+    if prisma.IsForeignKeyConstraint(err) {
+        fmt.Println("Related record not found")
+    }
+}
+```
+
 ## Next Steps
 
 - Read the [Quick Start Guide](QUICKSTART.md) for a complete walkthrough

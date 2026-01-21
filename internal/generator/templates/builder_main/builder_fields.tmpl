@@ -81,7 +81,7 @@ func (b *TableQueryBuilder) CreateFromFields(ctx context.Context, fields map[str
 		)
 		result, err := b.db.Exec(ctx, query, args...)
 		if err != nil {
-			return nil, err
+			return nil, MapDriverError(err, "Create")
 		}
 
 		if b.dialect.Name() == "sqlite" {
@@ -130,7 +130,7 @@ func (b *TableQueryBuilder) CreateFromFields(ctx context.Context, fields map[str
 	}
 
 	if driverRow, ok := row.(Row); ok {
-		return b.scanRow(driverRow)
+		return b.scanRow(driverRow, "Create")
 	}
 	return nil, fmt.Errorf("invalid row type")
 }
@@ -185,7 +185,11 @@ func (b *TableQueryBuilder) UpdateFromFields(ctx context.Context, id interface{}
 		return row, nil
 	}
 
-	return b.scanRow(row)
+	return b.scanRow(row, "Update")
+}
+
+func (b *TableQueryBuilder) wrapError(err error, op string) error {
+	return MapDriverError(err, op)
 }
 
 func (b *TableQueryBuilder) UpdateManyFromFields(ctx context.Context, where Where, fields map[string]interface{}) (*BatchPayload, error) {
@@ -234,5 +238,5 @@ func (b *TableQueryBuilder) UpdateManyFromFields(ctx context.Context, where Wher
 	}
 
 	rowsAffected := result.RowsAffected()
-	return &BatchPayload{Count: int(rowsAffected)}, nil
+	return &BatchPayload{Count: int(rowsAffected)}, MapDriverError(err, "UpdateMany")
 }

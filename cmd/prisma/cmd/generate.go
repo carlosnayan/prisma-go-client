@@ -221,6 +221,10 @@ func runGenerateOnce(schemaPath string) error {
 		return fmt.Errorf("error generating client: %w", err)
 	}
 
+	if err := generator.GenerateErrors(schema, absoluteOutputDir); err != nil {
+		return fmt.Errorf("error generating errors: %w", err)
+	}
+
 	if err := generator.GenerateDriver(schema, absoluteOutputDir); err != nil {
 		return fmt.Errorf("error generating driver: %w", err)
 	}

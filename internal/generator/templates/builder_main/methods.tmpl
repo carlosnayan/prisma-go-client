@@ -19,7 +19,7 @@ func (b *TableQueryBuilder) FindFirst(ctx context.Context, where Where) (interfa
 	}
 
 
-	return b.scanRow(row)
+	return b.scanRow(row, "FindFirst")
 
 }
 
@@ -39,7 +39,7 @@ func (b *TableQueryBuilder) FindMany(ctx context.Context, opts QueryOptions) (in
 
 	if err != nil {
 
-		return nil, err
+		return nil, MapDriverError(err, "FindMany")
 
 	}
 
@@ -53,7 +53,7 @@ func (b *TableQueryBuilder) FindMany(ctx context.Context, opts QueryOptions) (in
 	}
 
 
-	return b.scanRows(rows)
+	return b.scanRows(rows, "FindMany")
 
 }
 
@@ -97,7 +97,7 @@ func (b *TableQueryBuilder) Count(ctx context.Context, where Where) (int, error)
 
 	if err != nil {
 
-		return 0, SanitizeError(err)
+		return 0, MapDriverError(err, "Count")
 
 	}
 
@@ -279,7 +279,7 @@ func (b *TableQueryBuilder) Create(ctx context.Context, data interface{}) (inter
 
 		if err != nil {
 
-			return nil, err
+			return nil, MapDriverError(err, "Create")
 
 		}
 
@@ -352,7 +352,7 @@ func (b *TableQueryBuilder) Create(ctx context.Context, data interface{}) (inter
 
 	if rowValue, ok := row.(Row); ok {
 
-		return b.scanRow(rowValue)
+		return b.scanRow(rowValue, "Create")
 
 	}
 
@@ -371,7 +371,7 @@ func (b *TableQueryBuilder) Update(ctx context.Context, id interface{}, data int
 
 	if b.primaryKey == "" {
 		err := fmt.Errorf("primary key is required for Update operation")
-		return nil, SanitizeError(err)
+		return nil, MapDriverError(err, "Update")
 
 	}
 
@@ -437,7 +437,7 @@ func (b *TableQueryBuilder) Update(ctx context.Context, id interface{}, data int
 	if len(updateColumns) == 0 {
 
 		err := fmt.Errorf("no fields to update")
-		return nil, SanitizeError(err)
+		return nil, MapDriverError(err, "Update")
 
 	}
 
@@ -480,7 +480,7 @@ func (b *TableQueryBuilder) Update(ctx context.Context, id interface{}, data int
 	}
 
 
-	return b.scanRow(row)
+	return b.scanRow(row, "Update")
 
 }
 
@@ -517,7 +517,7 @@ func (b *TableQueryBuilder) Delete(ctx context.Context, id interface{}) error {
 
 	_, err := b.db.Exec(ctx, query, args...)
 
-	return err
+	return MapDriverError(err, "Delete")
 
 }
 
@@ -847,7 +847,7 @@ func (b *TableQueryBuilder) CreateMany(ctx context.Context, data []interface{}, 
 
 		if err != nil {
 
-			return &BatchPayload{Count: totalCount}, err
+			return &BatchPayload{Count: totalCount}, MapDriverError(err, "Exec")
 
 		}
 
@@ -969,7 +969,7 @@ func (b *TableQueryBuilder) UpdateMany(ctx context.Context, where Where, data in
 
 	if err != nil {
 
-		return nil, err
+		return nil, MapDriverError(err, "Exec")
 
 	}
 
