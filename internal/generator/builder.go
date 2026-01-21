@@ -17,7 +17,6 @@ func GenerateBuilder(schema *parser.Schema, outputDir string) error {
 		return fmt.Errorf("failed to create builder directory: %w", err)
 	}
 
-	// Detect user module for utils import path
 	userModule, err := detectUserModule(outputDir)
 	if err != nil {
 		return fmt.Errorf("failed to detect user module: %w", err)
@@ -28,7 +27,6 @@ func GenerateBuilder(schema *parser.Schema, outputDir string) error {
 		return fmt.Errorf("failed to calculate utils import path: %w", err)
 	}
 
-	// Generate builder foundation (consolidated utilities)
 	if err := generateBuilderFoundation(builderDir, utilsPath); err != nil {
 		return fmt.Errorf("failed to generate foundation.go: %w", err)
 	}
@@ -37,7 +35,6 @@ func GenerateBuilder(schema *parser.Schema, outputDir string) error {
 		return fmt.Errorf("failed to generate dialect.go: %w", err)
 	}
 
-	// Get provider from schema to generate appropriate builder
 	provider := getProviderFromSchema(schema)
 	if err := generateBuilderMain(builderDir, provider, utilsPath); err != nil {
 		return fmt.Errorf("failed to generate builder.go: %w", err)
@@ -45,6 +42,10 @@ func GenerateBuilder(schema *parser.Schema, outputDir string) error {
 
 	if err := generateBuilderFluent(builderDir, provider, utilsPath); err != nil {
 		return fmt.Errorf("failed to generate fluent.go: %w", err)
+	}
+
+	if err := generateBuilderFields(builderDir, utilsPath); err != nil {
+		return fmt.Errorf("failed to generate builder_fields.go: %w", err)
 	}
 
 	return nil
@@ -73,4 +74,18 @@ func generateBuilderFoundation(builderDir, utilsPath string) error {
 	}
 	filePath := filepath.Join(builderDir, "foundation.go")
 	return executeModelTemplate(filePath, "builder", "builder_main", "foundation.tmpl", data)
+}
+
+// generateBuilderFields generates builder_fields.go using templates
+func generateBuilderFields(builderDir, utilsPath string) error {
+	data := struct {
+		UtilsPath        string
+		UtilsPackageName string
+	}{
+		UtilsPath:        utilsPath,
+		UtilsPackageName: "utils",
+	}
+
+	filePath := filepath.Join(builderDir, "builder_fields.go")
+	return executeModelTemplate(filePath, "builder", "builder_main", "builder_fields.tmpl", data)
 }

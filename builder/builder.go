@@ -154,6 +154,12 @@ func (b *TableQueryBuilder) Create(ctx context.Context, data interface{}) (inter
 	var primaryKeyType reflect.Kind
 	var primaryKeyIsZero bool
 
+	// Build column map for validation
+	columnMap := make(map[string]bool)
+	for _, col := range b.columns {
+		columnMap[col] = true
+	}
+
 	for i := 0; i < val.NumField(); i++ {
 		field := typ.Field(i)
 		fieldVal := val.Field(i)
@@ -169,6 +175,11 @@ func (b *TableQueryBuilder) Create(ctx context.Context, data interface{}) (inter
 			primaryKeyValue = fieldVal.Interface()
 			primaryKeyType = fieldVal.Kind()
 			primaryKeyIsZero = fieldVal.IsZero()
+			continue
+		}
+
+		// Only include fields that match defined columns
+		if !columnMap[fieldName] {
 			continue
 		}
 
@@ -305,6 +316,12 @@ func (b *TableQueryBuilder) Update(ctx context.Context, id interface{}, data int
 	var args []interface{}
 	argIndex := 1
 
+	// Build column map for validation
+	columnMap := make(map[string]bool)
+	for _, col := range b.columns {
+		columnMap[col] = true
+	}
+
 	typ := val.Type()
 	for i := 0; i < val.NumField(); i++ {
 		field := typ.Field(i)
@@ -314,6 +331,10 @@ func (b *TableQueryBuilder) Update(ctx context.Context, id interface{}, data int
 		quotedFieldName := b.dialect.QuoteIdentifier(fieldName)
 
 		if fieldName == b.primaryKey {
+			continue
+		}
+
+		if !columnMap[fieldName] {
 			continue
 		}
 
@@ -422,7 +443,13 @@ func (b *TableQueryBuilder) CreateMany(ctx context.Context, data []interface{}, 
 		}
 	}
 
-	// Collect all non-primary key columns that are not zero
+	// Build column map for validation
+	validColumns := make(map[string]bool)
+	for _, col := range b.columns {
+		validColumns[col] = true
+	}
+
+	// Collect all non-primary key columns that match defined columns
 	for i := 0; i < firstVal.NumField(); i++ {
 		field := typ.Field(i)
 		dbTag := field.Tag.Get("db")
@@ -430,9 +457,12 @@ func (b *TableQueryBuilder) CreateMany(ctx context.Context, data []interface{}, 
 		if fieldName == "" {
 			fieldName = toSnakeCase(field.Name)
 		}
-		if fieldName != b.primaryKey && !firstVal.Field(i).IsZero() {
-			insertColumns = append(insertColumns, fieldName)
-			columnMap[fieldName] = true
+		if fieldName != b.primaryKey && validColumns[fieldName] {
+			fieldVal := firstVal.Field(i)
+			if !fieldVal.IsZero() {
+				insertColumns = append(insertColumns, fieldName)
+				columnMap[fieldName] = true
+			}
 		}
 	}
 
@@ -590,6 +620,12 @@ func (b *TableQueryBuilder) UpdateMany(ctx context.Context, where Where, data in
 	var args []interface{}
 	argIndex := 1
 
+	// Build column map for validation
+	columnMap := make(map[string]bool)
+	for _, col := range b.columns {
+		columnMap[col] = true
+	}
+
 	typ := val.Type()
 	for i := 0; i < val.NumField(); i++ {
 		field := typ.Field(i)
@@ -603,6 +639,10 @@ func (b *TableQueryBuilder) UpdateMany(ctx context.Context, where Where, data in
 		quotedFieldName := b.dialect.QuoteIdentifier(fieldName)
 
 		if fieldName == b.primaryKey {
+			continue
+		}
+
+		if !columnMap[fieldName] {
 			continue
 		}
 

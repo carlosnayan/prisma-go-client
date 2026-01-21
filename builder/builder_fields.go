@@ -1,0 +1,246 @@
+package builder
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	contextutil "github.com/carlosnayan/prisma-go-client/internal/context"
+	"github.com/carlosnayan/prisma-go-client/internal/driver"
+	"github.com/carlosnayan/prisma-go-client/internal/errors"
+	"github.com/carlosnayan/prisma-go-client/internal/uuid"
+)
+
+// CreateFromFields inserts a new record using explicit field values from a map
+func (b *TableQueryBuilder) CreateFromFields(ctx context.Context, fields map[string]interface{}) (interface{}, error) {
+	ctx, cancel := contextutil.WithQueryTimeout(ctx)
+	defer cancel()
+
+	var insertColumns []string
+	var values []string
+	var args []interface{}
+	argIndex := 1
+
+	var primaryKeyValue interface{}
+	var primaryKeyCol string
+	primaryKeyInFields := false
+
+	if b.primaryKey != "" {
+		if val, ok := fields[b.primaryKey]; ok {
+			primaryKeyCol = b.primaryKey
+			primaryKeyValue = val
+			primaryKeyInFields = true
+		}
+	}
+
+	for col, val := range fields {
+		if col == b.primaryKey {
+			continue
+		}
+		insertColumns = append(insertColumns, col)
+		values = append(values, b.dialect.GetPlaceholder(argIndex))
+		args = append(args, val)
+		argIndex++
+	}
+
+	if primaryKeyCol != "" && primaryKeyInFields {
+		insertColumns = append(insertColumns, primaryKeyCol)
+		values = append(values, b.dialect.GetPlaceholder(argIndex))
+		args = append(args, primaryKeyValue)
+	} else if primaryKeyCol != "" && b.primaryKey != "" {
+		generatedUUID := uuid.GenerateUUID()
+		primaryKeyValue = generatedUUID
+		insertColumns = append(insertColumns, primaryKeyCol)
+		values = append(values, b.dialect.GetPlaceholder(argIndex))
+		args = append(args, generatedUUID)
+	}
+
+	returningColumns := make([]string, len(b.columns))
+	copy(returningColumns, b.columns)
+
+	quotedTable := b.dialect.QuoteIdentifier(b.table)
+	quotedInsertCols := make([]string, len(insertColumns))
+	for i, col := range insertColumns {
+		quotedInsertCols[i] = b.dialect.QuoteIdentifier(col)
+	}
+	quotedReturnCols := make([]string, len(returningColumns))
+	for i, col := range returningColumns {
+		quotedReturnCols[i] = b.dialect.QuoteIdentifier(col)
+	}
+
+	var row interface{}
+	if b.dialect.SupportsReturning() {
+		query := fmt.Sprintf(
+			"INSERT INTO %s (%s) VALUES (%s) RETURNING %s",
+			quotedTable,
+			strings.Join(quotedInsertCols, ", "),
+			strings.Join(values, ", "),
+			strings.Join(quotedReturnCols, ", "),
+		)
+		row = b.db.QueryRow(ctx, query, args...)
+	} else {
+		query := fmt.Sprintf(
+			"INSERT INTO %s (%s) VALUES (%s)",
+			quotedTable,
+			strings.Join(quotedInsertCols, ", "),
+			strings.Join(values, ", "),
+		)
+		result, err := b.db.Exec(ctx, query, args...)
+		if err != nil {
+			return nil, err
+		}
+
+		if b.dialect.Name() == "sqlite" {
+			return nil, nil
+		}
+
+		if primaryKeyCol != "" && primaryKeyValue != nil {
+			selectQuery := fmt.Sprintf(
+				"SELECT %s FROM %s WHERE %s = %s LIMIT 1",
+				strings.Join(quotedReturnCols, ", "),
+				quotedTable,
+				b.dialect.QuoteIdentifier(primaryKeyCol),
+				b.dialect.GetPlaceholder(1),
+			)
+			row = b.db.QueryRow(ctx, selectQuery, primaryKeyValue)
+		} else if primaryKeyCol != "" {
+			if b.dialect.Name() == "mysql" {
+				selectQuery := fmt.Sprintf(
+					"SELECT %s FROM %s WHERE %s = LAST_INSERT_ID() LIMIT 1",
+					strings.Join(quotedReturnCols, ", "),
+					quotedTable,
+					b.dialect.QuoteIdentifier(primaryKeyCol),
+				)
+				row = b.db.QueryRow(ctx, selectQuery)
+			} else {
+				lastInsertID, err := result.LastInsertId()
+				if err != nil || lastInsertID == 0 {
+					return nil, fmt.Errorf("cannot retrieve inserted record: primary key was auto-generated but LastInsertId() failed: %v", err)
+				}
+				selectQuery := fmt.Sprintf(
+					"SELECT %s FROM %s WHERE %s = %s LIMIT 1",
+					strings.Join(quotedReturnCols, ", "),
+					quotedTable,
+					b.dialect.QuoteIdentifier(primaryKeyCol),
+					b.dialect.GetPlaceholder(1),
+				)
+				row = b.db.QueryRow(ctx, selectQuery, lastInsertID)
+			}
+		} else {
+			return nil, fmt.Errorf("cannot retrieve inserted record: no primary key and dialect does not support RETURNING")
+		}
+	}
+
+	if b.modelType == nil {
+		return row, nil
+	}
+
+	if driverRow, ok := row.(driver.Row); ok {
+		return b.scanRow(driverRow)
+	}
+	return nil, fmt.Errorf("invalid row type")
+}
+
+// UpdateFromFields updates a record by primary key using explicit field values from a map
+func (b *TableQueryBuilder) UpdateFromFields(ctx context.Context, id interface{}, fields map[string]interface{}) (interface{}, error) {
+	ctx, cancel := contextutil.WithQueryTimeout(ctx)
+	defer cancel()
+
+	if b.primaryKey == "" {
+		return nil, fmt.Errorf("%w: table %s", errors.ErrPrimaryKeyRequired, b.table)
+	}
+
+	var updateColumns []string
+	var args []interface{}
+	argIndex := 1
+
+	for col, val := range fields {
+		if col == b.primaryKey {
+			continue
+		}
+		quotedCol := b.dialect.QuoteIdentifier(col)
+		updateColumns = append(updateColumns, fmt.Sprintf("%s = $%d", quotedCol, argIndex))
+		args = append(args, val)
+		argIndex++
+	}
+
+	if len(updateColumns) == 0 {
+		return nil, errors.ErrNoFieldsToUpdate
+	}
+
+	quotedPK := b.dialect.QuoteIdentifier(b.primaryKey)
+	whereClause := fmt.Sprintf("%s = $%d", quotedPK, argIndex)
+	args = append(args, id)
+
+	quotedReturnCols := make([]string, len(b.columns))
+	for i, col := range b.columns {
+		quotedReturnCols[i] = b.dialect.QuoteIdentifier(col)
+	}
+
+	quotedTable := b.dialect.QuoteIdentifier(b.table)
+	query := fmt.Sprintf(
+		"UPDATE %s SET %s WHERE %s RETURNING %s",
+		quotedTable,
+		strings.Join(updateColumns, ", "),
+		whereClause,
+		strings.Join(quotedReturnCols, ", "),
+	)
+
+	row := b.db.QueryRow(ctx, query, args...)
+
+	if b.modelType == nil {
+		return row, nil
+	}
+
+	return b.scanRow(row)
+}
+
+// UpdateManyFromFields updates multiple records using explicit field values from a map
+func (b *TableQueryBuilder) UpdateManyFromFields(ctx context.Context, where Where, fields map[string]interface{}) (*BatchPayload, error) {
+	ctx, cancel := contextutil.WithQueryTimeout(ctx)
+	defer cancel()
+
+	if len(where) == 0 {
+		return nil, fmt.Errorf("where condition is required for UpdateMany (empty where would update all records)")
+	}
+
+	var updateColumns []string
+	var args []interface{}
+	argIndex := 1
+
+	for col, val := range fields {
+		if col == b.primaryKey {
+			continue
+		}
+		quotedCol := b.dialect.QuoteIdentifier(col)
+		updateColumns = append(updateColumns, fmt.Sprintf("%s = %s", quotedCol, b.dialect.GetPlaceholder(argIndex)))
+		args = append(args, val)
+		argIndex++
+	}
+
+	if len(updateColumns) == 0 {
+		return nil, errors.ErrNoFieldsToUpdate
+	}
+
+	whereClause, whereArgs := b.buildWhereFromMap(where, &argIndex)
+	if whereClause == "" {
+		return nil, fmt.Errorf("where condition is required for UpdateMany")
+	}
+	args = append(args, whereArgs...)
+
+	quotedTable := b.dialect.QuoteIdentifier(b.table)
+	query := fmt.Sprintf(
+		"UPDATE %s SET %s WHERE %s",
+		quotedTable,
+		strings.Join(updateColumns, ", "),
+		whereClause,
+	)
+
+	result, err := b.db.Exec(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	rowsAffected := result.RowsAffected()
+	return &BatchPayload{Count: int(rowsAffected)}, nil
+}
