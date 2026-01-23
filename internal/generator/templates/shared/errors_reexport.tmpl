@@ -1,0 +1,36 @@
+import (
+	"{{.UtilsPath}}"
+)
+
+var (
+	ErrNotFound             = {{.UtilsPackageName}}.ErrNotFound
+	ErrUniqueConstraint     = {{.UtilsPackageName}}.ErrUniqueConstraint
+	ErrForeignKeyConstraint = {{.UtilsPackageName}}.ErrForeignKeyConstraint
+	ErrNullConstraint       = {{.UtilsPackageName}}.ErrNullConstraint
+	ErrValueTooLong         = {{.UtilsPackageName}}.ErrValueTooLong
+	ErrInvalidInput         = {{.UtilsPackageName}}.ErrInvalidInput
+	ErrRawQueryFailed       = {{.UtilsPackageName}}.ErrRawQueryFailed
+	ErrValueOutOfRange      = {{.UtilsPackageName}}.ErrValueOutOfRange
+	ErrTableNotFound        = {{.UtilsPackageName}}.ErrTableNotFound
+	ErrColumnNotFound       = {{.UtilsPackageName}}.ErrColumnNotFound
+	ErrDeadlock             = {{.UtilsPackageName}}.ErrDeadlock
+
+	ErrAuthenticationFailed = {{.UtilsPackageName}}.ErrAuthenticationFailed
+	ErrConnectionFailed     = {{.UtilsPackageName}}.ErrConnectionFailed
+	ErrDatabaseNotFound     = {{.UtilsPackageName}}.ErrDatabaseNotFound
+	ErrTimeout              = {{.UtilsPackageName}}.ErrTimeout
+	ErrConnectionClosed     = {{.UtilsPackageName}}.ErrConnectionClosed
+	ErrTooManyConnections   = {{.UtilsPackageName}}.ErrTooManyConnections
+)
+
+func IsNotFound(err error) bool {
+	return {{.UtilsPackageName}}.IsNotFound(err)
+}
+
+func IsUniqueConstraint(err error) bool {
+	return {{.UtilsPackageName}}.IsUniqueConstraint(err)
+}
+
+func IsForeignKeyConstraint(err error) bool {
+	return {{.UtilsPackageName}}.IsForeignKeyConstraint(err)
+}

@@ -20,13 +20,7 @@ func (q *Query) First(ctx context.Context, dest interface{}) error {
 
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
 
-	if err != nil {
-		if logger := q.getLogger(); logger != nil {
-			logger.Error("SELECT query failed: %v", err)
-		}
-	}
-
-	return err
+	return MapDriverError(err, "First")
 }
 
 // Find executes the query and returns all results
@@ -43,10 +37,7 @@ func (q *Query) Find(ctx context.Context, dest interface{}) error {
 	queryDuration := queryEnd.Sub(queryStart)
 
 	if err != nil {
-		if logger := q.getLogger(); logger != nil {
-			logger.Error("SELECT query failed: %v", err)
-		}
-		return err
+		return MapDriverError(err, "Find")
 	}
 	defer rows.Close()
 
@@ -58,13 +49,7 @@ func (q *Query) Find(ctx context.Context, dest interface{}) error {
 
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
 
-	if err != nil {
-		if logger := q.getLogger(); logger != nil {
-			logger.Error("SELECT query failed during scan: %v", err)
-		}
-	}
-
-	return err
+	return MapDriverError(err, "Find")
 }
 
 // FindFirst is an alias for First
@@ -91,12 +76,7 @@ func (q *Query) Count(ctx context.Context) (int64, error) {
 
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
 
-	if err != nil {
-		if logger := q.getLogger(); logger != nil {
-			logger.Error("COUNT query failed: %v", err)
-		}
-	}
-	return count, err
+	return count, MapDriverError(err, "Count")
 }
 
 // Create inserts a new record
@@ -114,12 +94,7 @@ func (q *Query) Create(ctx context.Context, value interface{}) error {
 
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
 
-	if err != nil {
-		if logger := q.getLogger(); logger != nil {
-			logger.Error("INSERT query failed: %v", err)
-		}
-	}
-	return SanitizeError(err)
+	return MapDriverError(err, "Create")
 }
 
 // Save updates or creates a record (upsert)
@@ -141,12 +116,7 @@ func (q *Query) Save(ctx context.Context, value interface{}) error {
 
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
 
-	if err != nil {
-		if logger := q.getLogger(); logger != nil {
-			logger.Error("UPSERT query failed: %v", err)
-		}
-	}
-	return SanitizeError(err)
+	return MapDriverError(err, "Save")
 }
 
 // Update updates records
@@ -164,12 +134,7 @@ func (q *Query) Update(ctx context.Context, column string, value interface{}) er
 
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
 
-	if err != nil {
-		if logger := q.getLogger(); logger != nil {
-			logger.Error("UPDATE query failed: %v", err)
-		}
-	}
-	return SanitizeError(err)
+	return MapDriverError(err, "Update")
 }
 
 // Updates updates multiple columns
@@ -187,12 +152,7 @@ func (q *Query) Updates(ctx context.Context, values map[string]interface{}) erro
 
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
 
-	if err != nil {
-		if logger := q.getLogger(); logger != nil {
-			logger.Error("UPDATE query failed: %v", err)
-		}
-	}
-	return SanitizeError(err)
+	return MapDriverError(err, "Updates")
 }
 
 // UpdatesReturning updates multiple columns and returns the updated record
@@ -223,10 +183,7 @@ func (q *Query) UpdatesReturning(ctx context.Context, values map[string]interfac
 		q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
 
 		if err != nil {
-			if logger := q.getLogger(); logger != nil {
-				logger.Error("UPDATE RETURNING query failed: %v", err)
-			}
-			return SanitizeError(err)
+			return MapDriverError(err, "UpdatesReturning")
 		}
 		return nil
 	}
@@ -238,10 +195,7 @@ func (q *Query) UpdatesReturning(ctx context.Context, values map[string]interfac
 	queryStart := time.Now()
 	_, err := q.db.Exec(ctx, query, args...)
 	if err != nil {
-		if logger := q.getLogger(); logger != nil {
-			logger.Error("UPDATE query failed: %v", err)
-		}
-		return SanitizeError(err)
+		return MapDriverError(err, "UpdatesReturning")
 	}
 
 	// Step 2: SELECT the updated record
@@ -263,10 +217,7 @@ func (q *Query) UpdatesReturning(ctx context.Context, values map[string]interfac
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
 
 	if err != nil {
-		if logger := q.getLogger(); logger != nil {
-			logger.Error("SELECT after UPDATE query failed: %v", err)
-		}
-		return SanitizeError(err)
+		return MapDriverError(err, "UpdatesReturning")
 	}
 	return nil
 }
@@ -286,11 +237,5 @@ func (q *Query) Delete(ctx context.Context, value interface{}) error {
 
 	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
 
-	if err != nil {
-		if logger := q.getLogger(); logger != nil {
-			logger.Error("DELETE query failed: %v", err)
-		}
-	}
-	return SanitizeError(err)
+	return MapDriverError(err, "Delete")
 }
-

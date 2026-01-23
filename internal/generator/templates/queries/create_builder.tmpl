@@ -41,51 +41,29 @@ func (b *{{.PascalName}}CreateBuilder) Exec() (*models.{{.PascalName}}, error) {
 
 // ExecWithContext executes the create operation with an explicit context
 func (b *{{.PascalName}}CreateBuilder) ExecWithContext(ctx context.Context) (*models.{{.PascalName}}, error) {
-	// Reset query state to ensure clean context for this operation
 	b.query.Query.Reset()
 
-	// Validate required fields
 	{{range .CreateFields}}{{if .IsRequired}}
 	if _, ok := b.fields["{{.DBName}}"]; !ok {
 		return nil, fmt.Errorf("required field {{.DBName}} is missing")
 	}
 	{{end}}{{end}}
 
-	// Build the model
-	result := &models.{{.PascalName}}{}
-	{{range .CreateFields}}
-	if val, ok := b.fields["{{.DBName}}"]; ok {
-		{{if and .IsNullable (not .IsNonPointerOptional)}}
-		if val == nil {
-			result.{{.FieldName}} = nil
-		} else {
-			typed := val.({{.GoType}})
-			result.{{.FieldName}} = &typed
-		}
-		{{else}}
-		result.{{.FieldName}} = val.({{.GoType}})
-		{{end}}
-	}
-	{{end}}
-
-	// Use TableQueryBuilder to insert into database
 	columns := []string{ {{- range $i, $col := .Columns}}{{if $i}}, {{end}}{{printf "%q" $col}}{{end}} }
 	tableBuilder := builder.NewTableQueryBuilder(b.query.Query.GetDB(), {{printf "%q" .TableName}}, columns)
 	{{if .PrimaryKey}}tableBuilder.SetPrimaryKey({{printf "%q" .PrimaryKey}})
 	{{end}}tableBuilder.SetDialect(b.query.Query.GetDialect())
 	tableBuilder.SetModelType(reflect.TypeOf(models.{{.PascalName}}{}))
 	
-	created, err := tableBuilder.Create(ctx, result)
+	created, err := tableBuilder.CreateFromFields(ctx, b.fields)
 	if err != nil {
 		return nil, err
 	}
 	
-	// Convert the result from interface{} to *models.{{.PascalName}}
 	if createdModel, ok := created.(models.{{.PascalName}}); ok {
 		return &createdModel, nil
 	}
 	
-	// Fallback: return the result we prepared
-	return result, nil
+	return nil, fmt.Errorf("unexpected return type from CreateFromFields")
 }
 

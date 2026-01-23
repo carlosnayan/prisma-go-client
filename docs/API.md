@@ -1035,21 +1035,23 @@ func (e *PrismaError) Unwrap() error   // Returns original driver error
 ### Checking Errors
 
 ```go
-// Using helper functions
-if raw.IsNotFound(err) {
+import "errors"
+
+// Using helper functions (Recommended)
+if prisma.IsNotFound(err) {
 	// Record not found
 }
-if raw.IsUniqueConstraint(err) {
+if prisma.IsUniqueConstraint(err) {
 	// Duplicate key
 }
 
 // Using errors.Is
-if errors.Is(err, raw.ErrNotFound) {
+if errors.Is(err, prisma.ErrNotFound) {
 	// Record not found
 }
 
 // Using error code
-var prismaErr *raw.PrismaError
+var prismaErr *prisma.PrismaError
 if errors.As(err, &prismaErr) {
 	switch prismaErr.Code {
 	case "P2002":
@@ -1059,6 +1061,9 @@ if errors.As(err, &prismaErr) {
 	}
 }
 ```
+
+> [!IMPORTANT]
+> Always use `errors.Is()` or helper functions like `IsNotFound()`. Do **not** use direct comparison `==` because errors are wrapped with the original driver cause and will not match exactly.
 
 ### Getting Original Error
 

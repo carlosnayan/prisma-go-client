@@ -6,7 +6,5 @@ import (
 	"strings"
 	"time"
 
-	{{printf "%q" .UtilsPath}}
+	{{.UtilsPackageName}} {{printf "%q" .UtilsPath}}
 )
-
-

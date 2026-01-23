@@ -2,6 +2,7 @@ package generator
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 
 	"github.com/carlosnayan/prisma-go-client/internal/migrations"
@@ -104,6 +105,31 @@ func GenerateClient(schema *parser.Schema, outputDir string) error {
 
 	// Generate client.go using templates with package "prisma" for root directory
 	return executeTemplatesFromDirWithPackage(outputDir, "client.go", "client", templateNames, data, "prisma")
+}
+
+// GenerateErrors generates the errors.go file in the root package
+func GenerateErrors(schema *parser.Schema, outputDir string) error {
+	// Detect user module
+	userModule, err := detectUserModule(outputDir)
+	if err != nil {
+		return fmt.Errorf("failed to detect user module: %w", err)
+	}
+
+	utilsPath, err := calculateUtilsImportPath(userModule, outputDir)
+	if err != nil {
+		return fmt.Errorf("failed to calculate utils import path: %w", err)
+	}
+
+	data := struct {
+		UtilsPath        string
+		UtilsPackageName string
+	}{
+		UtilsPath:        utilsPath,
+		UtilsPackageName: "utils",
+	}
+
+	filePath := filepath.Join(outputDir, "errors.go")
+	return executeModelTemplate(filePath, "prisma", "shared", "errors_reexport.tmpl", data)
 }
 
 // Note: Model access is now via fields (e.g., client.Users) instead of methods (e.g., client.Users())

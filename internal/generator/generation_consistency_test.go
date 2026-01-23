@@ -522,3 +522,80 @@ func TestGeneratedCode_OptionalFieldsPointerHandling(t *testing.T) {
 		t.Logf("✓ Update operation correctly assigns pointer field 'name'")
 	}
 }
+
+// TestGeneratedCode_Errors verifica se os arquivos de erro são gerados corretamente
+func TestGeneratedCode_Errors(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputDir := filepath.Join(tmpDir, "db")
+
+	// Create go.mod
+	goModPath := filepath.Join(tmpDir, "go.mod")
+	goModContent := "module test\n"
+	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
+		t.Fatalf("Failed to create go.mod: %v", err)
+	}
+
+	schema := &parser.Schema{
+		Datasources: []*parser.Datasource{
+			{
+				Name: "db",
+				Fields: []*parser.Field{
+					{Name: "provider", Value: "postgresql"},
+				},
+			},
+		},
+		Models: []*parser.Model{
+			{
+				Name: "User",
+				Fields: []*parser.ModelField{
+					{
+						Name: "id",
+						Type: &parser.FieldType{Name: "Int"},
+						Attributes: []*parser.Attribute{
+							{Name: "id"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Generate all files
+	if err := GenerateUtils(outputDir); err != nil {
+		t.Fatalf("GenerateUtils failed: %v", err)
+	}
+	if err := GenerateClient(schema, outputDir); err != nil {
+		t.Fatalf("GenerateClient failed: %v", err)
+	}
+	if err := GenerateErrors(schema, outputDir); err != nil {
+		t.Fatalf("GenerateErrors failed: %v", err)
+	}
+
+	// Check utils/errors.go
+	utilsErrorsFile := filepath.Join(outputDir, "utils", "errors.go")
+	content, err := os.ReadFile(utilsErrorsFile)
+	if err != nil {
+		t.Fatalf("Failed to read utils/errors.go: %v", err)
+	}
+	contentStr := string(content)
+	if !strings.Contains(contentStr, "package utils") {
+		t.Error("utils/errors.go should have package utils")
+	}
+	if !strings.Contains(contentStr, "ErrNotFound             = &PrismaError{Code: \"P2025\"") {
+		t.Error("utils/errors.go is missing ErrNotFound definition")
+	}
+
+	// Check core errors.go
+	coreErrorsFile := filepath.Join(outputDir, "errors.go")
+	content, err = os.ReadFile(coreErrorsFile)
+	if err != nil {
+		t.Fatalf("Failed to read core errors.go: %v", err)
+	}
+	contentStr = string(content)
+	if !strings.Contains(contentStr, "package prisma") {
+		t.Error("core errors.go should have package prisma")
+	}
+	if !strings.Contains(contentStr, "ErrNotFound             = utils.ErrNotFound") {
+		t.Error("core errors.go is missing ErrNotFound re-export")
+	}
+}

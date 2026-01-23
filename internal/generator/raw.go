@@ -23,6 +23,24 @@ func GenerateRaw(outputDir string) error {
 	}
 	file.Close()
 
+	userModule, err := detectUserModule(outputDir)
+	if err != nil {
+		return fmt.Errorf("failed to detect user module: %w", err)
+	}
+
+	utilsPath, err := calculateUtilsImportPath(userModule, outputDir)
+	if err != nil {
+		return fmt.Errorf("failed to calculate utils import path: %w", err)
+	}
+
+	data := struct {
+		UtilsPath        string
+		UtilsPackageName string
+	}{
+		UtilsPath:        utilsPath,
+		UtilsPackageName: "utils",
+	}
+
 	// Define template order - imports must come first, then interfaces
 	templateNames := []string{
 		"imports.tmpl",
@@ -30,7 +48,7 @@ func GenerateRaw(outputDir string) error {
 	}
 
 	// Generate imports first
-	if err := executeRawTemplatesAppend(rawFile, templateNames); err != nil {
+	if err := executeRawTemplatesAppend(rawFile, templateNames, data); err != nil {
 		return fmt.Errorf("failed to generate imports: %w", err)
 	}
 
@@ -57,11 +75,11 @@ func GenerateRaw(outputDir string) error {
 		"scan_result.tmpl",
 	}
 
-	return executeRawTemplatesAppend(rawFile, restTemplateNames)
+	return executeRawTemplatesAppend(rawFile, restTemplateNames, data)
 }
 
 // executeRawTemplatesAppend executes templates and appends to existing file
-func executeRawTemplatesAppend(filePath string, templateNames []string) error {
+func executeRawTemplatesAppend(filePath string, templateNames []string, data interface{}) error {
 	// Open file in append mode
 	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
@@ -78,7 +96,7 @@ func executeRawTemplatesAppend(filePath string, templateNames []string) error {
 	// Execute each template in order
 	for _, tmplName := range templateNames {
 		tmplPath := filepath.Join(templatesDir, tmplName)
-		if err := executeTemplate(file, tmplPath, nil); err != nil {
+		if err := executeTemplate(file, tmplPath, data); err != nil {
 			return fmt.Errorf("failed to execute template %s: %w", tmplName, err)
 		}
 	}
