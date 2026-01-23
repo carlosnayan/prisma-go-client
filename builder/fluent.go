@@ -15,7 +15,6 @@ import (
 	"github.com/carlosnayan/prisma-go-client/internal/errors"
 	"github.com/carlosnayan/prisma-go-client/internal/limits"
 	"github.com/carlosnayan/prisma-go-client/internal/logger"
-	"github.com/carlosnayan/prisma-go-client/internal/uuid"
 )
 
 // fieldCache caches field lookups by type and column name
@@ -725,80 +724,6 @@ func (q *Query) Count(ctx context.Context) (int64, error) {
 	return count, err
 }
 
-// Create inserts a new record
-func (q *Query) Create(ctx context.Context, value interface{}) error {
-	ctx, cancel := contextutil.WithQueryTimeout(ctx)
-	defer cancel()
-
-	processStart := time.Now()
-	query, args := q.buildInsertQuery(value)
-
-	queryStart := time.Now()
-	_, err := q.db.Exec(ctx, query, args...)
-	queryEnd := time.Now()
-	queryDuration := queryEnd.Sub(queryStart)
-
-	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
-
-	if err != nil {
-		if logger := q.getLogger(); logger != nil {
-			logger.Error("INSERT query failed: %v", err)
-		}
-	}
-	return errors.SanitizeError(err)
-}
-
-// Save updates or creates a record (upsert)
-func (q *Query) Save(ctx context.Context, value interface{}) error {
-	ctx, cancel := contextutil.WithQueryTimeout(ctx)
-	defer cancel()
-
-	if q.primaryKey == "" {
-		// Se não há primary key, apenas criar
-		return q.Create(ctx, value)
-	}
-
-	processStart := time.Now()
-	query, args := q.buildUpsertQuery(value)
-
-	queryStart := time.Now()
-	_, err := q.db.Exec(ctx, query, args...)
-	queryEnd := time.Now()
-	queryDuration := queryEnd.Sub(queryStart)
-
-	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
-
-	if err != nil {
-		if logger := q.getLogger(); logger != nil {
-			logger.Error("UPSERT query failed: %v", err)
-		}
-	}
-	return errors.SanitizeError(err)
-}
-
-// Update updates records
-func (q *Query) Update(ctx context.Context, column string, value interface{}) error {
-	ctx, cancel := contextutil.WithQueryTimeout(ctx)
-	defer cancel()
-
-	processStart := time.Now()
-	query, args := q.buildUpdateQuery(column, value)
-
-	queryStart := time.Now()
-	_, err := q.db.Exec(ctx, query, args...)
-	queryEnd := time.Now()
-	queryDuration := queryEnd.Sub(queryStart)
-
-	q.logQueryWithTiming(ctx, query, args, queryStart, processStart, queryDuration)
-
-	if err != nil {
-		if logger := q.getLogger(); logger != nil {
-			logger.Error("UPDATE query failed: %v", err)
-		}
-	}
-	return errors.SanitizeError(err)
-}
-
 // Updates updates multiple columns
 func (q *Query) Updates(ctx context.Context, values map[string]interface{}) error {
 	ctx, cancel := contextutil.WithQueryTimeout(ctx)
@@ -1024,6 +949,28 @@ func (q *Query) buildSelectQuery(single bool) (string, []interface{}) {
 	return queryBuilder.String(), args
 }
 
+// CreateFromFields inserts a new record using explicit field values from a map
+func (q *Query) CreateFromFields(ctx context.Context, fields map[string]interface{}) (interface{}, error) {
+	tqb := NewTableQueryBuilder(q.db, q.table, q.columns)
+	if q.primaryKey != "" {
+		tqb.SetPrimaryKey(q.primaryKey)
+	}
+	tqb.SetDialect(q.dialect)
+	tqb.SetModelType(q.modelType)
+	return tqb.CreateFromFields(ctx, fields)
+}
+
+// CreateManyFromFields inserts multiple records using explicit field values from maps
+func (q *Query) CreateManyFromFields(ctx context.Context, data []map[string]interface{}, skipDuplicates bool) (*BatchPayload, error) {
+	tqb := NewTableQueryBuilder(q.db, q.table, q.columns)
+	if q.primaryKey != "" {
+		tqb.SetPrimaryKey(q.primaryKey)
+	}
+	tqb.SetDialect(q.dialect)
+	tqb.SetModelType(q.modelType)
+	return tqb.CreateManyFromFields(ctx, data, skipDuplicates)
+}
+
 // buildWhereClause builds the WHERE clause
 func (q *Query) buildWhereClause(argIndex *int) (string, []interface{}) {
 	if len(q.whereConditions) == 0 {
@@ -1117,253 +1064,6 @@ func (q *Query) buildCountQuery() (string, []interface{}) {
 	}
 
 	return strings.Join(parts, " "), args
-}
-
-// buildInsertQuery builds the INSERT query
-func (q *Query) buildInsertQuery(value interface{}) (string, []interface{}) {
-	val := reflect.ValueOf(value)
-	if val.Kind() == reflect.Ptr {
-		val = val.Elem()
-	}
-	if val.Kind() != reflect.Struct {
-		return "", nil
-	}
-
-	var columns []string
-	var values []string
-	var args []interface{}
-	argIndex := 1
-
-	typ := val.Type()
-	var primaryKeyValue interface{}
-	var primaryKeyCol string
-	var primaryKeyType reflect.Kind
-	var primaryKeyIsZero bool
-
-	for i := 0; i < val.NumField(); i++ {
-		field := typ.Field(i)
-		fieldVal := val.Field(i)
-		fieldName := toSnakeCase(field.Name)
-
-		if fieldName == q.primaryKey {
-			primaryKeyCol = fieldName
-			primaryKeyValue = fieldVal.Interface()
-			primaryKeyType = fieldVal.Kind()
-			primaryKeyIsZero = fieldVal.IsZero()
-			continue
-		}
-
-		if fieldVal.IsZero() {
-			continue
-		}
-
-		columns = append(columns, fieldName)
-		values = append(values, q.dialect.GetPlaceholder(argIndex))
-		args = append(args, fieldVal.Interface())
-		argIndex++
-	}
-
-	if primaryKeyCol != "" {
-		if !primaryKeyIsZero {
-			columns = append(columns, primaryKeyCol)
-			values = append(values, q.dialect.GetPlaceholder(argIndex))
-			args = append(args, primaryKeyValue)
-		} else if primaryKeyType == reflect.String {
-			generatedUUID := uuid.GenerateUUID()
-			columns = append(columns, primaryKeyCol)
-			values = append(values, q.dialect.GetPlaceholder(argIndex))
-			args = append(args, generatedUUID)
-		}
-	}
-
-	quotedColumns := make([]string, len(columns))
-	for i, col := range columns {
-		quotedColumns[i] = q.dialect.QuoteIdentifier(col)
-	}
-
-	query := fmt.Sprintf(
-		"INSERT INTO %s (%s) VALUES (%s)",
-		q.dialect.QuoteIdentifier(q.table),
-		strings.Join(quotedColumns, ", "),
-		strings.Join(values, ", "),
-	)
-
-	return query, args
-}
-
-// buildUpsertQuery builds an INSERT ... ON CONFLICT (upsert) query
-func (q *Query) buildUpsertQuery(value interface{}) (string, []interface{}) {
-	val := reflect.ValueOf(value)
-	if val.Kind() == reflect.Ptr {
-		val = val.Elem()
-	}
-	if val.Kind() != reflect.Struct {
-		return "", nil
-	}
-
-	var columns []string
-	var values []string
-	var args []interface{}
-	argIndex := 1
-
-	typ := val.Type()
-	var primaryKeyValue interface{}
-	var primaryKeyCol string
-
-	for i := 0; i < val.NumField(); i++ {
-		field := typ.Field(i)
-		fieldVal := val.Field(i)
-
-		// Use db tag if available, otherwise use snake_case of field name
-		dbTag := field.Tag.Get("db")
-		fieldName := dbTag
-		if fieldName == "" {
-			fieldName = toSnakeCase(field.Name)
-		}
-
-		if fieldName == q.primaryKey {
-			primaryKeyCol = fieldName
-			primaryKeyValue = fieldVal.Interface()
-			continue
-		}
-
-		if fieldVal.IsZero() {
-			continue
-		}
-
-		columns = append(columns, fieldName)
-		values = append(values, q.dialect.GetPlaceholder(argIndex))
-		args = append(args, fieldVal.Interface())
-		argIndex++
-	}
-
-	// Se há primary key, adicionar à lista de colunas
-	if primaryKeyCol != "" && primaryKeyValue != nil {
-		columns = append(columns, primaryKeyCol)
-		values = append(values, q.dialect.GetPlaceholder(argIndex))
-		args = append(args, primaryKeyValue)
-		_ = argIndex // Incremento não necessário pois argIndex não é mais usado
-	}
-
-	quotedColumns := make([]string, len(columns))
-	for i, col := range columns {
-		quotedColumns[i] = q.dialect.QuoteIdentifier(col)
-	}
-
-	quotedTable := q.dialect.QuoteIdentifier(q.table)
-	insertPart := fmt.Sprintf(
-		"INSERT INTO %s (%s) VALUES (%s)",
-		quotedTable,
-		strings.Join(quotedColumns, ", "),
-		strings.Join(values, ", "),
-	)
-
-	// Construir parte de conflito baseado no dialect
-	dialectName := q.dialect.Name()
-	var conflictPart string
-
-	if dialectName == "postgresql" || dialectName == "postgres" || dialectName == "sqlite" {
-		// PostgreSQL e SQLite usam ON CONFLICT
-		if primaryKeyCol != "" {
-			quotedPK := q.dialect.QuoteIdentifier(primaryKeyCol)
-			var updateParts []string
-			for _, col := range columns {
-				if col == primaryKeyCol {
-					continue
-				}
-				quotedCol := q.dialect.QuoteIdentifier(col)
-				updateParts = append(updateParts, fmt.Sprintf("%s = EXCLUDED.%s", quotedCol, quotedCol))
-			}
-			conflictPart = fmt.Sprintf("ON CONFLICT (%s) DO UPDATE SET %s", quotedPK, strings.Join(updateParts, ", "))
-		} else {
-			// Sem primary key, apenas INSERT
-			return insertPart, args
-		}
-	} else if dialectName == "mysql" || dialectName == "mariadb" {
-		// MySQL usa ON DUPLICATE KEY UPDATE
-		if primaryKeyCol != "" {
-			var updateParts []string
-			for _, col := range columns {
-				if col == primaryKeyCol {
-					continue
-				}
-				quotedCol := q.dialect.QuoteIdentifier(col)
-				updateParts = append(updateParts, fmt.Sprintf("%s = VALUES(%s)", quotedCol, quotedCol))
-			}
-			conflictPart = fmt.Sprintf("ON DUPLICATE KEY UPDATE %s", strings.Join(updateParts, ", "))
-		} else {
-			// Sem primary key, apenas INSERT
-			return insertPart, args
-		}
-	} else {
-		// Fallback: apenas INSERT
-		return insertPart, args
-	}
-
-	query := fmt.Sprintf("%s %s", insertPart, conflictPart)
-	return query, args
-}
-
-// buildUpdateQuery builds the UPDATE query
-func (q *Query) buildUpdateQuery(column string, value interface{}) (string, []interface{}) {
-	var parts []string
-	var args []interface{}
-	argIndex := 1
-
-	parts = append(parts, fmt.Sprintf("UPDATE %s SET %s = %s",
-		q.dialect.QuoteIdentifier(q.table),
-		q.dialect.QuoteIdentifier(column),
-		q.dialect.GetPlaceholder(argIndex)))
-	args = append(args, value)
-	argIndex++
-
-	// WHERE
-	if len(q.whereConditions) > 0 {
-		whereClause, whereArgs := q.buildWhereClause(&argIndex)
-		parts = append(parts, "WHERE", whereClause)
-		args = append(args, whereArgs...)
-	}
-
-	return strings.Join(parts, " "), args
-}
-
-// buildUpdatesQuery builds the UPDATE query for multiple columns
-func (q *Query) buildUpdatesQuery(values map[string]interface{}) (string, []interface{}) {
-	var setParts []string
-	var args []interface{}
-	argIndex := 1
-
-	for column, value := range values {
-		setParts = append(setParts, fmt.Sprintf("%s = %s",
-			q.dialect.QuoteIdentifier(column),
-			q.dialect.GetPlaceholder(argIndex)))
-		args = append(args, value)
-		argIndex++
-	}
-
-	var parts []string
-	parts = append(parts, fmt.Sprintf("UPDATE %s SET %s",
-		q.dialect.QuoteIdentifier(q.table),
-		strings.Join(setParts, ", ")))
-
-	// WHERE
-	if len(q.whereConditions) > 0 {
-		whereClause, whereArgs := q.buildWhereClause(&argIndex)
-		parts = append(parts, "WHERE", whereClause)
-		args = append(args, whereArgs...)
-	}
-
-	return strings.Join(parts, " "), args
-}
-
-// buildUpdatesQueryWithReturning builds UPDATE query with RETURNING clause (PostgreSQL)
-func (q *Query) buildUpdatesQueryWithReturning(values map[string]interface{}) (string, []interface{}) {
-	query, args := q.buildUpdatesQuery(values)
-
-	// Add RETURNING * for PostgreSQL
-	query += " RETURNING *"
-
-	return query, args
 }
 
 // Clone creates a copy of the Query to avoid modifying the original
@@ -1832,4 +1532,43 @@ func (q *Query) ScanFind(ctx context.Context, dest interface{}, scanType reflect
 	}
 
 	return nil
+}
+
+// buildUpdatesQuery builds the UPDATE query for multiple columns
+func (q *Query) buildUpdatesQuery(values map[string]interface{}) (string, []interface{}) {
+	var setParts []string
+	var args []interface{}
+	argIndex := 1
+
+	for column, value := range values {
+		setParts = append(setParts, fmt.Sprintf("%s = %s",
+			q.dialect.QuoteIdentifier(column),
+			q.dialect.GetPlaceholder(argIndex)))
+		args = append(args, value)
+		argIndex++
+	}
+
+	var parts []string
+	parts = append(parts, fmt.Sprintf("UPDATE %s SET %s",
+		q.dialect.QuoteIdentifier(q.table),
+		strings.Join(setParts, ", ")))
+
+	// WHERE
+	if len(q.whereConditions) > 0 {
+		whereClause, whereArgs := q.buildWhereClause(&argIndex)
+		parts = append(parts, "WHERE", whereClause)
+		args = append(args, whereArgs...)
+	}
+
+	return strings.Join(parts, " "), args
+}
+
+// buildUpdatesQueryWithReturning builds UPDATE query with RETURNING clause (PostgreSQL)
+func (q *Query) buildUpdatesQueryWithReturning(values map[string]interface{}) (string, []interface{}) {
+	query, args := q.buildUpdatesQuery(values)
+
+	// Add RETURNING * for PostgreSQL
+	query += " RETURNING *"
+
+	return query, args
 }

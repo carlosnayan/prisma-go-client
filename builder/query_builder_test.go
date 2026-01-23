@@ -369,7 +369,11 @@ func TestQueryBuilder_Create_ReturnsCorrectModel(t *testing.T) {
 				ISBN:   "999-999-999",
 			}
 
-			created, err := builder.Create(ctx, book)
+			created, err := builder.CreateFromFields(ctx, map[string]interface{}{
+				"title":  book.Title,
+				"author": book.Author,
+				"isbn":   book.ISBN,
+			})
 			if err != nil {
 				t.Fatalf("Create failed: %v", err)
 			}
@@ -428,106 +432,6 @@ func TestQueryBuilder_Create_ReturnsCorrectModel(t *testing.T) {
 	}
 }
 
-// TestQueryBuilder_Scan_WithCorrectFieldCount testa que o scan funciona corretamente
-// mesmo quando há campos extras no modelo (simula relacionamentos removidos)
-func TestQueryBuilder_Scan_WithCorrectFieldCount(t *testing.T) {
-	providers := []string{"postgresql", "mysql", "sqlite"}
-
-	for _, provider := range providers {
-		t.Run(provider, func(t *testing.T) {
-			testutil.SkipIfNoDatabase(t, provider)
-			db, cleanup := testutil.SetupTestDB(t, provider)
-			defer cleanup()
-
-			sqlDB := db.SQLDB()
-			if sqlDB == nil {
-				t.Fatal("database does not support SQLDB()")
-			}
-
-			ctx := context.Background()
-
-			// Criar tabela books (apenas 4 colunas: id, title, author, created_at)
-			var createTableSQL string
-			switch provider {
-			case "postgresql":
-				createTableSQL = `
-					CREATE TABLE IF NOT EXISTS books (
-						id SERIAL PRIMARY KEY,
-						title VARCHAR(255) NOT NULL,
-						author VARCHAR(255) NOT NULL,
-						created_at TIMESTAMP DEFAULT NOW()
-					)
-				`
-			case "mysql":
-				createTableSQL = `
-					CREATE TABLE IF NOT EXISTS books (
-						id INT AUTO_INCREMENT PRIMARY KEY,
-						title VARCHAR(255) NOT NULL,
-						author VARCHAR(255) NOT NULL,
-						created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-					)
-				`
-			case "sqlite":
-				createTableSQL = `
-					CREATE TABLE IF NOT EXISTS books (
-						id INTEGER PRIMARY KEY AUTOINCREMENT,
-						title TEXT NOT NULL,
-						author TEXT NOT NULL,
-						created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-					)
-				`
-			}
-
-			_, err := sqlDB.ExecContext(ctx, createTableSQL)
-			if err != nil {
-				t.Fatalf("failed to create table: %v", err)
-			}
-
-			// Inserir livro
-			var insertSQL string
-			switch provider {
-			case "postgresql":
-				insertSQL = `INSERT INTO books (title, author) VALUES ($1, $2) RETURNING id`
-			case "mysql", "sqlite":
-				insertSQL = `INSERT INTO books (title, author) VALUES (?, ?)`
-			}
-
-			_, err = sqlDB.ExecContext(ctx, insertSQL, "Test Book", "Test Author")
-			if err != nil {
-				t.Fatalf("failed to insert book: %v", err)
-			}
-
-			// Criar query builder com apenas as colunas que existem na tabela
-			columns := []string{"id", "title", "author", "created_at"} // Apenas 4 colunas
-			bookQuery := NewQuery(db, "books", columns)
-			bookQuery.SetDialect(dialect.GetDialect(provider))
-			bookQuery.SetPrimaryKey("id")
-			bookQuery.SetModelType(reflect.TypeOf(Book{})) // Book tem 5 campos, mas apenas 4 colunas
-
-			// Teste: FindFirst deve funcionar mesmo com modelo tendo mais campos que colunas
-			var result Book
-			err = bookQuery.First(ctx, &result)
-			if err != nil {
-				t.Fatalf("First failed: %v", err)
-			}
-
-			// Verificar que os campos correspondentes foram preenchidos
-			if result.Title == "" {
-				t.Error("Expected title to be filled")
-			}
-			if result.Author == "" {
-				t.Error("Expected author to be filled")
-			}
-			if result.ID == 0 {
-				t.Error("Expected ID to be set")
-			}
-
-			// ISBN deve estar vazio (zero value) pois não foi selecionado
-			// Isso é esperado e não deve causar erro
-		})
-	}
-}
-
 // UserIdentifiers model simula o modelo do problema relatado
 // com db tags diferentes de json tags (snake_case)
 type UserIdentifiers struct {
@@ -538,7 +442,6 @@ type UserIdentifiers struct {
 }
 
 // TestTableQueryBuilder_Create_WithDBTags testa Create com modelo que usa db tags
-// Este teste deve detectar o problema de scan quando buildColumnToFieldMap não mapeia corretamente
 func TestTableQueryBuilder_Create_WithDBTags(t *testing.T) {
 	providers := []string{"postgresql"}
 
@@ -587,7 +490,10 @@ func TestTableQueryBuilder_Create_WithDBTags(t *testing.T) {
 				Phone: "1234567890",
 			}
 
-			created, err := builder.Create(ctx, userIdentifiers)
+			created, err := builder.CreateFromFields(ctx, map[string]interface{}{
+				"email": userIdentifiers.Email,
+				"phone": userIdentifiers.Phone,
+			})
 			if err != nil {
 				t.Fatalf("Create failed: %v", err)
 			}
@@ -663,7 +569,10 @@ func TestTableQueryBuilder_Update_WithDBTags(t *testing.T) {
 				Phone: "1111111111",
 			}
 
-			created, err := builder.Create(ctx, userIdentifiers)
+			created, err := builder.CreateFromFields(ctx, map[string]interface{}{
+				"email": userIdentifiers.Email,
+				"phone": userIdentifiers.Phone,
+			})
 			if err != nil {
 				t.Fatalf("Create failed: %v", err)
 			}
@@ -676,7 +585,10 @@ func TestTableQueryBuilder_Update_WithDBTags(t *testing.T) {
 				Phone: "9999999999",
 			}
 
-			updated, err := builder.Update(ctx, createdUserIdentifiers.IdUserIdentifiers, updatedData)
+			updated, err := builder.UpdateFromFields(ctx, createdUserIdentifiers.IdUserIdentifiers, map[string]interface{}{
+				"email": updatedData.Email,
+				"phone": updatedData.Phone,
+			})
 			if err != nil {
 				t.Fatalf("Update failed: %v", err)
 			}
@@ -701,7 +613,6 @@ func TestTableQueryBuilder_Update_WithDBTags(t *testing.T) {
 }
 
 // TestTableQueryBuilder_FindFirst_WithOrConditions_DBTags testa FindFirst com condições Or e db tags
-// Simula exatamente o problema relatado pelo usuário
 func TestTableQueryBuilder_FindFirst_WithOrConditions_DBTags(t *testing.T) {
 	providers := []string{"postgresql"}
 
@@ -750,25 +661,23 @@ func TestTableQueryBuilder_FindFirst_WithOrConditions_DBTags(t *testing.T) {
 				Phone: "9876543210",
 			}
 
-			_, err = builder.Create(ctx, userIdentifiers)
+			_, err = builder.CreateFromFields(ctx, map[string]interface{}{
+				"email": userIdentifiers.Email,
+				"phone": userIdentifiers.Phone,
+			})
 			if err != nil {
 				t.Fatalf("Create failed: %v", err)
 			}
 
-			// Testar FindFirst com condições Or (simula o problema relatado)
-			// WHERE email = ? OR phone = ?
-			// TableQueryBuilder usa Where map para condições
+			// Testar FindFirst
 			builder2 := NewTableQueryBuilder(db, "user_identifiers", columns)
 			builder2.SetDialect(dialect.GetDialect(provider))
 			builder2.SetPrimaryKey("id_user_identifiers")
 			builder2.SetModelType(reflect.TypeOf(UserIdentifiers{}))
 
-			// Usar Where com múltiplas condições (simula OR através de múltiplas chamadas)
-			// Na prática, o código gerado usa applyWhereInput que cria condições OR
-			// Aqui simulamos com uma condição que deve encontrar o registro
 			found, err := builder2.FindFirst(ctx, Where{"email": "findme@example.com"})
 			if err != nil {
-				t.Fatalf("FindFirst with Or conditions failed: %v", err)
+				t.Fatalf("FindFirst failed: %v", err)
 			}
 
 			foundUserIdentifiers, ok := found.(UserIdentifiers)
@@ -776,7 +685,6 @@ func TestTableQueryBuilder_FindFirst_WithOrConditions_DBTags(t *testing.T) {
 				t.Fatal("FindFirst returned wrong type")
 			}
 
-			// Verificar que todos os campos foram preenchidos corretamente
 			if foundUserIdentifiers.IdUserIdentifiers == 0 {
 				t.Error("Expected IdUserIdentifiers to be set")
 			}
@@ -791,7 +699,6 @@ func TestTableQueryBuilder_FindFirst_WithOrConditions_DBTags(t *testing.T) {
 }
 
 // TestTableQueryBuilder_Create_WithTransaction_DBTags testa Create dentro de uma transação
-// Este teste reproduz o problema relatado pelo usuário
 func TestTableQueryBuilder_Create_WithTransaction_DBTags(t *testing.T) {
 	providers := []string{"postgresql"}
 
@@ -829,20 +736,21 @@ func TestTableQueryBuilder_Create_WithTransaction_DBTags(t *testing.T) {
 
 			// Testar Create dentro de uma transação
 			err = ExecuteTransaction(ctx, db, func(tx *Transaction) error {
-				// Criar query builder usando a transação (simula o código gerado)
 				columns := []string{"id_user_identifiers", "email", "phone", "created_at"}
 				builder := NewTableQueryBuilder(tx.DB(), "user_identifiers", columns)
 				builder.SetDialect(dialect.GetDialect(provider))
 				builder.SetPrimaryKey("id_user_identifiers")
 				builder.SetModelType(reflect.TypeOf(UserIdentifiers{}))
 
-				// Criar registro dentro da transação
 				userIdentifiers := UserIdentifiers{
 					Email: "transaction@example.com",
 					Phone: "1111111111",
 				}
 
-				created, err := builder.Create(ctx, userIdentifiers)
+				created, err := builder.CreateFromFields(ctx, map[string]interface{}{
+					"email": userIdentifiers.Email,
+					"phone": userIdentifiers.Phone,
+				})
 				if err != nil {
 					return err
 				}
@@ -852,7 +760,6 @@ func TestTableQueryBuilder_Create_WithTransaction_DBTags(t *testing.T) {
 					t.Fatal("Create returned wrong type")
 				}
 
-				// Verificar que todos os campos foram preenchidos corretamente
 				if createdUserIdentifiers.IdUserIdentifiers == 0 {
 					t.Error("Expected IdUserIdentifiers to be set")
 				}

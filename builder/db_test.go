@@ -54,7 +54,10 @@ func TestBuilder_PostgreSQL(t *testing.T) {
 		Name:  "Test User",
 	}
 
-	created, err := builder.Create(ctx, user)
+	created, err := builder.CreateFromFields(ctx, map[string]interface{}{
+		"email": user.Email,
+		"name":  user.Name,
+	})
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
@@ -85,7 +88,9 @@ func TestBuilder_PostgreSQL(t *testing.T) {
 	updateData := User{
 		Name: "Updated Name",
 	}
-	updated, err := builder.Update(ctx, createdUser.ID, updateData)
+	updated, err := builder.UpdateFromFields(ctx, createdUser.ID, map[string]interface{}{
+		"name": updateData.Name,
+	})
 	if err != nil {
 		t.Fatalf("Update failed: %v", err)
 	}
@@ -168,7 +173,10 @@ func TestBuilder_MySQL(t *testing.T) {
 		Name:  "Test User",
 	}
 
-	created, err := builder.Create(ctx, user)
+	created, err := builder.CreateFromFields(ctx, map[string]interface{}{
+		"email": user.Email,
+		"name":  user.Name,
+	})
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
@@ -243,7 +251,9 @@ func TestBuilder_AllProviders(t *testing.T) {
 			record := TestRecord{Name: "Test"}
 
 			// Create
-			created, err := builder.Create(ctx, record)
+			created, err := builder.CreateFromFields(ctx, map[string]interface{}{
+				"name": record.Name,
+			})
 			if err != nil {
 				t.Fatalf("Create failed: %v", err)
 			}
