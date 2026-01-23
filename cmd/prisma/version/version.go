@@ -5,4 +5,4 @@ package version
 // It can be overridden at build time using:
 //
 //	go build -ldflags="-X github.com/carlosnayan/prisma-go-client/cmd/prisma/version.Version=x.y.z"
-var Version = "0.2.4"
+var Version = "0.2.5"
