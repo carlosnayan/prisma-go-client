@@ -166,7 +166,11 @@ func TestUpdate_WithZeroValues(t *testing.T) {
 				IsActive: true,
 			}
 
-			created, err := builder.Create(ctx, record)
+			created, err := builder.CreateFromFields(ctx, map[string]interface{}{
+				"name":      record.Name,
+				"count":     record.Count,
+				"is_active": record.IsActive,
+			})
 			if err != nil {
 				t.Fatalf("Create failed: %v", err)
 			}

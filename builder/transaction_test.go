@@ -103,7 +103,7 @@ func TestTransactionCommit(t *testing.T) {
 			query.SetPrimaryKey("id")
 
 			record := TestRecord{Name: "Transaction Test"}
-			err = query.Create(ctx, record)
+			_, err = query.CreateFromFields(ctx, map[string]interface{}{"name": record.Name})
 			if err != nil {
 				if rbErr := tx.Rollback(ctx); rbErr != nil {
 					t.Logf("Rollback failed: %v", rbErr)
@@ -202,7 +202,7 @@ func TestTransactionRollback(t *testing.T) {
 			query.SetPrimaryKey("id")
 
 			record := TestRecord{Name: "Rollback Test"}
-			err = query.Create(ctx, record)
+			_, err = query.CreateFromFields(ctx, map[string]interface{}{"name": record.Name})
 			if err != nil {
 				if rbErr := tx.Rollback(ctx); rbErr != nil {
 					t.Logf("Rollback failed: %v", rbErr)
@@ -288,7 +288,7 @@ func TestExecuteTransaction(t *testing.T) {
 				}
 
 				record := TestRecord{Name: "Execute Test"}
-				err := query.Create(ctx, record)
+				_, err := query.CreateFromFields(ctx, map[string]interface{}{"name": record.Name})
 				return err
 			})
 
@@ -383,7 +383,7 @@ func TestExecuteTransactionRollback(t *testing.T) {
 				}
 
 				record := TestRecord{Name: "Should Not Persist"}
-				err := query.Create(ctx, record)
+				_, err := query.CreateFromFields(ctx, map[string]interface{}{"name": record.Name})
 				if err != nil {
 					return err
 				}
@@ -484,7 +484,7 @@ func TestExecuteTransactionPanic(t *testing.T) {
 					}
 
 					record := TestRecord{Name: "Panic Test"}
-					err := query.Create(ctx, record)
+					_, err := query.CreateFromFields(ctx, map[string]interface{}{"name": record.Name})
 					if err != nil {
 						return err
 					}
@@ -577,7 +577,7 @@ func TestExecuteSequentialTransactions(t *testing.T) {
 					}
 
 					record := TestRecord{Name: "First"}
-					err := query.Create(ctx, record)
+					_, err := query.CreateFromFields(ctx, map[string]interface{}{"name": record.Name})
 					return err
 				},
 				func(tx *Transaction) error {
@@ -591,7 +591,7 @@ func TestExecuteSequentialTransactions(t *testing.T) {
 					}
 
 					record := TestRecord{Name: "Second"}
-					err := query.Create(ctx, record)
+					_, err := query.CreateFromFields(ctx, map[string]interface{}{"name": record.Name})
 					return err
 				},
 			}
@@ -681,7 +681,7 @@ func TestTransactionIsolation(t *testing.T) {
 			query.SetPrimaryKey("id")
 
 			record := TestRecord{Name: "Isolation Test"}
-			err = query.Create(ctx, record)
+			_, err = query.CreateFromFields(ctx, map[string]interface{}{"name": record.Name})
 			if err != nil {
 				if rbErr := tx.Rollback(ctx); rbErr != nil {
 					t.Logf("Rollback failed: %v", rbErr)

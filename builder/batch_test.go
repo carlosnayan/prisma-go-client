@@ -391,13 +391,13 @@ func TestCreateMany_Basic(t *testing.T) {
 			builder.SetModelType(reflect.TypeOf(Book{}))
 
 			// Create multiple books
-			books := []interface{}{
-				Book{Title: "Book 1", Author: "Author A"},
-				Book{Title: "Book 2", Author: "Author B"},
-				Book{Title: "Book 3", Author: "Author C"},
+			mapSlice := []map[string]interface{}{
+				{"title": "Book 1", "author": "Author A"},
+				{"title": "Book 2", "author": "Author B"},
+				{"title": "Book 3", "author": "Author C"},
 			}
 
-			result, err := builder.CreateMany(ctx, books, false)
+			result, err := builder.CreateManyFromFields(ctx, mapSlice, false)
 			if err != nil {
 				t.Fatalf("CreateMany failed: %v", err)
 			}
@@ -433,7 +433,7 @@ func TestCreateMany_EmptySlice(t *testing.T) {
 	builder.SetPrimaryKey("id")
 	builder.SetModelType(reflect.TypeOf(Book{}))
 
-	result, err := builder.CreateMany(ctx, []interface{}{}, false)
+	result, err := builder.CreateManyFromFields(ctx, []map[string]interface{}{}, false)
 	if err != nil {
 		t.Fatalf("CreateMany failed: %v", err)
 	}
@@ -516,12 +516,11 @@ func TestUpdateMany_Basic(t *testing.T) {
 			builder.SetPrimaryKey("id")
 			builder.SetModelType(reflect.TypeOf(Book{}))
 
-			// Update all books by Author A - using a struct with only the fields we want to update
-			// Since Book doesn't have Status, we'll update title instead
-			updateData := Book{Title: "Updated Title"}
+			// Update all books by Author A
+			updateFields := map[string]interface{}{"title": "Updated Title"}
 			where := Where{"author": "Author A"}
 
-			result, err := builder.UpdateMany(ctx, where, updateData)
+			result, err := builder.UpdateManyFromFields(ctx, where, updateFields)
 			if err != nil {
 				t.Fatalf("UpdateMany failed: %v", err)
 			}
@@ -609,10 +608,10 @@ func TestUpdateMany_NoMatches(t *testing.T) {
 			builder.SetModelType(reflect.TypeOf(Book{}))
 
 			// Try to update non-existent author
-			updateData := Book{Title: "Updated"}
+			updateFields := map[string]interface{}{"title": "Updated"}
 			where := Where{"author": "NonExistent"}
 
-			result, err := builder.UpdateMany(ctx, where, updateData)
+			result, err := builder.UpdateManyFromFields(ctx, where, updateFields)
 			if err != nil {
 				t.Fatalf("UpdateMany failed: %v", err)
 			}
@@ -637,10 +636,10 @@ func TestUpdateMany_EmptyWhere(t *testing.T) {
 	builder.SetPrimaryKey("id")
 	builder.SetModelType(reflect.TypeOf(Book{}))
 
-	updateData := Book{Title: "Updated"}
+	updateFields := map[string]interface{}{"title": "Updated"}
 	where := Where{}
 
-	_, err := builder.UpdateMany(ctx, where, updateData)
+	_, err := builder.UpdateManyFromFields(ctx, where, updateFields)
 	if err == nil {
 		t.Error("Expected error for empty where condition, got nil")
 	}
@@ -907,15 +906,15 @@ func TestCreateMany_LargeBatch(t *testing.T) {
 			builder.SetModelType(reflect.TypeOf(Book{}))
 
 			// Create 1500 books (larger than batch size of 1000)
-			books := make([]interface{}, 1500)
+			mapSlice := make([]map[string]interface{}, 1500)
 			for i := 0; i < 1500; i++ {
-				books[i] = Book{
-					Title:  fmt.Sprintf("Book %d", i+1),
-					Author: fmt.Sprintf("Author %d", (i%10)+1),
+				mapSlice[i] = map[string]interface{}{
+					"title":  fmt.Sprintf("Book %d", i+1),
+					"author": fmt.Sprintf("Author %d", (i%10)+1),
 				}
 			}
 
-			result, err := builder.CreateMany(ctx, books, false)
+			result, err := builder.CreateManyFromFields(ctx, mapSlice, false)
 			if err != nil {
 				t.Fatalf("CreateMany failed: %v", err)
 			}

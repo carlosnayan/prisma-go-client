@@ -240,3 +240,84 @@ func (b *TableQueryBuilder) UpdateManyFromFields(ctx context.Context, where Wher
 	rowsAffected := result.RowsAffected()
 	return &BatchPayload{Count: int(rowsAffected)}, MapDriverError(err, "UpdateMany")
 }
+func (b *TableQueryBuilder) CreateManyFromFields(ctx context.Context, data []map[string]interface{}, skipDuplicates bool) (*BatchPayload, error) {
+	ctx, cancel := WithQueryTimeout(ctx)
+	defer cancel()
+
+	if len(data) == 0 {
+		return &BatchPayload{Count: 0}, nil
+	}
+
+	// Use first record to determine columns
+	firstFields := data[0]
+	var insertColumns []string
+	for col := range firstFields {
+		if col != b.primaryKey {
+			insertColumns = append(insertColumns, col)
+		}
+	}
+
+	if b.primaryKey != "" {
+		insertColumns = append(insertColumns, b.primaryKey)
+	}
+
+	quotedTable := b.dialect.QuoteIdentifier(b.table)
+	quotedInsertCols := make([]string, len(insertColumns))
+	for i, col := range insertColumns {
+		quotedInsertCols[i] = b.dialect.QuoteIdentifier(col)
+	}
+
+	batchSize := 1000
+	totalCount := 0
+
+	for batchStart := 0; batchStart < len(data); batchStart += batchSize {
+		batchEnd := batchStart + batchSize
+		if batchEnd > len(data) {
+			batchEnd = len(data)
+		}
+
+		batch := data[batchStart:batchEnd]
+		var valuesParts []string
+		var allArgs []interface{}
+		argIndex := 1
+
+		for _, fields := range batch {
+			var rowValues []string
+			for _, col := range insertColumns {
+				val, exists := fields[col]
+				if !exists && col == b.primaryKey {
+					val = {{.UtilsPackageName}}.GenerateUUID()
+				}
+				allArgs = append(allArgs, val)
+				rowValues = append(rowValues, b.dialect.GetPlaceholder(argIndex))
+				argIndex++
+			}
+			valuesParts = append(valuesParts, "("+strings.Join(rowValues, ", ")+")")
+		}
+
+		onConflict := ""
+		if skipDuplicates && b.dialect.Name() == "postgresql" {
+			onConflict = " ON CONFLICT DO NOTHING"
+		} else if skipDuplicates && b.dialect.Name() == "mysql" {
+			onConflict = " ON DUPLICATE KEY UPDATE " + quotedInsertCols[0] + " = " + quotedInsertCols[0]
+		}
+
+		query := fmt.Sprintf(
+			"INSERT INTO %s (%s) VALUES %s%s",
+			quotedTable,
+			strings.Join(quotedInsertCols, ", "),
+			strings.Join(valuesParts, ", "),
+			onConflict,
+		)
+
+		result, err := b.db.Exec(ctx, query, allArgs...)
+		if err != nil {
+			return &BatchPayload{Count: totalCount}, MapDriverError(err, "CreateMany")
+		}
+
+		rowsAffected := result.RowsAffected()
+		totalCount += int(rowsAffected)
+	}
+
+	return &BatchPayload{Count: totalCount}, nil
+}

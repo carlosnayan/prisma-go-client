@@ -32,7 +32,7 @@ This document serves as a context guide for the development and maintenance of t
 
 ### Core Component (`builder/builder.go`)
 
-- **`TableQueryBuilder`:** Base component that handles fundamental operations (`FindFirst`, `FindMany`, `Create`, `Update`, `Delete`, `Count`).
+- **`TableQueryBuilder`:** Base component that handles fundamental operations using **map-based APIs exclusively** (`CreateFromFields`, `UpdateFromFields`, `CreateManyFromFields`, `FindFirst`, `FindMany`, `Delete`, `Count`).
 - **Database Abstraction:** Uses the `driver.DB` interface (`internal/driver`) to support multiple SQL drivers (PostgreSQL, MySQL, SQLite).
 - **Dialect Support:** The `dialect.Dialect` interface allows handling database-specific particularities (placeholders, quoting, JSON, Full-text search).
 
@@ -57,19 +57,18 @@ This document serves as a context guide for the development and maintenance of t
 
 ### Relationship between `TableQueryBuilder` and `Query`
 
-- **`TableQueryBuilder` (Low-Level):** Originally the primary builder. Now primarily serves as a heavy-lifting internal helper for `Create` and `CreateMany` operations because it contains robust logic for retrieving fully materialized models after an insert (handling auto-increments and defaults across different dialects).
+- **`TableQueryBuilder` (Low-Level):** Low-level map-based builder. Provides `CreateFromFields`, `UpdateFromFields`, and `CreateManyFromFields` methods that accept `map[string]interface{}` to avoid zero-value ambiguity. Contains robust logic for retrieving fully materialized models after an insert (handling auto-increments and defaults across different dialects).
 - **`Query` (High-Level):** The preferred API for `Find`, `Update`, and `Delete` operations. It provides the chaining logic and integrates directly with the type-safe filter system.
 
 ## Deprecated Patterns and Future Improvements
 
 ### Deprecated
 
-- **Map-based `Updates()`:** The per-model `Updates(map[string]interface{})` method is deprecated/removed in favor of the fluent `Update().SetField(val).Exec()` builders.
-- **Row Strings in Filters:** While still supported, using raw strings for field names in `.Where("field = ?", val)` is being replaced by type-safe table package filters.
+- **Raw Strings in Filters:** While still supported, using raw strings for field names in `.Where("field = ?", val)` is being replaced by type-safe table package filters.
 
 ### Future Roadmap
 
-- **Phasing out `TableQueryBuilder`:** Aim to move the advanced insertion/materialization logic from `TableQueryBuilder` into `Query` to unify the core engine.
+- **Unified Query Engine:** Continue consolidating query logic in the `Query` struct while `TableQueryBuilder` focuses on map-based low-level operations.
 - **JSON/Full-Text Search Parity:** Ensure all dialects implement these advanced features consistently within the `Query` struct.
 - **Reflection Optimization:** Explore code generation for result scanning to reduce reliance on reflection and improve performance.
 
@@ -158,15 +157,16 @@ To ensure stability and protect against OOM (Out of Memory):
 
 This is the modern, type-safe API used by developers. It uses specialized builders for different operations.
 
-| Builder               | Methods                                                          | Returns            |
-| :-------------------- | :--------------------------------------------------------------- | :----------------- |
-| **`FindFirst()`**     | `Where()`, `OrderBy()`, `Select()`, `Exec()`                     | `(*Model, error)`  |
-| **`FindMany()`**      | `Where()`, `OrderBy()`, `Take()`, `Skip()`, `Select()`, `Exec()` | `([]Model, error)` |
-| **`Create()`**        | `Set[Field]()`, `Exec()`                                         | `(*Model, error)`  |
-| **`Update()`**        | `Where()`, `Set[Field]()`, `Exec()`                              | `(*Model, error)`  |
-| **`UpdateOneID(id)`** | `Set[Field]()`, `Exec()`                                         | `error`            |
-| **`UpdateMany()`**    | `Where()`, `Set[Field]()`, `Exec()`                              | `error`            |
-| **`Delete()`**        | `Where()`, `Exec()`                                              | `error`            |
+| Builder               | Methods                                                          | Returns                  |
+| :-------------------- | :--------------------------------------------------------------- | :----------------------- |
+| **`FindFirst()`**     | `Where()`, `OrderBy()`, `Select()`, `Exec()`                     | `(*Model, error)`        |
+| **`FindMany()`**      | `Where()`, `OrderBy()`, `Take()`, `Skip()`, `Select()`, `Exec()` | `([]Model, error)`       |
+| **`Create()`**        | `Set[Field]()`, `Exec()`                                         | `(*Model, error)`        |
+| **`CreateMany()`**    | `Data()`, `SkipDuplicates()`, `Exec()`                           | `(*BatchPayload, error)` |
+| **`Update()`**        | `Where()`, `Set[Field]()`, `Exec()`                              | `(*Model, error)`        |
+| **`UpdateOneID(id)`** | `Set[Field]()`, `Exec()`                                         | `error`                  |
+| **`UpdateMany()`**    | `Where()`, `Set[Field]()`, `Exec()`                              | `error`                  |
+| **`Delete()`**        | `Where()`, `Exec()`                                              | `error`                  |
 
 > [!NOTE]
 > All builders support `WithContext(ctx)` to explicitly pass a context. The standard `Exec()` uses the context stored in the query (usually `context.Background()` unless set via `WithContext`).
@@ -176,16 +176,15 @@ This is the modern, type-safe API used by developers. It uses specialized builde
 
 ### Table Package (`TableQueryBuilder` struct)
 
-Low-level operations usually called by generated code.
+Low-level **map-based operations** called by generated code.
 
 - **`FindFirst(ctx, where)`**: Retrieves one record using a map-based filter.
 - **`FindMany(ctx, opts)`**: Retrieves multiple records using a `QueryOptions` struct.
 - **`Count(ctx, where)`**: Simple count based on map filters.
-- **`Create(ctx, data)`**: Direct insertion of a model struct.
-- **`Update(ctx, id, data)`**: Updates a record by ID using a model struct.
-- **`Delete(ctx, id)`**: Deletes a single record by ID.
-- **`CreateMany(ctx, data)`**: Batch insertion logic.
-- **`UpdateMany(ctx, where, data)`**: Batch update logic.
+- **`CreateFromFields(ctx, map[string]interface{})`**: Direct insertion using a field map. Avoids zero-value ambiguity.
+- **`UpdateFromFields(ctx, id, map[string]interface{})`**: Updates a record by ID using a field map.
+- **`CreateManyFromFields(ctx, []map[string]interface{}, skipDuplicates)`**: Batch insertion with field maps.
+- **`Delete(ctx, model)`**: Deletes a single record.
 
 ## Implementation Details
 

@@ -41,50 +41,52 @@ func (b *{{.PascalName}}CreateManyBuilder) ExecWithContext(ctx context.Context) 
 		return &builder.BatchPayload{Count: 0}, nil
 	}
 
-	// Validate required fields for each item
+	// Validate required fields and convert to map slice
+	fieldsSlice := make([]map[string]interface{}, 0, len(b.data))
 	for i, input := range b.data {
+		fields := make(map[string]interface{})
 		var missingFields []string
-{{range .CreateFields}}{{if .IsRequired}}
-		// Required fields are never optional (not pointers), so check zero value directly
+
+		{{range .CreateFields}}
+		{{if .IsRequired}}
+		// Required check
 		if reflect.ValueOf(input.{{.FieldName}}).IsZero() {
 			missingFields = append(missingFields, "{{.FieldName}}")
+		} else {
+			fields["{{.DBName}}"] = input.{{.FieldName}}
 		}
-{{end}}{{end}}
+		{{else if .IsNonPointerOptional}}
+		// Optional fields with non-pointer wrappers (Json, Bytes)
+		// These can't be compared to nil, just use IsZero
+		if !reflect.ValueOf(input.{{.FieldName}}).IsZero() {
+			fields["{{.DBName}}"] = input.{{.FieldName}}
+		}
+		{{else if .IsNullable}}
+		// Nullable check (pointer)
+		if input.{{.FieldName}} != nil {
+			fields["{{.DBName}}"] = *input.{{.FieldName}}
+		}
+		{{else}}
+		// Optional fields with defaults (plain types like string, time.Time)
+		// Use IsZero to check if value was provided
+		if !reflect.ValueOf(input.{{.FieldName}}).IsZero() {
+			fields["{{.DBName}}"] = input.{{.FieldName}}
+		}
+		{{end}}
+		{{end}}
+
 		if len(missingFields) > 0 {
 			return nil, fmt.Errorf("validation error: required fields missing in item %d: %s", i, strings.Join(missingFields, ", "))
 		}
-	}
-
-	// Convert CreateManyArgs slice to model slice
-	modelSlice := make([]interface{}, 0, len(b.data))
-	for _, input := range b.data {
-		result := models.{{.PascalName}}{}
-{{range .CreateFields}}{{if .IsNullable}}{{if .BaseGoType}}		// Pointer field (primitives: String, Int, DateTime, etc)
-		result.{{.FieldName}} = input.{{.FieldName}}
-{{else}}		// NullableWrapper field (Json, Bytes - not using pointers)
-		if input.{{.FieldName}}.IsSet {
-			{{- if .IsNonPointerOptional}}
-			if !input.{{.FieldName}}.IsNull && input.{{.FieldName}}.Value != nil {
-				result.{{.FieldName}} = *input.{{.FieldName}}.Value
-			}
-			{{- else}}
-			if input.{{.FieldName}}.IsNull {
-				result.{{.FieldName}} = nil
-			} else {
-				result.{{.FieldName}} = input.{{.FieldName}}.Value
-			}
-			{{- end}}
-		}
-{{end}}{{else}}		result.{{.FieldName}} = input.{{.FieldName}}
-{{end}}{{end}}		modelSlice = append(modelSlice, result)
+		fieldsSlice = append(fieldsSlice, fields)
 	}
 
 	// Use TableQueryBuilder to perform batch insert
 	columns := []string{ {{- range $i, $col := .Columns}}{{if $i}}, {{end}}{{printf "%q" $col}}{{end}} }
 	tableBuilder := builder.NewTableQueryBuilder(b.query.Query.GetDB(), {{printf "%q" .TableName}}, columns)
-{{if .PrimaryKey}}	tableBuilder.SetPrimaryKey({{printf "%q" .PrimaryKey}})
-{{end}}	tableBuilder.SetDialect(b.query.Query.GetDialect())
+	{{if .PrimaryKey}}tableBuilder.SetPrimaryKey({{printf "%q" .PrimaryKey}})
+	{{end}}tableBuilder.SetDialect(b.query.Query.GetDialect())
 	tableBuilder.SetModelType(reflect.TypeOf(models.{{.PascalName}}{}))
 
-	return tableBuilder.CreateMany(ctx, modelSlice, b.skipDuplicates)
+	return tableBuilder.CreateManyFromFields(ctx, fieldsSlice, b.skipDuplicates)
 }

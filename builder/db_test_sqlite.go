@@ -57,7 +57,10 @@ func TestBuilder_SQLite(t *testing.T) {
 		Name:  "Test User",
 	}
 
-	created, err := builder.Create(ctx, user)
+	created, err := builder.CreateFromFields(ctx, map[string]interface{}{
+		"email": user.Email,
+		"name":  user.Name,
+	})
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}

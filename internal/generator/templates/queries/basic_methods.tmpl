@@ -14,11 +14,6 @@ func (q *{{.PascalName}}Query) Find(ctx context.Context, dest *[]models.{{.Pasca
 	return q.Query.Find(ctx, dest)
 }
 
-// Save saves a record (create or update)
-// Example: q.Save(ctx, &user)
-func (q *{{.PascalName}}Query) Save(ctx context.Context, value *models.{{.PascalName}}) error {
-	return q.Query.Save(ctx, value)
-}
 
 // Updates() removed - use UpdateMany() or Update() from new API instead
 

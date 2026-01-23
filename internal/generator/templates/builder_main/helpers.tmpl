@@ -22,3 +22,32 @@ func toSnakeCase(s string) string {
 	return strings.ToLower(result.String())
 }
 
+func structToFieldsMap(data interface{}) map[string]interface{} {
+	fields := make(map[string]interface{})
+	val := reflect.ValueOf(data)
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+	
+	typ := val.Type()
+	for i := 0; i < val.NumField(); i++ {
+		field := typ.Field(i)
+		fieldVal := val.Field(i)
+		
+		// Skip unset pointers to support partial updates and DB defaults
+		if fieldVal.Kind() == reflect.Ptr && fieldVal.IsNil() {
+			continue
+		}
+
+		dbTag := field.Tag.Get("db")
+		fieldName := dbTag
+		if fieldName == "" {
+			fieldName = toSnakeCase(field.Name)
+		}
+		
+		fields[fieldName] = fieldVal.Interface()
+	}
+	
+	return fields
+}
+
