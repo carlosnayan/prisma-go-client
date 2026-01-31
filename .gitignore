@@ -1,4 +1,4 @@
 .DS_Store
 temp
 db
-ci_errors.txt
+test_errors.log
