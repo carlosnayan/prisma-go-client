@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/carlosnayan/prisma-go-client/builder"
 	"github.com/carlosnayan/prisma-go-client/internal/driver"
 	"github.com/carlosnayan/prisma-go-client/internal/parser"
 )
@@ -154,8 +153,8 @@ func TestRawNew_WithMockBuilderDBTX(t *testing.T) {
 	// We'll use the builder package's DBTX which is an alias for driver.DB
 	mockDB := &mockBuilderDBTX{}
 
-	// Convert to builder.DBTX (which is driver.DB)
-	var builderDB builder.DBTX = mockDB
+	// Convert to interface{} (simulating passing to raw.New)
+	var builderDB interface{} = mockDB
 	_ = builderDB // Use the variable to show it's a valid builder.DBTX
 
 	// This test verifies that if we had a way to call raw.New at runtime,

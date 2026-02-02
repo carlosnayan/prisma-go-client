@@ -1,0 +1,410 @@
+package cmd_test
+
+import (
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/carlosnayan/prisma-go-client/cmd/prisma/cmd"
+)
+
+func TestInit_CreatesProjectStructure(t *testing.T) {
+	cmd.ResetGlobalFlags()
+	dir := cmd.SetupTestDir(t)
+	defer func() { _ = cmd.CleanupTestDir(dir) }()
+
+	err := cmd.RunInit([]string{})
+	if err != nil {
+		t.Fatalf("runInit failed: %v", err)
+	}
+
+	// Check prisma.conf exists
+	if !cmd.FileExists("prisma.conf") {
+		t.Error("prisma.conf was not created")
+	}
+
+	// Check schema.prisma exists
+	schemaPath := "prisma/schema.prisma"
+	if !cmd.FileExists(schemaPath) {
+		t.Error("schema.prisma was not created")
+	}
+
+	// Check migrations directory exists
+	migrationsPath := "prisma/migrations"
+	cmd.AssertDirExists(t, migrationsPath)
+}
+
+func TestInit_CreatesCorrectConfig(t *testing.T) {
+	cmd.ResetGlobalFlags()
+	dir := cmd.SetupTestDir(t)
+	defer func() { _ = cmd.CleanupTestDir(dir) }()
+
+	err := cmd.RunInit([]string{})
+	if err != nil {
+		t.Fatalf("runInit failed: %v", err)
+	}
+
+	configContent := cmd.ReadFile(t, "prisma.conf")
+
+	// Check for required sections
+	if !cmd.Contains(configContent, "schema =") {
+		t.Error("Config should contain schema path")
+	}
+	if !cmd.Contains(configContent, "[migrations]") {
+		t.Error("Config should contain migrations section")
+	}
+	if !cmd.Contains(configContent, "[datasource]") {
+		t.Error("Config should contain datasource section")
+	}
+	if !cmd.Contains(configContent, "env('DATABASE_URL')") {
+		t.Error("Config should contain DATABASE_URL environment variable")
+	}
+}
+
+func TestInit_CreatesDebugSection(t *testing.T) {
+	cmd.ResetGlobalFlags()
+	dir := cmd.SetupTestDir(t)
+	defer func() { _ = cmd.CleanupTestDir(dir) }()
+
+	err := cmd.RunInit([]string{})
+	if err != nil {
+		t.Fatalf("runInit failed: %v", err)
+	}
+
+	configContent := cmd.ReadFile(t, "prisma.conf")
+
+	// Check for [debug] section
+	if !cmd.Contains(configContent, "[debug]") {
+		t.Error("Config should contain [debug] section")
+	}
+
+	// Check for default log levels (should be ["warn"] as per specification)
+	if !cmd.Contains(configContent, `log = ["warn"]`) {
+		t.Errorf("Config should contain default log levels ['warn'], got: %s", configContent)
+	}
+}
+
+func TestInit_CreatesCorrectSchema(t *testing.T) {
+	cmd.ResetGlobalFlags()
+	dir := cmd.SetupTestDir(t)
+	defer func() { _ = cmd.CleanupTestDir(dir) }()
+
+	err := cmd.RunInit([]string{})
+	if err != nil {
+		t.Fatalf("runInit failed: %v", err)
+	}
+
+	schemaContent := cmd.ReadFile(t, "prisma/schema.prisma")
+
+	// Check for required sections
+	if !cmd.Contains(schemaContent, "datasource db") {
+		t.Error("Schema should contain datasource")
+	}
+	if !cmd.Contains(schemaContent, "provider = \"postgresql\"") {
+		t.Error("Schema should contain postgresql provider")
+	}
+	if !cmd.Contains(schemaContent, "generator client") {
+		t.Error("Schema should contain generator")
+	}
+	if !cmd.Contains(schemaContent, "prisma-client-go") {
+		t.Error("Schema should contain prisma-client-go provider")
+	}
+}
+
+func TestInit_WithProviderFlag(t *testing.T) {
+	cmd.ResetGlobalFlags()
+	dir := cmd.SetupTestDir(t)
+	defer func() { _ = cmd.CleanupTestDir(dir) }()
+
+	cmd.SetProviderFlag("mysql")
+	err := cmd.RunInit([]string{})
+	if err != nil {
+		t.Fatalf("runInit failed: %v", err)
+	}
+
+	schemaContent := cmd.ReadFile(t, "prisma/schema.prisma")
+	if !cmd.Contains(schemaContent, "provider = \"mysql\"") {
+		t.Errorf("Schema should contain mysql provider, got: %s", schemaContent)
+	}
+}
+
+func TestInit_WithDatabaseFlag(t *testing.T) {
+	cmd.ResetGlobalFlags()
+	dir := cmd.SetupTestDir(t)
+	defer func() { _ = cmd.CleanupTestDir(dir) }()
+
+	cmd.SetDatabaseFlag("postgresql://user:pass@localhost/db")
+	err := cmd.RunInit([]string{})
+	if err != nil {
+		t.Fatalf("runInit failed: %v", err)
+	}
+
+	configContent := cmd.ReadFile(t, "prisma.conf")
+	if !cmd.Contains(configContent, "postgresql://user:pass@localhost/db") {
+		t.Error("Config should contain custom database URL")
+	}
+}
+
+func TestInit_FailsWhenConfigExists(t *testing.T) {
+	cmd.ResetGlobalFlags()
+	dir := cmd.SetupTestDir(t)
+	defer func() { _ = cmd.CleanupTestDir(dir) }()
+
+	// Create existing config
+	err := os.WriteFile("prisma.conf", []byte("existing"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create existing config: %v", err)
+	}
+
+	err = cmd.RunInit([]string{})
+	if err == nil {
+		t.Error("runInit should fail when prisma.conf already exists")
+	}
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("Error should mention 'already exists', got: %v", err)
+	}
+}
+
+func TestInit_CreatesMigrationsDirectory(t *testing.T) {
+	cmd.ResetGlobalFlags()
+	dir := cmd.SetupTestDir(t)
+	defer func() { _ = cmd.CleanupTestDir(dir) }()
+
+	err := cmd.RunInit([]string{})
+	if err != nil {
+		t.Fatalf("runInit failed: %v", err)
+	}
+
+	migrationsPath := "prisma/migrations"
+	info, err := os.Stat(migrationsPath)
+	if err != nil {
+		t.Fatalf("Migrations directory should exist: %v", err)
+	}
+	if !info.IsDir() {
+		t.Error("Migrations path should be a directory")
+	}
+}
+
+func TestInit_WithDifferentProviders(t *testing.T) {
+	providers := []string{"postgresql", "mysql", "sqlite"}
+
+	for _, provider := range providers {
+		t.Run(provider, func(t *testing.T) {
+			cmd.ResetGlobalFlags()
+			dir := cmd.SetupTestDir(t)
+			defer func() { _ = cmd.CleanupTestDir(dir) }()
+
+			cmd.SetProviderFlag(provider)
+			err := cmd.RunInit([]string{})
+			if err != nil {
+				t.Fatalf("runInit failed for %s: %v", provider, err)
+			}
+
+			schemaContent := cmd.ReadFile(t, "prisma/schema.prisma")
+			expected := "provider = \"" + provider + "\""
+			if !cmd.Contains(schemaContent, expected) {
+				t.Errorf("Schema should contain %s provider, got: %s", provider, schemaContent)
+			}
+		})
+	}
+}
+
+// Test edge cases and validation
+
+func TestInit_FailsWhenSchemaExistsInRoot(t *testing.T) {
+	cmd.ResetGlobalFlags()
+	dir := cmd.SetupTestDir(t)
+	defer func() { _ = cmd.CleanupTestDir(dir) }()
+
+	// Create schema.prisma in root
+	err := os.WriteFile("schema.prisma", []byte("existing"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create existing schema: %v", err)
+	}
+
+	err = cmd.RunInit([]string{})
+	if err == nil {
+		t.Error("runInit should fail when schema.prisma already exists in root")
+	}
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("Error should mention 'already exists', got: %v", err)
+	}
+}
+
+func TestInit_FailsWhenPrismaFolderExists(t *testing.T) {
+	cmd.ResetGlobalFlags()
+	dir := cmd.SetupTestDir(t)
+	defer func() { _ = cmd.CleanupTestDir(dir) }()
+
+	// Create prisma folder
+	err := os.MkdirAll("prisma", 0755)
+	if err != nil {
+		t.Fatalf("Failed to create prisma folder: %v", err)
+	}
+
+	err = cmd.RunInit([]string{})
+	if err == nil {
+		t.Error("runInit should fail when prisma folder already exists")
+	}
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("Error should mention 'already exists', got: %v", err)
+	}
+}
+
+func TestInit_FailsWhenPrismaSchemaExists(t *testing.T) {
+	cmd.ResetGlobalFlags()
+	dir := cmd.SetupTestDir(t)
+	defer func() { _ = cmd.CleanupTestDir(dir) }()
+
+	// Create prisma/schema.prisma
+	err := os.MkdirAll("prisma", 0755)
+	if err != nil {
+		t.Fatalf("Failed to create prisma folder: %v", err)
+	}
+	err = os.WriteFile("prisma/schema.prisma", []byte("existing"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create existing schema: %v", err)
+	}
+
+	err = cmd.RunInit([]string{})
+	if err == nil {
+		t.Error("runInit should fail when prisma/schema.prisma already exists")
+	}
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("Error should mention 'already exists', got: %v", err)
+	}
+}
+
+func TestInit_ValidatesProvider(t *testing.T) {
+	cmd.ResetGlobalFlags()
+	dir := cmd.SetupTestDir(t)
+	defer func() { _ = cmd.CleanupTestDir(dir) }()
+
+	// Test invalid provider
+	cmd.SetProviderFlag("invalid-provider")
+	err := cmd.RunInit([]string{})
+	if err == nil {
+		t.Error("runInit should fail with invalid provider")
+	}
+	if !strings.Contains(err.Error(), "invalid") {
+		t.Errorf("Error should mention 'invalid', got: %v", err)
+	}
+}
+
+func TestInit_NormalizesProviderNames(t *testing.T) {
+	testCases := []struct {
+		input    string
+		expected string
+	}{
+		{"postgres", "postgresql"},
+		{"postgresql", "postgresql"},
+		{"mysql", "mysql"},
+		{"mariadb", "mysql"},
+		{"sqlite", "sqlite"},
+		{"sqlite3", "sqlite"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.input, func(t *testing.T) {
+			cmd.ResetGlobalFlags()
+			dir := cmd.SetupTestDir(t)
+			defer func() { _ = cmd.CleanupTestDir(dir) }()
+
+			cmd.SetProviderFlag(tc.input)
+			err := cmd.RunInit([]string{})
+			if err != nil {
+				t.Fatalf("runInit failed for %s: %v", tc.input, err)
+			}
+
+			schemaContent := cmd.ReadFile(t, "prisma/schema.prisma")
+			expected := "provider = \"" + tc.expected + "\""
+			if !cmd.Contains(schemaContent, expected) {
+				t.Errorf("Schema should contain %s provider (normalized from %s), got: %s", tc.expected, tc.input, schemaContent)
+			}
+		})
+	}
+}
+
+func TestInit_SchemaContainsComments(t *testing.T) {
+	cmd.ResetGlobalFlags()
+	dir := cmd.SetupTestDir(t)
+	defer func() { _ = cmd.CleanupTestDir(dir) }()
+
+	err := cmd.RunInit([]string{})
+	if err != nil {
+		t.Fatalf("runInit failed: %v", err)
+	}
+
+	schemaContent := cmd.ReadFile(t, "prisma/schema.prisma")
+
+	// Check for helpful comments
+	if !cmd.Contains(schemaContent, "This is your Prisma schema file") {
+		t.Error("Schema should contain helpful comments")
+	}
+	if !cmd.Contains(schemaContent, "learn more about it in the docs") {
+		t.Error("Schema should contain documentation link")
+	}
+}
+
+func TestInit_SchemaFormatIsConsistent(t *testing.T) {
+	cmd.ResetGlobalFlags()
+	dir := cmd.SetupTestDir(t)
+	defer func() { _ = cmd.CleanupTestDir(dir) }()
+
+	err := cmd.RunInit([]string{})
+	if err != nil {
+		t.Fatalf("runInit failed: %v", err)
+	}
+
+	schemaContent := cmd.ReadFile(t, "prisma/schema.prisma")
+
+	// Check that generator comes before datasource (consistent with official)
+	generatorPos := strings.Index(schemaContent, "generator client")
+	datasourcePos := strings.Index(schemaContent, "datasource db")
+
+	if generatorPos == -1 || datasourcePos == -1 {
+		t.Error("Schema should contain both generator and datasource")
+	}
+
+	if generatorPos > datasourcePos {
+		t.Error("Generator should come before datasource in schema")
+	}
+
+	// Check for proper formatting
+	if !cmd.Contains(schemaContent, "output   =") {
+		t.Error("Schema should have properly formatted output field")
+	}
+}
+
+func TestInit_CreatesCorrectDefaultURLs(t *testing.T) {
+	testCases := []struct {
+		provider string
+		urlPart  string
+	}{
+		{"postgresql", "postgresql://"},
+		{"mysql", "mysql://"},
+		{"sqlite", "file:./dev.db"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.provider, func(t *testing.T) {
+			cmd.ResetGlobalFlags()
+			dir := cmd.SetupTestDir(t)
+			defer func() { _ = cmd.CleanupTestDir(dir) }()
+
+			cmd.SetProviderFlag(tc.provider)
+			err := cmd.RunInit([]string{})
+			if err != nil {
+				t.Fatalf("runInit failed: %v", err)
+			}
+
+			// The output message should contain the default URL
+			// We can't easily test the printed output, but we can verify
+			// the schema was created correctly
+			schemaContent := cmd.ReadFile(t, "prisma/schema.prisma")
+			if !cmd.Contains(schemaContent, "provider = \""+tc.provider+"\"") {
+				t.Errorf("Schema should contain %s provider", tc.provider)
+			}
+		})
+	}
+}

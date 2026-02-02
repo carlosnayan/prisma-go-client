@@ -78,7 +78,7 @@ func (a *App) Execute() error {
 	}
 
 	// Parse global flags
-	globalArgs, remainingArgs := parseFlags(args, a.GlobalFlags)
+	globalArgs, remainingArgs := ParseFlags(args, a.GlobalFlags)
 	_ = globalArgs // Store parsed global flags if needed
 
 	// Find and execute command
@@ -113,7 +113,7 @@ func (a *App) Execute() error {
 			for _, subCmd := range cmd.Subcommands {
 				if subCmd.Name == subCmdName {
 					// Parse flags for subcommand
-					_, subCmdArgs := parseFlags(cmdArgs[1:], subCmd.Flags)
+					_, subCmdArgs := ParseFlags(cmdArgs[1:], subCmd.Flags)
 					if subCmd.Run == nil {
 						return fmt.Errorf("subcommand %s has no run function", subCmdName)
 					}
@@ -130,15 +130,15 @@ func (a *App) Execute() error {
 	}
 
 	// Parse flags for command
-	_, finalArgs := parseFlags(cmdArgs, cmd.Flags)
+	_, finalArgs := ParseFlags(cmdArgs, cmd.Flags)
 	if cmd.Run == nil {
 		return fmt.Errorf("command %s has no run function", cmdName)
 	}
 	return cmd.Run(finalArgs)
 }
 
-// parseFlags parses flags from arguments and returns parsed flags and remaining args
-func parseFlags(args []string, flags []*Flag) (map[string]interface{}, []string) {
+// ParseFlags parses flags from arguments and returns parsed flags and remaining args
+func ParseFlags(args []string, flags []*Flag) (map[string]interface{}, []string) {
 	parsed := make(map[string]interface{})
 	remaining := []string{}
 	i := 0
